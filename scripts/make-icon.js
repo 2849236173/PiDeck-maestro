@@ -1,0 +1,13 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#20d66b"/><stop offset="1" stop-color="#078b43"/></linearGradient></defs>
+  <rect width="256" height="256" rx="56" fill="url(#g)"/>
+  <circle cx="196" cy="52" r="20" fill="rgba(255,255,255,.22)"/>
+  <text x="128" y="164" text-anchor="middle" font-family="Arial, sans-serif" font-size="118" font-weight="900" fill="white">π</text>
+  <circle cx="190" cy="190" r="18" fill="white"/>
+</svg>`;
+const out = path.join(__dirname, '..', 'build');
+fs.mkdirSync(out, { recursive: true });
+fs.writeFileSync(path.join(out, 'icon.svg'), svg);
+console.log('wrote build/icon.svg');
