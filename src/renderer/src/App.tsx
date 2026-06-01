@@ -40,6 +40,7 @@ export function App() {
   const [environmentDialog, setEnvironmentDialog] = useState(false);
   const [listWidth, setListWidth] = useState(300);
   const [drawerWidth, setDrawerWidth] = useState(360);
+  const [composerHeight, setComposerHeight] = useState(132);
   const [listCollapsed, setListCollapsed] = useState(false);
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
@@ -314,6 +315,33 @@ export function App() {
     window.addEventListener("pointerup", onUp);
   }
 
+  function startComposerResize(event: PointerEvent) {
+    const startY = event.clientY;
+    const startHeight = composerHeight;
+    let frame = 0;
+
+    function onMove(moveEvent: globalThis.PointerEvent) {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const maxHeight = Math.max(180, Math.floor(window.innerHeight * 0.42));
+        // 拖动的是输入区顶部边线，鼠标向上意味着输入区变高；限制最大高度避免挤压会话阅读区域。
+        const next = Math.min(maxHeight, Math.max(132, startHeight + startY - moveEvent.clientY));
+        setComposerHeight(next);
+      });
+    }
+
+    function onUp() {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("is-composer-resizing");
+    }
+
+    document.body.classList.add("is-composer-resizing");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   return (
     <div className={["wechat-shell", drawer ? "drawer-open" : "", listCollapsed ? "list-collapsed" : "", drawerCollapsed ? "drawer-collapsed" : ""].filter(Boolean).join(" ")} style={{ "--list-width": `${listCollapsed ? 68 : listWidth}px`, "--drawer-width": `${drawerCollapsed ? 0 : drawerWidth}px` } as React.CSSProperties}>
       <aside className="chat-list-pane">
@@ -389,7 +417,8 @@ export function App() {
         </section>
 
         <footer className="composer">
-          <div className="composer-box">
+          <div className="composer-box" style={{ height: composerHeight }}>
+            <div className="composer-resize-handle" title="拖动调整输入框高度" onPointerDown={startComposerResize} />
             <ComposerToolbar state={activeRuntimeState} onCycleModel={cycleModel} onPickModel={openModelPicker} onCycleThinking={cycleThinking} />
             <textarea value={prompt} onFocus={() => setSuggestionsOpen(true)} onChange={event => { setPrompt(event.target.value); setSuggestionsOpen(true); }} onKeyDown={handleComposerKeyDown} placeholder={settings.sendShortcut === "enter-send" ? "输入消息，Enter 发送，Ctrl/Shift+Enter 换行。输入 / 或 @ 查看建议。" : "输入消息，按设置的快捷键发送。输入 / 或 @ 查看建议。"} />
             {suggestionsOpen && <PromptSuggestions prompt={prompt} commands={commands} files={flatFiles} onClose={() => { setPrompt(current => clearSuggestionTrigger(current)); setSuggestionsOpen(false); }} onPick={value => { setPrompt(current => applySuggestion(current, value)); setSuggestionsOpen(false); }} />}

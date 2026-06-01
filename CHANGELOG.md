@@ -4,6 +4,18 @@
 
 All notable changes to pi-desktop are documented here.
 
+## v0.1.6 - 2026-06-01
+
+### Improved
+- Improved Markdown table rendering in chat messages with clearer borders, spacing, header styling, and safe horizontal scrolling for wide tables.
+- Replaced the hard-to-discover native textarea resize handle with a visible top-edge composer resize grip.
+- Composer resizing now keeps bounded heights so expanding the input area does not take over the conversation timeline.
+
+## v0.1.5 - 2026-06-01
+
+### Fixed
+- Refined the chat header layout so long project paths and session controls fit more reliably in narrow windows.
+
 ## v0.1.4 - 2026-05-31
 
 ### Added
