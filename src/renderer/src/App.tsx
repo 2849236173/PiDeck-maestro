@@ -1485,6 +1485,14 @@ function ToolSummary(props: { message: ChatMessage }) {
 	);
 }
 
+// ANSI 转义码正则：匹配 \x1b[...m 等终端颜色/样式序列
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
+/** 去除 pi 输出中的 ANSI 终端转义码，避免在 React UI 中显示原始 \e[38;5;109m 等文本 */
+function stripAnsi(text: string): string {
+	return text.replace(ANSI_RE, "");
+}
+
 function ChatBubble(props: { message: ChatMessage }) {
 	const { message } = props;
 	const [expanded, setExpanded] = useState(false);
@@ -1495,6 +1503,9 @@ function ChatBubble(props: { message: ChatMessage }) {
 		typeof message.meta?.detailText === "string"
 			? message.meta.detailText
 			: JSON.stringify(message.meta ?? {}, null, 2);
+	// 过滤 ANSI 转义码，pi 终端输出的颜色序列在桌面 UI 中无意义
+	const cleanText = stripAnsi(message.text);
+	const cleanDetail = stripAnsi(detailText);
 	return (
 		<article
 			data-message-id={message.id}
@@ -1513,15 +1524,15 @@ function ChatBubble(props: { message: ChatMessage }) {
 						remarkPlugins={[remarkGfm]}
 						components={{ pre: CodeBlock, a: MarkdownLink }}
 					>
-						{message.text}
+						{cleanText}
 					</ReactMarkdown>
-					{expanded && <pre className="tool-detail">{detailText}</pre>}
+					{expanded && <pre className="tool-detail">{cleanDetail}</pre>}
 				</div>
 				<div className="msg-actions">
 					<button
 						onClick={() =>
 							navigator.clipboard.writeText(
-								expanded && isTool ? detailText : message.text,
+								expanded && isTool ? cleanDetail : cleanText,
 							)
 						}
 					>
