@@ -4,6 +4,13 @@
 
 All notable changes to pi-desktop are documented here.
 
+## v0.2.1 - 2026-06-01
+
+### Fixed
+- Stripped ANSI terminal escape codes from pi output in chat messages, tool details, and conversation outline.
+- Conversation outline now shows last 15 items by default with a "show all" button to expand the full list; panel is scrollable with max-height 70vh.
+- Increased outline summary truncation from 34 to 48 characters for better readability.
+
 ## v0.2.0 - 2026-06-01
 
 ### Added
