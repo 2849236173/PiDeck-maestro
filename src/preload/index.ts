@@ -189,6 +189,12 @@ const api = {
 		) => subscribe(ipcChannels.agentsMessage, callback),
 		onLog: (callback: (payload: { agentId: string; text: string }) => void) =>
 			subscribe(ipcChannels.agentsLog, callback),
+		onRuntimeState: (
+			callback: (payload: {
+				agentId: string;
+				state: AgentRuntimeState;
+			}) => void,
+		) => subscribe(ipcChannels.agentsRuntimeState, callback),
 	},
 };
 

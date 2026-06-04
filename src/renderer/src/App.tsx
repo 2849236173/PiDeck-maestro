@@ -32,6 +32,7 @@ import type {
 	FileTreeNode,
 	GitBranchInfo,
 	ImageContent,
+	PendingPrompt,
 	PiCommand,
 	PiInstallStatus,
 	Project,
@@ -70,6 +71,7 @@ export function App() {
 	const [modelPickerOpen, setModelPickerOpen] = useState(false);
 	const [prompt, setPrompt] = useState("");
 	const [attachedImages, setAttachedImages] = useState<ImageContent[]>([]);
+	const [pendingPrompts, setPendingPrompts] = useState<PendingPrompt[]>([]);
 	const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
 	const [_logs, setLogs] = useState<string[]>([]); // 写入式调试日志，仅用于 onLog/onError 捕获
 	const [search, setSearch] = useState("");
@@ -198,6 +200,14 @@ export function App() {
 		const offSettings = api.settings.onApplyWindow(() =>
 			setSettingsNotice("标题栏样式需要重启应用后生效。"),
 		);
+		// 监听后端主动推送的 runtimeState 更新（如 agent_end 时重置 isStreaming），
+		// 确保前端 isAgentBusy 判断基于最新状态，排队 flush 能正常触发。
+		const offRuntimeState = api.agents.onRuntimeState((payload) =>
+			setRuntimeStateByAgent((current) => ({
+				...current,
+				[payload.agentId]: payload.state,
+			})),
+		);
 
 		return () => {
 			offProjects();
@@ -205,6 +215,7 @@ export function App() {
 			offMessages();
 			offLog();
 			offSettings();
+			offRuntimeState();
 		};
 	}, []);
 
@@ -400,6 +411,8 @@ export function App() {
 
 	async function abortAgent(agentId = activeAgentId) {
 		if (!agentId) return;
+		// 用户主动停止时清空排队消息，避免 agent 空闲后自动发送已取消的内容
+		clearPendingPrompts();
 		await api.agents.abort(agentId);
 		void refreshRuntimeState(agentId);
 	}
@@ -440,13 +453,85 @@ export function App() {
 		}
 	}
 
+	/** 判断 agent 是否处于忙碌状态（正在处理消息或流式输出中） */
+	const isAgentBusy = Boolean(
+		activeAgent &&
+			(activeAgent.status === "running" || activeRuntimeState?.isStreaming),
+	);
+
+	// Agent 从忙碌变为空闲时，自动发送排队中的消息（只发当前 agent 的）
+	useEffect(() => {
+		if (!isAgentBusy && pendingPrompts.length > 0 && activeAgentId) {
+			void flushPendingQueue();
+		}
+	}, [isAgentBusy, pendingPrompts.length, activeAgentId]);
+
 	async function sendPrompt() {
-		if (!activeAgentId || (!prompt.trim() && attachedImages.length === 0)) return;
+		if (!activeAgentId || (!prompt.trim() && attachedImages.length === 0))
+			return;
 		const message = prompt;
 		const images = attachedImages.length > 0 ? attachedImages : undefined;
 		setPrompt("");
 		setAttachedImages([]);
+
+		// Agent 忙碌时，消息加入本地排队，等 agent 空闲后自动发送
+		if (isAgentBusy) {
+			const pending: PendingPrompt = {
+				id: crypto.randomUUID(),
+				agentId: activeAgentId,
+				message,
+				images,
+				enqueuedAt: Date.now(),
+			};
+			setPendingPrompts((prev) => [...prev, pending]);
+			return;
+		}
+
 		await api.agents.prompt({ agentId: activeAgentId, message, images });
+	}
+
+	/**
+	 * Agent 空闲后，发送排队中属于当前 agent 的消息。
+	 * 逐条处理：先发、成功后移除；失败保留在队列中。
+	 */
+	async function flushPendingQueue() {
+		if (!activeAgentId) return;
+		// 取快照，不清空队列 — 发完成功后才逐条移除，避免过程中异常导致消息永久丢失
+		const snapshot = pendingPrompts.filter((p) => p.agentId === activeAgentId);
+		if (snapshot.length === 0) return;
+
+		// 从 UI 中清掉排队中的状态（这些消息正在发送）
+		setPendingPrompts((prev) =>
+			prev.filter((p) => p.agentId !== activeAgentId),
+		);
+
+		for (const item of snapshot) {
+			try {
+				await api.agents.prompt({
+					agentId: activeAgentId,
+					message: item.message,
+					images: item.images,
+					streamingBehavior: "steer",
+				});
+			} catch (error) {
+				// 发送失败时回退到队列，用户可手动取消
+				setPendingPrompts((prev) => [...prev, item]);
+				setToast(
+					`排队消息发送失败：${error instanceof Error ? error.message : String(error)}`,
+				);
+				setTimeout(() => setToast(null), 4000);
+			}
+		}
+	}
+
+	/** 取消排队中的单条消息 */
+	function cancelPendingPrompt(id: string) {
+		setPendingPrompts((prev) => prev.filter((p) => p.id !== id));
+	}
+
+	/** 清空所有排队消息 */
+	function clearPendingPrompts() {
+		setPendingPrompts([]);
 	}
 
 	/**
@@ -470,24 +555,34 @@ export function App() {
 
 		// GIF 可能是动图，canvas 压缩会丢失动画；保留原始数据。
 		if (file.type === "image/gif") return fileToImageContent(file);
-		return resizeImageFile(file, 2000, 0.86).catch(() => fileToImageContent(file));
+		return resizeImageFile(file, 2000, 0.86).catch(() =>
+			fileToImageContent(file),
+		);
 	}
 
 	function fileToImageContent(file: File): Promise<ImageContent> {
 		return new Promise((resolve) => {
 			const reader = new FileReader();
-			reader.onload = () => resolve(dataUrlToImageContent(String(reader.result), file.type));
+			reader.onload = () =>
+				resolve(dataUrlToImageContent(String(reader.result), file.type));
 			reader.readAsDataURL(file);
 		});
 	}
 
-	function dataUrlToImageContent(dataUrl: string, fallbackMimeType: string): ImageContent {
+	function dataUrlToImageContent(
+		dataUrl: string,
+		fallbackMimeType: string,
+	): ImageContent {
 		const [meta, data = ""] = dataUrl.split(",");
 		const mimeType = meta.match(/^data:(.*?);base64$/)?.[1] || fallbackMimeType;
 		return { type: "image", data, mimeType };
 	}
 
-	function resizeImageFile(file: File, maxEdge: number, quality: number): Promise<ImageContent> {
+	function resizeImageFile(
+		file: File,
+		maxEdge: number,
+		quality: number,
+	): Promise<ImageContent> {
 		return new Promise((resolve, reject) => {
 			const reader = new FileReader();
 			reader.onerror = () => reject(reader.error);
@@ -495,7 +590,10 @@ export function App() {
 				const image = new Image();
 				image.onerror = reject;
 				image.onload = () => {
-					const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+					const scale = Math.min(
+						1,
+						maxEdge / Math.max(image.width, image.height),
+					);
 					const width = Math.max(1, Math.round(image.width * scale));
 					const height = Math.max(1, Math.round(image.height * scale));
 					const canvas = document.createElement("canvas");
@@ -503,8 +601,14 @@ export function App() {
 					canvas.height = height;
 					canvas.getContext("2d")?.drawImage(image, 0, 0, width, height);
 					// JPEG 更省 token/传输体积；透明 PNG/WebP 保持 PNG，避免截图透明区域变黑。
-					const outputType = file.type === "image/png" ? "image/png" : "image/jpeg";
-					resolve(dataUrlToImageContent(canvas.toDataURL(outputType, quality), outputType));
+					const outputType =
+						file.type === "image/png" ? "image/png" : "image/jpeg";
+					resolve(
+						dataUrlToImageContent(
+							canvas.toDataURL(outputType, quality),
+							outputType,
+						),
+					);
 				};
 				image.src = String(reader.result);
 			};
@@ -957,6 +1061,13 @@ export function App() {
 								),
 							)}
 							{isAwaitingAssistant && <ThinkingBubble />}
+							{pendingPrompts.map((item) => (
+								<PendingBubble
+									key={item.id}
+									pending={item}
+									onCancel={() => cancelPendingPrompt(item.id)}
+								/>
+							))}
 						</div>
 					)}
 					{!agentLoading && outlineItems.length > 1 && (
@@ -1086,10 +1197,22 @@ export function App() {
 									</button>
 								)}
 								<button
-									disabled={!activeAgentId || (!prompt.trim() && attachedImages.length === 0)}
+									disabled={
+										!activeAgentId ||
+										(!prompt.trim() && attachedImages.length === 0)
+									}
+									className={
+										isAgentBusy && (prompt.trim() || attachedImages.length > 0)
+											? "queue-send"
+											: ""
+									}
 									onClick={sendPrompt}
 								>
-									发送
+									{isAgentBusy && (prompt.trim() || attachedImages.length > 0)
+										? "排队发送"
+										: pendingPrompts.length > 0
+											? `发送 (${pendingPrompts.length} 排队中)`
+											: "发送"}
 								</button>
 							</div>
 						</div>
@@ -1645,6 +1768,46 @@ function ThinkingBubble() {
 	);
 }
 
+function PendingBubble(props: {
+	pending: PendingPrompt;
+	onCancel: () => void;
+}) {
+	const { pending } = props;
+	const cleanText = stripAnsi(pending.message);
+	return (
+		<article className="chat-message mine pending-message">
+			<div className="msg-avatar">我</div>
+			<div className="msg-content">
+				<div className="msg-name">
+					<span>我</span>
+					<time>
+						<span className="pending-indicator" />
+						排队中
+					</time>
+				</div>
+				<div className="msg-bubble">
+					{pending.images && pending.images.length > 0 && (
+						<div className="message-images">
+							{pending.images.map((img, index) => (
+								<img
+									key={index}
+									src={`data:${img.mimeType};base64,${img.data}`}
+									alt={`图片 ${index + 1}`}
+									className="message-image"
+								/>
+							))}
+						</div>
+					)}
+					<div className="user-message-text">{cleanText}</div>
+				</div>
+				<div className="msg-actions">
+					<button onClick={props.onCancel}>取消排队</button>
+				</div>
+			</div>
+		</article>
+	);
+}
+
 function ToolGroup(props: { group: ToolGroupItem }) {
 	const [expanded, setExpanded] = useState(false);
 	const visible = expanded
@@ -1704,7 +1867,10 @@ function ToolSummary(props: { message: ChatMessage }) {
 	);
 }
 
-function ImagePreviewModal(props: { image: ImageContent; onClose: () => void }) {
+function ImagePreviewModal(props: {
+	image: ImageContent;
+	onClose: () => void;
+}) {
 	return (
 		<div className="image-preview-modal" onClick={props.onClose}>
 			<button className="image-preview-close" onClick={props.onClose}>

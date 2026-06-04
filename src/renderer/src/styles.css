@@ -453,8 +453,13 @@ button:disabled {
 	background: #ef4444;
 }
 @keyframes pulse-running {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.6; }
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.6;
+	}
 }
 .conversation-body {
 	min-width: 0;
@@ -1107,6 +1112,51 @@ body.is-composer-resizing {
 	40% {
 		transform: translateY(-4px);
 		opacity: 1;
+	}
+}
+
+/* 排队中的用户消息 */
+.pending-message {
+	opacity: 0.75;
+}
+.pending-message .msg-bubble {
+	border-style: dashed;
+	border-color: #c0c8d4;
+}
+.pending-indicator {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border: 2px solid #94a3b8;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: pendingSpin 0.8s linear infinite;
+	margin-right: 4px;
+	vertical-align: middle;
+}
+@keyframes pendingSpin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.pending-message .msg-actions button {
+	color: #ef4444;
+}
+.pending-message .msg-actions button:hover {
+	background: #fef2f2;
+}
+
+/* 排队发送按钮脉冲动效 */
+.composer-footer .queue-send {
+	animation: queuePulse 1.5s ease-in-out infinite;
+}
+@keyframes queuePulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.6;
 	}
 }
 .tool-group {

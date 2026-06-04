@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Notification } from "electron";
+import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import type {
 	AgentRuntimeState,
@@ -109,7 +109,11 @@ export class AgentManager {
 					? `${project.name} 历史会话`
 					: `${project.name} agent`);
 			tab.status = "idle";
-			await this.loadMessages(id).catch(() => undefined);
+			// 加载历史消息，失败时重试一次（新进程可能需要短暂初始化时间）
+			await this.loadMessages(id)
+				.catch(() => new Promise((resolve) => setTimeout(resolve, 800)))
+				.then(() => this.loadMessages(id))
+				.catch(() => undefined);
 		} catch (error) {
 			tab.status = "error";
 			this.addMessage(
@@ -146,27 +150,47 @@ export class AgentManager {
 			}
 		}
 
+		// 判断 agent 是否已在忙碌中（flush 场景：第一条消息触发 agent_start 后状态变为 running，
+		// 后续消息必须带 streamingBehavior 否则 pi 返回 error）
+		const alreadyBusy = runtime.tab.status === "running";
+
 		// 保存用户消息（包含图片）
-		this.addMessage(input.agentId, "user", trimmed || "[图片]", undefined, input.images);
+		this.addMessage(
+			input.agentId,
+			"user",
+			trimmed || "[图片]",
+			undefined,
+			input.images,
+		);
 		runtime.tab.status = "running";
 		this.emitState();
 
 		// streamingBehavior 只在 agent 忙碌时需要；UI 可以显式传 steer/followUp 以复用 pi 队列语义。
+		// 当前端排队 flush 连续发送多条消息时，第一条会触发 agent_start 使 agent 变忙碌，
+		// 后续消息必须带 streamingBehavior 否则 pi 直接返回 error。这里自动兜底。
 		// images 用于传递粘贴/拖拽的图片，pi 会将 base64 图片直接传给支持视觉的模型。
 		try {
-			const response = await runtime.process.client.request({
+			const requestPayload: Record<string, unknown> = {
 				type: "prompt",
 				message: trimmed || "Describe this image.",
 				...(hasImages ? { images: input.images } : {}),
-				...(input.streamingBehavior
-					? { streamingBehavior: input.streamingBehavior }
-					: {}),
-			});
+			};
+			// 如果 agent 已经忙碌且调用方没指定 streamingBehavior，默认用 steer
+			if (input.streamingBehavior) {
+				requestPayload.streamingBehavior = input.streamingBehavior;
+			} else if (alreadyBusy) {
+				requestPayload.streamingBehavior = "steer";
+			}
+			const response = await runtime.process.client.request(requestPayload);
 			if (!response.success) {
 				// pi RPC 会把不支持图片、忙碌队列参数缺失等前置错误作为 success:false 返回；
 				// 必须显式显示出来，否则 UI 会停在“已发送但无响应”的状态。
 				runtime.tab.status = "idle";
-				this.addMessage(input.agentId, "error", response.error ?? "图片消息发送失败");
+				this.addMessage(
+					input.agentId,
+					"error",
+					response.error ?? "图片消息发送失败",
+				);
 				this.emitState();
 			}
 		} catch (error) {
@@ -371,7 +395,23 @@ export class AgentManager {
 	 */
 	async restart(agentId: string): Promise<AgentTab> {
 		const runtime = this.requireRuntime(agentId);
-		const { projectId, sessionPath, title } = runtime.tab;
+		const { projectId, title } = runtime.tab;
+
+		// 优先从 pi 获取最新 sessionFile，兜底用 tab 上缓存的值；
+		// 避免首次创建时未指定 session 路径、restart 后丢失历史的情况。
+		let sessionPath = runtime.tab.sessionPath;
+		if (!sessionPath) {
+			try {
+				const state = await runtime.process.client.request({
+					type: "get_state",
+				});
+				sessionPath =
+					(state.data as { sessionFile?: string } | undefined)?.sessionFile ??
+					undefined;
+			} catch {
+				// 获取失败时继续用 undefined，create 会启动新 session
+			}
+		}
 
 		// 停止旧进程并清理状态
 		runtime.process.stop();
@@ -436,6 +476,13 @@ export class AgentManager {
 		if (typed.type === "agent_end" && runtime) {
 			runtime.tab.status = "idle";
 			this.emitState();
+			// 同步刷新 runtimeState，将 isStreaming 重置为 false；
+			// 否则前端 isAgentBusy 依赖的 isStreaming 仍为过期的 true，导致排队 flush 无法触发。
+			void this.getRuntimeState(agentId)
+				.then((state) =>
+					this.emit(ipcChannels.agentsRuntimeState, { agentId, state }),
+				)
+				.catch(() => undefined);
 			// 会话结束时发送系统通知，让用户知道 agent 已完成工作
 			// 只在最后一条消息是 assistant 消息时通知，避免工具调用结束时也触发通知
 			const messages = this.messages.get(agentId) ?? [];
@@ -561,7 +608,9 @@ export class AgentManager {
 							id: `${agentId}-history-${index}`,
 							agentId,
 							role: "user" as const,
-							text: this.extractText(typed.content) || (images.length > 0 ? "[图片]" : ""),
+							text:
+								this.extractText(typed.content) ||
+								(images.length > 0 ? "[图片]" : ""),
 							timestamp: typed.timestamp ?? Date.now(),
 							...(images.length > 0 ? { images } : {}),
 						},

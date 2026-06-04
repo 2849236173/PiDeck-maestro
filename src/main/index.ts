@@ -239,9 +239,14 @@ function registerIpc() {
 		(_event, agentId: string, level: string) =>
 			agentManager.setThinking(agentId, level),
 	);
-	ipcMain.handle("agents:commands", (_event, agentId: string) =>
-		agentManager.getCommands(agentId),
-	);
+	ipcMain.handle("agents:commands", async (_event, agentId: string) => {
+		try {
+			return await agentManager.getCommands(agentId);
+		} catch {
+			// agent 不存在或 RPC 超时时返回空列表，避免控制台报未处理异常
+			return [];
+		}
+	});
 
 	// ── 配置管理 ──────────────────────────────────────
 	ipcMain.handle(ipcChannels.configGetModels, () =>

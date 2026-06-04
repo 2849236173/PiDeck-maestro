@@ -232,6 +232,7 @@ export function createPreviewApi(): PiDesktopApi {
 				return () => undefined;
 			}) as any,
 			onLog: noop,
+			onRuntimeState: noop,
 		},
 	};
 }
