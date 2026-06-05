@@ -3074,41 +3074,48 @@ body.is-composer-resizing .composer-resize-handle::after {
 /* ── 本次会话修改文件区域 ─────────────────────── */
 
 .modified-files-section {
-	margin-bottom: 10px;
-	padding-bottom: 10px;
-	border-bottom: 1px solid #e8ecf1;
+	margin-bottom: 12px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #dde2e8;
 }
 
 .modified-files-header {
-	font-size: 11px;
-	color: #8a94a3;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	font-weight: 600;
+	font-size: 12px;
+	color: #5d6673;
+	font-weight: 650;
 	padding: 4px 8px;
-	margin-bottom: 4px;
+	margin-bottom: 6px;
 }
 
 .modified-file-row {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 5px 8px;
-	border-radius: 6px;
-	font-size: 12px;
-	color: #3b424c;
+	gap: 7px;
+	padding: 6px 8px;
+	border-radius: 7px;
+	font-size: 13px;
+	color: #2b3038;
 	overflow: hidden;
+	transition: background 0.12s;
+}
+
+.modified-file-row:hover {
+	background: #f5f7fa;
 }
 
 .modified-file-row.running {
-	color: #7d8794;
+	color: #5d6673;
 }
 
 .modified-file-icon {
-	flex: 0 0 14px;
-	width: 14px;
+	flex: 0 0 16px;
+	width: 16px;
 	text-align: center;
-	font-size: 11px;
+	font-size: 12px;
+}
+
+.modified-file-icon.done {
+	color: #14a514;
 }
 
 .modified-file-row.running .modified-file-icon {
@@ -3121,13 +3128,14 @@ body.is-composer-resizing .composer-resize-handle::after {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	font-weight: 500;
 }
 
 .modified-file-tool {
 	flex: 0 0 auto;
-	font-size: 10px;
-	color: #9ba5b0;
-	padding: 1px 5px;
+	font-size: 11px;
+	color: #6b7583;
+	padding: 2px 6px;
 	border-radius: 4px;
-	background: #f1f4f7;
+	background: #eef1f5;
 }

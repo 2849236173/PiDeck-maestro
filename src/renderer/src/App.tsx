@@ -178,7 +178,9 @@ export function App() {
 		const result: { path: string; toolName: string; status: string }[] = [];
 		for (const msg of activeMessages) {
 			if (msg.role !== "tool") continue;
-			const toolName: string | undefined = msg.meta?.toolName as string | undefined;
+			const toolName: string | undefined = msg.meta?.toolName as
+				| string
+				| undefined;
 			const args: any = msg.meta?.args;
 			const status: string = String(msg.meta?.status ?? "done");
 			// 只收集文件写入/编辑类的工具调用
@@ -2487,7 +2489,7 @@ function FilesPanel(props: {
 								className={`modified-file-row${isRunning ? " running" : ""}`}
 								title={file.path}
 							>
-								<span className="modified-file-icon">
+								<span className={`modified-file-icon${isRunning ? "" : " done"}`}>
 									{isRunning ? "◌" : "✓"}
 								</span>
 								<span className="modified-file-name">{fileName}</span>
