@@ -297,6 +297,51 @@ export function ConfigModal(props: {
 		}
 	};
 
+	// ── 导出 / 导入 ─────────────────────────────────────
+
+	/** 将三个配置文件打包为 JSON 并触发浏览器下载。 */
+	const handleExport = async () => {
+		try {
+			const json = await api.config.export();
+			const blob = new Blob([json], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			// 文件名含时间戳，便于用户区分多次备份
+			a.download = `pi-desktop-config-${new Date().toISOString().slice(0, 10)}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+			showToast("配置已导出");
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	/** 从用户选择的 JSON 文件导入配置，成功后刷新当前 tab。 */
+	const handleImport = async () => {
+		const input = document.createElement("input");
+		input.type = "file";
+		input.accept = ".json";
+		input.onchange = async () => {
+			const file = input.files?.[0];
+			if (!file) return;
+			try {
+				const text = await file.text();
+				const result = await api.config.import(text);
+				if (!result.valid) {
+					setError(result.error ?? "导入失败");
+					return;
+				}
+				onSaved();
+				await loadConfig(tab);
+				showToast("配置已导入");
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		};
+		input.click();
+	};
+
 	if (!open) return null;
 
 	return (
@@ -304,7 +349,15 @@ export function ConfigModal(props: {
 			<div className="config-modal" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-header">
 					<strong>配置管理</strong>
-					<button onClick={onClose}>×</button>
+					<div className="modal-header-actions">
+						<button className="config-btn primary" onClick={handleExport}>
+							导出
+						</button>
+						<button className="config-btn blue" onClick={handleImport}>
+							导入
+						</button>
+						<button className="modal-close-btn" onClick={onClose}>×</button>
+					</div>
 				</div>
 
 				<div className="config-tabs">
@@ -584,7 +637,7 @@ function ModelsTab(props: {
 						onClick={props.onSave}
 						disabled={saving}
 					>
-						{saving ? "保存中…" : "保存全部"}
+						{saving ? "保存中…" : "保存"}
 					</button>
 				</div>
 			</div>
@@ -691,6 +744,35 @@ function ModelsTab(props: {
 												}
 											/>
 										</div>
+										<div className="config-form-row">
+											<label>兼容性</label>
+											<div className="config-compat-group">
+												<label className="config-checkbox-label">
+													<input
+														type="checkbox"
+														checked={(provider.compat as Record<string, unknown>)?.supportsDeveloperRole !== false}
+														onChange={(e) => {
+															const compat = { ...((provider.compat as Record<string, unknown>) ?? {}) } as Record<string, unknown>;
+															compat.supportsDeveloperRole = e.target.checked;
+															props.onChangeProvider(name, "compat", compat);
+														}}
+													/>
+													<span>developer 角色</span>
+												</label>
+												<label className="config-checkbox-label">
+													<input
+														type="checkbox"
+														checked={(provider.compat as Record<string, unknown>)?.supportsReasoningEffort !== false}
+														onChange={(e) => {
+															const compat = { ...((provider.compat as Record<string, unknown>) ?? {}) } as Record<string, unknown>;
+															compat.supportsReasoningEffort = e.target.checked;
+															props.onChangeProvider(name, "compat", compat);
+														}}
+													/>
+													<span>推理强度</span>
+												</label>
+											</div>
+										</div>
 									</div>
 
 									<div className="config-models-section">
@@ -779,7 +861,7 @@ function ModelsTab(props: {
 													onClick={() => props.onDeleteModel(name, i)}
 													title="删除模型"
 												>
-													×
+													<Trash2 size={14} />
 												</button>
 											</div>
 										))}
@@ -839,7 +921,7 @@ function AuthTab(props: {
 						onClick={props.onSave}
 						disabled={saving}
 					>
-						{saving ? "保存中…" : "保存全部"}
+						{saving ? "保存中…" : "保存"}
 					</button>
 				</div>
 			</div>
@@ -956,7 +1038,7 @@ function SettingsTab(props: {
 					onClick={props.onSave}
 					disabled={saving}
 				>
-					{saving ? "保存中…" : "保存全部"}
+					{saving ? "保存中…" : "保存"}
 				</button>
 			</div>
 			<div className="config-settings-list">
@@ -1052,7 +1134,7 @@ function RawTab(props: {
 					onClick={props.onSave}
 					disabled={props.saving}
 				>
-					{props.saving ? "保存中…" : "保存并重载"}
+					{props.saving ? "保存中…" : "保存"}
 				</button>
 			</div>
 			<textarea

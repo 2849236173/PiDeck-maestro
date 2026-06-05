@@ -1331,6 +1331,9 @@ export function App() {
 										<img
 											src={`data:${img.mimeType};base64,${img.data}`}
 											alt={`图片 ${index + 1}`}
+										
+											onClick={() => setPreviewImage(img)}
+											style={{ cursor: "pointer" }}
 										/>
 										<button
 											className="image-remove-btn"
@@ -1620,7 +1623,7 @@ function SessionStatus(props: {
 	return (
 		<div className="session-status">
 			<span className="model-chip">
-				{props.state.modelName ?? props.state.modelId ?? "model"}
+				{props.state.provider ? `${props.state.provider}/` : ""}{props.state.modelName ?? props.state.modelId ?? "model"}
 			</span>
 			<span>think: {props.state.thinkingLevel ?? "-"}</span>
 			{props.duration != null && (
@@ -1655,7 +1658,7 @@ function ComposerToolbar(props: {
 	return (
 		<div className="composer-toolbar">
 			<button onClick={props.onPickModel} disabled={props.disabled}>
-				Model: {props.state?.modelName ?? "-"}
+				Model: {props.state?.provider ? `${props.state.provider}/` : ""}{props.state?.modelName ?? "-"}
 			</button>
 			<button onClick={props.onCycleModel} disabled={props.disabled}>
 				Cycle Model

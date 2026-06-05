@@ -1387,7 +1387,7 @@ body.is-composer-resizing {
 	min-height: 132px;
 	max-height: 42vh;
 	display: grid;
-	grid-template-rows: 30px minmax(64px, 1fr) 34px;
+	grid-template-rows: 30px auto minmax(64px, 1fr) 34px;
 	border: 1px solid #dde2e8;
 	background: #fff;
 	border-radius: 10px;
@@ -1451,6 +1451,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: #1f2329;
 	padding: 13px 14px 8px;
 	line-height: 1.5;
+	grid-row: 3;
 }
 .composer-box:focus-within {
 	border-color: #14b814;
@@ -1462,6 +1463,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	padding: 0 8px 8px 14px;
 	color: #8a9099;
 	font-size: 12px;
+	grid-row: 4;
 }
 .composer-footer span {
 	max-width: 70%;
@@ -1887,11 +1889,11 @@ body.is-composer-resizing .composer-resize-handle::after {
 	flex: 1;
 }
 .modal-header {
-	height: 58px;
+	height: 64px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 0 18px;
+	padding: 8px 18px;
 	border-bottom: 1px solid #edf0f2;
 }
 .modal-header strong {
@@ -2083,7 +2085,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 /* ── 配置管理弹窗 ─────────────────────────────────── */
 
 .config-modal {
-	width: 720px;
+	width: 900px;
 	max-height: 85vh;
 	display: flex;
 	flex-direction: column;
@@ -2249,7 +2251,65 @@ body.is-composer-resizing .composer-resize-handle::after {
 	font-size: 11px;
 }
 
-.config-icon-btn {
+.config-btn.blue {
+	border-color: #3b82f6;
+	background: #3b82f6;
+	color: #fff;
+}
+
+.config-btn.blue:hover:not(:disabled) {
+	background: #2563eb;
+	border-color: #2563eb;
+}
+
+/* 头部导出/导入按钮：完全覆盖 .modal-header button 的固定宽高，回归 config-btn 原始尺寸 */
+.modal-header-actions .config-btn {
+	height: 32px !important;
+	width: auto !important;
+	min-width: 0 !important;
+	padding: 0 14px !important;
+	font-size: 12px !important;
+	line-height: 1 !important;
+	border: 1px solid #d7dce4 !important;
+}
+.modal-header-actions .config-btn.primary {
+	border-color: #14a514 !important;
+	background: #14a514 !important;
+	color: #fff !important;
+}
+.modal-header-actions .config-btn.primary:hover:not(:disabled) {
+	background: #129212 !important;
+	border-color: #129212 !important;
+}
+.modal-header-actions .config-btn.blue {
+	border-color: #3b82f6 !important;
+	background: #3b82f6 !important;
+	color: #fff !important;
+}
+.modal-header-actions .config-btn.blue:hover:not(:disabled) {
+	background: #2563eb !important;
+	border-color: #2563eb !important;
+}
+
+/* 配置弹窗关闭按钮 */
+.modal-close-btn {
+	width: 28px;
+	height: 28px;
+	border: 1px solid #4a5160;
+	background: transparent;
+	color: #c8cdd5;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 16px;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.modal-close-btn:hover {
+	background: #333a45;
+}
 	width: 28px;
 	height: 28px;
 	border: 0;
@@ -2378,6 +2438,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 
 .config-provider-body {
 	border-top: 1px solid #edf0f2;
+	padding-top: 12px;
 	background: linear-gradient(180deg, #fbfcfd 0%, #f7f9fb 100%);
 }
 
@@ -2795,6 +2856,13 @@ body.is-composer-resizing .composer-resize-handle::after {
 	accent-color: #14a514;
 }
 
+/* 兼容性配置组：横向排列多个 checkbox */
+.config-compat-group {
+	display: flex;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
 .config-raw-tab select {
 	height: 36px;
 	border: 1px solid #d7dce4;
@@ -2842,6 +2910,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	background: #f8f9fa;
 	max-height: 120px;
 	overflow-y: auto;
+	grid-row: 2;
 }
 
 .image-preview-item {
@@ -2982,18 +3051,25 @@ body.is-composer-resizing .composer-resize-handle::after {
 .modal-header-actions {
 	display: flex;
 	gap: 6px;
+	align-items: center;
 }
-.modal-header-actions button {
-	border: 1px solid #4a5160;
-	background: transparent;
-	color: #c8cdd5;
-	padding: 4px 10px;
+.modal-header-actions .modal-close-btn {
+	width: 32px;
+	height: 32px;
+	border: 1px solid #d7dce4;
+	background: #f8f9fa;
+	color: #5d6673;
 	border-radius: 6px;
 	cursor: pointer;
-	font-size: 12px;
+	font-size: 16px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 }
-.modal-header-actions button:hover {
-	background: #333a45;
+.modal-header-actions .modal-close-btn:hover {
+	background: #edf0f2;
+	color: #3b424c;
 }
 .rpc-log-list {
 	flex: 1;

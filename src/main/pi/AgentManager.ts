@@ -505,25 +505,52 @@ export class AgentManager {
 			this.emitState();
 		}
 
-		if (typed.type === "agent_end" && runtime) {
-			runtime.tab.status = "idle";
-			// 清理流式思考状态
-			this.streamingThinking.delete(agentId);
-			this.emitThinking(agentId, "");
-			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白
-			// 错误信息可能在顶层也可能嵌套在 messages 数组中——遍历查找最近一条异常消息
-			const errorList = Array.isArray(typed.messages)
-				? (typed.messages as any[]).filter((m: any) => m.stopReason === "error")
-				: [];
+		if (typed.type === "agent_end") {
+			// 即使 runtime 已被清理（如用户快速切换/停止 agent），仍需向会话写入错误提示，
+			// 否则用户会看到发送后完全空白、没有任何反馈。
+			if (runtime) {
+				runtime.tab.status = "idle";
+				// 清理流式思考状态
+				this.streamingThinking.delete(agentId);
+				this.emitThinking(agentId, "");
+			}
+			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白。
+			// 错误信息的存放位置因 pi 版本和错误类型不同而有多种可能：
+			//   1. agent_end 顶层 errorMessage
+			//   2. messages 数组中 stopReason=error 的消息的 errorMessage
+			//   3. messages 数组中 assistant 消息的 content 里包含 error 片段
+			//   4. agent_end 顶层 stopReason=error 但无 messages
+			const agentMessages = Array.isArray(typed.messages) ? typed.messages : [];
+			const errorMessages = agentMessages.filter(
+				(m: any) => m.stopReason === "error",
+			);
+			// 逐级查找错误文本：顶层 → 错误消息列表 → 仅检查最后一轮对话中 type=error 的 content 块
+			const topMsg = errorMessages[errorMessages.length - 1];
+			// 只从最后一条 assistant 消息中查找显式 type=error 的 content 块，
+			// 避免扫描全部历史消息导致工具成功输出被误判为错误。
+			const lastAssistant = agentMessages
+				.filter((m: any) => m.role === "assistant")
+				.pop();
+			const contentError = Array.isArray(lastAssistant?.content)
+				? lastAssistant.content.find((c: any) => c?.type === "error")
+				: undefined;
 			const errorMsg =
 				(typed.errorMessage as string | undefined) ??
-				errorList[errorList.length - 1]?.errorMessage;
+				topMsg?.errorMessage ??
+				(typed.error as string | undefined) ??
+				(typeof contentError?.text === "string" ? contentError.text : undefined) ??
+				(typeof contentError?.message === "string"
+					? contentError.message
+					: undefined);
 			if (errorMsg) {
 				this.addMessage(agentId, "error", String(errorMsg));
-			} else if (typed.stopReason === "error" || errorList.length > 0) {
+			} else if (
+				typed.stopReason === "error" ||
+				errorMessages.length > 0
+			) {
 				this.addMessage(agentId, "error", "Agent 返回未知错误，请重试");
 			}
-			this.emitState();
+			if (runtime) this.emitState();
 			// 同步刷新 runtimeState，将 isStreaming 重置为 false；
 			// 否则前端 isAgentBusy 依赖的 isStreaming 仍为过期的 true，导致排队 flush 无法触发。
 			void this.getRuntimeState(agentId)
@@ -535,7 +562,7 @@ export class AgentManager {
 			// 只在最后一条消息是 assistant 消息时通知，避免工具调用结束时也触发通知
 			const messages = this.messages.get(agentId) ?? [];
 			const lastMessage = messages[messages.length - 1];
-			if (lastMessage?.role === "assistant") {
+			if (lastMessage?.role === "assistant" && runtime) {
 				this.notifySessionEnd(runtime.tab.title);
 			}
 		}

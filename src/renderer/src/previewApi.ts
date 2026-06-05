@@ -167,6 +167,13 @@ export function createPreviewApi(): PiDesktopApi {
 			saveAuth: async () => ({ valid: true }),
 			saveSettings: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
+			export: async () =>
+				JSON.stringify({
+					version: 1,
+					exportedAt: new Date().toISOString(),
+					files: { "models.json": {}, "auth.json": {}, "settings.json": {} },
+				}),
+			import: async () => ({ valid: true }),
 		},
 		agents: {
 			list: async () => agents,

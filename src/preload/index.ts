@@ -123,6 +123,13 @@ const api = {
 				fileName,
 				rawJson,
 			) as Promise<{ valid: boolean; error?: string }>,
+		export: () =>
+			ipcRenderer.invoke(ipcChannels.configExport) as Promise<string>,
+		import: (packageJson: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.configImport,
+				packageJson,
+			) as Promise<{ valid: boolean; error?: string }>,
 	},
 	agents: {
 		list: () =>

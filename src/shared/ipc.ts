@@ -46,6 +46,8 @@ export const ipcChannels = {
 	configSaveAuth: "config:save-auth",
 	configSaveSettings: "config:save-settings",
 	configSaveRaw: "config:save-raw",
+	configExport: "config:export",
+	configImport: "config:import",
 
 	/** 切换开发者控制台 */
 	appToggleDevTools: "app:toggle-devtools",

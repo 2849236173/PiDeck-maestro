@@ -270,6 +270,12 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configSaveRaw, (_event, fileName, rawJson) =>
 		configManager.saveRawConfig(fileName, rawJson),
 	);
+	ipcMain.handle(ipcChannels.configExport, () =>
+		configManager.exportConfig(),
+	);
+	ipcMain.handle(ipcChannels.configImport, (_event, packageJson: string) =>
+		configManager.importConfig(packageJson),
+	);
 
 	// 切换开发者控制台
 	ipcMain.handle(ipcChannels.appToggleDevTools, () => {

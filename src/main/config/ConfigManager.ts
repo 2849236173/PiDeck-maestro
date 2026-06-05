@@ -178,4 +178,61 @@ export class ConfigManager {
 			typeof content === "string" ? content : JSON.stringify(content, null, 2);
 		await writeFile(filePath, json, "utf8");
 	}
+
+	// ── 导出 / 导入 ───────────────────────────────────────
+
+	/** 将三个配置文件打包为单个 JSON 对象，便于用户备份和迁移。 */
+	async exportConfig(): Promise<string> {
+		const [models, auth, settings] = await Promise.all([
+			this.readJsonFile<PiModelsFile>("models.json", { providers: {} }),
+			this.readJsonFile<PiAuthFile>("auth.json", {}),
+			this.readJsonFile<PiSettings>("settings.json", {}),
+		]);
+		return JSON.stringify(
+			{
+				version: 1,
+				exportedAt: new Date().toISOString(),
+				files: {
+					"models.json": models.parsed,
+					"auth.json": auth.parsed,
+					"settings.json": settings.parsed,
+				},
+			},
+			null,
+			2,
+		);
+	}
+
+	/** 从导出的 JSON 包恢复配置文件，返回导入结果。 */
+	async importConfig(
+		packageJson: string,
+	): Promise<ConfigValidationResult> {
+		let pkg: unknown;
+		try {
+			pkg = JSON.parse(packageJson);
+		} catch (e) {
+			return {
+				valid: false,
+				error: `JSON 格式错误：${e instanceof Error ? e.message : String(e)}`,
+			};
+		}
+		const data = pkg as Record<string, unknown>;
+		const files = data.files as Record<string, unknown> | undefined;
+		if (!files || typeof files !== "object") {
+			return { valid: false, error: "导入文件缺少 files 字段，请确认是 pi-desktop 导出的配置包" };
+		}
+
+		// 按需写入，只处理三个已知文件名，忽略其他 key
+		const allowed: Array<[string, string]> = [
+			["models.json", "models.json"],
+			["auth.json", "auth.json"],
+			["settings.json", "settings.json"],
+		];
+		for (const [key, fileName] of allowed) {
+			if (files[key] != null) {
+				await this.writeJsonFile(fileName, files[key]);
+			}
+		}
+		return { valid: true };
+	}
 }
