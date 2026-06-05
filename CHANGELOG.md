@@ -4,6 +4,28 @@
 
 All notable changes to pi-desktop are documented here.
 
+## v0.4.5 - 2026-06-05
+
+### Added
+- Config export/import: package models.json, auth.json, and settings.json
+  into a single JSON file for backup and migration.
+- Provider compat settings: visual editor for supportsDeveloperRole and
+  supportsReasoningEffort options, no manual JSON editing required.
+- Image preview in composer: click thumbnail images to view full-size
+  preview in modal.
+
+### Fixed
+- Error detection logic: prevented normal tool outputs (e.g., "Successfully
+  replaced") from being displayed as error messages.
+- Image preview area overlapping with textarea: adjusted grid layout so
+  image preview occupies its own row.
+
+### Improved
+- Config modal UI: width increased to 900px, export/import buttons
+  match save button style, provider expand area has more spacing,
+  delete button icons unified.
+- Close button color darkened for better visibility.
+
 ## v0.4.4 - 2026-06-05
 
 ### Added
