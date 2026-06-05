@@ -147,7 +147,7 @@ export function ConfigModal(props: {
 				return;
 			}
 			onSaved();
-			showToast("配置已保存，正在重载…");
+			showToast("配置已保存");
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
