@@ -1085,6 +1085,12 @@ export function App() {
 					)}
 					{activeAgent && (
 						<div className="message-list">
+							{isAwaitingAssistant && !renderedMessages.some((m) => m.kind === "response-group") && (
+								<ThinkingBubble
+									thinking={activeThinking}
+									showThinking={settings.showThinking}
+								/>
+							)}
 							{renderedMessages.map((item) =>
 								item.kind === "tool-group" ? (
 									<ToolGroup key={item.id} group={item} />
@@ -1094,27 +1100,22 @@ export function App() {
 										group={item}
 										onPreviewImage={setPreviewImage}
 										showThinking={settings.showThinking}
+										streamingThinking={activeThinking}
 									/>
 								) : (
 									<ChatBubble
 										key={item.message.id}
 										message={item.message}
 										onPreviewImage={setPreviewImage}
-										showThinking={settings.showThinking}
+											showThinking={settings.showThinking}
 									/>
 								),
 							)}
-							{isAwaitingAssistant && (
-								<ThinkingBubble
-									thinking={activeThinking}
-									showThinking={settings.showThinking}
-								/>
-							)}
-							{pendingPrompts.map((item) => (
+							{pendingPrompts.map((prompt) => (
 								<PendingBubble
-									key={item.id}
-									pending={item}
-									onCancel={() => cancelPendingPrompt(item.id)}
+									key={prompt.id}
+									pending={prompt}
+									onCancel={() => cancelPendingPrompt(prompt.id)}
 								/>
 							))}
 						</div>
@@ -1996,20 +1997,22 @@ function ResponseBubble(props: {
 	group: ResponseGroupItem;
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
+	/** 流式过程中的实时 thinking 内容，在 group.thinking 尚未生成时填充 thinking 块 */
+	streamingThinking?: string;
 }) {
 	const { group } = props;
 	const [expanded, setExpanded] = useState(false);
 	const [thinkingExpanded, setThinkingExpanded] = useState(false);
 	const cleanText = stripAnsi(group.text);
-	const hasThinking =
-		props.showThinking && group.thinking && group.thinking.length > 0;
+	// 使用累计 thinking（历史）或流式 thinking（实时），确保响应过程中 thinking 块始终有内容
+	const thinkingContent = group.thinking || props.streamingThinking || "";
+	const hasThinking = props.showThinking && thinkingContent.length > 0;
 	const thinkingPreviewLen = 200;
-	const thinkingNeedsTruncate =
-		(group.thinking?.length ?? 0) > thinkingPreviewLen;
+	const thinkingNeedsTruncate = thinkingContent.length > thinkingPreviewLen;
 	const thinkingDisplayText =
 		thinkingExpanded || !thinkingNeedsTruncate
-			? (group.thinking ?? "")
-			: (group.thinking ?? "").slice(0, thinkingPreviewLen) + "\u2026";
+			? thinkingContent
+			: thinkingContent.slice(0, thinkingPreviewLen) + "...";
 	const running =
 		group.tools.length > 0 &&
 		group.tools[group.tools.length - 1].meta?.status === "running";
