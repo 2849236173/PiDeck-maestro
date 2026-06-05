@@ -1141,6 +1141,7 @@ export function App() {
 						<ComposerToolbar
 							state={activeRuntimeState}
 							compacting={compacting}
+							disabled={isAgentBusy}
 							onCycleModel={cycleModel}
 							onPickModel={openModelPicker}
 							onCycleThinking={cycleThinking}
@@ -1520,6 +1521,7 @@ function SessionStatus(props: { state?: AgentRuntimeState }) {
 function ComposerToolbar(props: {
 	state?: AgentRuntimeState;
 	compacting: boolean;
+	disabled?: boolean;
 	onCycleModel: () => void;
 	onPickModel: () => void;
 	onCycleThinking: () => void;
@@ -1529,11 +1531,11 @@ function ComposerToolbar(props: {
 	const showCompact = ctxPercent != null && ctxPercent > 30;
 	return (
 		<div className="composer-toolbar">
-			<button onClick={props.onPickModel}>
+			<button onClick={props.onPickModel} disabled={props.disabled}>
 				Model: {props.state?.modelName ?? "-"}
 			</button>
-			<button onClick={props.onCycleModel}>Cycle Model</button>
-			<button onClick={props.onCycleThinking}>
+			<button onClick={props.onCycleModel} disabled={props.disabled}>Cycle Model</button>
+			<button onClick={props.onCycleThinking} disabled={props.disabled}>
 				Think: {props.state?.thinkingLevel ?? "-"}
 			</button>
 			{showCompact && (
