@@ -520,10 +520,7 @@ export class AgentManager {
 				errorList[errorList.length - 1]?.errorMessage;
 			if (errorMsg) {
 				this.addMessage(agentId, "error", String(errorMsg));
-			} else if (
-				typed.stopReason === "error" ||
-				errorList.length > 0
-			) {
+			} else if (typed.stopReason === "error" || errorList.length > 0) {
 				this.addMessage(agentId, "error", "Agent 返回未知错误，请重试");
 			}
 			this.emitState();
