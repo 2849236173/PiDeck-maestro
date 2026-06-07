@@ -11,10 +11,7 @@ import type {
 	ModelsFile,
 	SettingsFile,
 } from "./config/configTypes";
-import {
-	DEFAULT_PROVIDER_HEADERS,
-	getProviderHeaders,
-} from "./config/providerHeaders";
+import { getProviderHeaders } from "./config/providerHeaders";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi })
 	.piDesktop;
@@ -151,19 +148,18 @@ export function ConfigModal(props: {
 	// ── Models 操作 ──────────────────────────────────────
 
 	const handleAddProvider = () => {
-		if (!newProviderName.trim()) return;
+		const providerName = newProviderName.trim();
+		if (!providerName) return;
 		const updated = {
 			...modelsData,
 			providers: {
 				...modelsData.providers,
-				[newProviderName.trim()]: {
-					headers: DEFAULT_PROVIDER_HEADERS,
-					models: [],
-				},
+				// 默认不写入 headers，保持和手写 models.json 一致；需要兼容特定代理时再由用户显式选择 User-Agent。
+				[providerName]: { models: [] },
 			},
 		};
 		setModelsData(updated);
-		setExpandedProvider(newProviderName.trim());
+		setExpandedProvider(providerName);
 		setAddingProvider(false);
 		setNewProviderName("");
 	};

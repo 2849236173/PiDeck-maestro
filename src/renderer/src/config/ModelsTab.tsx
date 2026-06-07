@@ -289,9 +289,9 @@ export function ModelsTab(props: {
 															),
 														)
 													}
-													placeholder="pi-coding-agent"
+													placeholder="留空则不写入"
 												/>
-												<span>写入 models.json 的 headers 字段</span>
+												<span>留空时不写入 headers，使用 pi / SDK 运行时默认值</span>
 											</div>
 										</div>
 										<div className="config-form-row">
