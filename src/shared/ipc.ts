@@ -10,6 +10,7 @@ export const ipcChannels = {
 	sessionsRename: "sessions:rename",
 	settingsGet: "settings:get",
 	settingsUpdate: "settings:update",
+	settingsTestPiProxy: "settings:test-pi-proxy",
 	settingsApplyWindow: "settings:apply-window",
 	gitBranches: "git:branches",
 	gitCheckout: "git:checkout",

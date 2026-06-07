@@ -2456,13 +2456,23 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: #4c5664;
 	font-size: 13px;
 }
-.setting-field select {
+.setting-field select,
+.setting-field input {
 	height: 36px;
 	border: 1px solid #d7dce4;
 	border-radius: 8px;
 	background: #fff;
 	padding: 0 10px;
 	color: #2b3038;
+}
+.setting-field input:disabled {
+	background: #f6f8fb;
+	color: #98a2b3;
+}
+.setting-proxy-panel {
+	margin: 10px 0 18px 24px;
+	padding: 2px 0 2px 14px;
+	border-left: 2px solid #e5eaf1;
 }
 .setting-row {
 	display: grid;
@@ -2482,6 +2492,18 @@ body.is-composer-resizing .composer-resize-handle::after {
 .setting-row small {
 	color: #7d8794;
 }
+.setting-status {
+	margin-top: 2px;
+}
+.setting-status.success {
+	color: #168a4a;
+}
+.setting-status.error {
+	color: #d93025;
+}
+.setting-status.info {
+	color: #667085;
+}
 .setting-row button {
 	border: 1px solid #b8d8ff;
 	border-radius: 8px;
@@ -2489,6 +2511,11 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: #1677ff;
 	padding: 7px 12px;
 	white-space: nowrap;
+}
+.setting-row button:disabled {
+	border-color: #d7dce4;
+	color: #98a2b3;
+	cursor: not-allowed;
 }
 .settings-panel p {
 	color: #8a9099;

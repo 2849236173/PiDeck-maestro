@@ -156,9 +156,20 @@ export function App() {
 		enableNotifications: true,
 		showThinking: true,
 		showDevTools: false,
+		piProxyEnabled: false,
+		piProxyUrl: "http://127.0.0.1:7890",
+		piProxyBypass: "localhost,127.0.0.1,::1",
+		desktopProxyEnabled: false,
+		desktopProxyUrl: "http://127.0.0.1:7890",
+		desktopProxyBypass: "localhost,127.0.0.1,::1",
 	});
 	const [settingsNotice, setSettingsNotice] = useState("");
+	const [piProxyNotice, setPiProxyNotice] = useState("");
+	const [piProxyNoticeTone, setPiProxyNoticeTone] = useState<
+		"info" | "success" | "error"
+	>("info");
 	const [piStatus, setPiStatus] = useState<PiInstallStatus | null>(null);
+	const [piProxyChecking, setPiProxyChecking] = useState(false);
 	const [appInfo, setAppInfo] = useState<AppInfo>({
 		version: "-",
 		releasesUrl: "https://github.com/ayuayue/pi-desktop/releases",
@@ -912,6 +923,51 @@ export function App() {
 	async function updateSettings(patch: Partial<AppSettings>) {
 		const next = await api.settings.update(patch);
 		setSettings(next);
+		if (
+			"piProxyEnabled" in patch ||
+			"piProxyUrl" in patch ||
+			"piProxyBypass" in patch
+		) {
+			setPiProxyNoticeTone("info");
+			setPiProxyNotice(
+				next.piProxyEnabled
+					? "代理设置已保存；新建或重启 agent 后生效。"
+					: "",
+			);
+		}
+		if (
+			"desktopProxyEnabled" in patch ||
+			"desktopProxyUrl" in patch ||
+			"desktopProxyBypass" in patch
+		) {
+			setSettingsNotice(
+				next.desktopProxyEnabled
+					? "桌面端代理设置已保存；模型拉取和模型测试会使用该代理。"
+					: "桌面端代理已关闭。",
+			);
+		}
+	}
+
+	async function testPiProxy() {
+		setPiProxyChecking(true);
+		setPiProxyNoticeTone("info");
+		setPiProxyNotice("正在检测 pi agent 代理...");
+		try {
+			const result = await api.settings.testPiProxy();
+			setPiProxyNoticeTone(result.success ? "success" : "error");
+			setPiProxyNotice(
+				result.success
+					? `${result.message ?? "代理可用"}，耗时 ${result.elapsedMs}ms。`
+					: `代理检测失败：${result.error ?? "未知错误"}`,
+			);
+		} catch (error) {
+			setPiProxyNoticeTone("error");
+			setPiProxyNotice(
+				`代理检测失败：${error instanceof Error ? error.message : String(error)}`,
+			);
+		} finally {
+			setPiProxyChecking(false);
+		}
 	}
 
 	async function switchBranch(branch: string) {
@@ -1625,8 +1681,12 @@ export function App() {
 					notice={settingsNotice}
 					piStatus={piStatus}
 					piChecking={piChecking}
+					piProxyChecking={piProxyChecking}
+					piProxyNotice={piProxyNotice}
+					piProxyNoticeTone={piProxyNoticeTone}
 					appInfo={appInfo}
 					onCheckPi={() => checkPiInstall("manual")}
+					onTestPiProxy={() => testPiProxy()}
 					onCheckUpdate={() => api.app.openExternal(appInfo.releasesUrl)}
 					onToggleDevTools={() => {
 						void api.app.toggleDevTools();

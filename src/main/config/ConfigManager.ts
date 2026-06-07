@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { net } from "electron";
 
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
@@ -205,31 +206,35 @@ export class ConfigManager {
 			// 10 秒超时，避免网络不通时长时间卡住
 			const timeout = setTimeout(() => controller.abort(), 10_000);
 
-			const res = await fetch(request.url, {
-				method: request.method ?? "GET",
-				headers: request.headers,
-				signal: controller.signal,
-			});
-			clearTimeout(timeout);
+			try {
+				// 桌面端配置检测属于 Electron 主进程自身请求；使用 net.fetch 才能走 defaultSession 的代理配置。
+				const res = await net.fetch(request.url, {
+					method: request.method ?? "GET",
+					headers: request.headers,
+					signal: controller.signal,
+				});
 
-			if (!res.ok) {
-				return {
-					success: false,
-					error: `HTTP ${res.status}: ${res.statusText}`,
-				};
+				if (!res.ok) {
+					return {
+						success: false,
+						error: `HTTP ${res.status}: ${res.statusText}`,
+					};
+				}
+
+				const body = (await res.json()) as Record<string, unknown>;
+				const models = this.parseModelsResponse(body, apiType);
+
+				if (models.length === 0) {
+					return {
+						success: false,
+						error: "接口返回了空的模型列表",
+					};
+				}
+
+				return { success: true, models };
+			} finally {
+				clearTimeout(timeout);
 			}
-
-			const body = (await res.json()) as Record<string, unknown>;
-			const models = this.parseModelsResponse(body, apiType);
-
-			if (models.length === 0) {
-				return {
-					success: false,
-					error: "接口返回了空的模型列表",
-				};
-			}
-
-			return { success: true, models };
 		} catch (e) {
 			const msg =
 				e instanceof Error
@@ -647,13 +652,17 @@ export class ConfigManager {
 			const controller = new AbortController();
 			const timeout = setTimeout(() => controller.abort(), 15_000);
 
-			const res = await fetch(requestUrl, {
-				method: "POST",
-				headers,
-				body: requestBody,
-				signal: controller.signal,
-			});
-			clearTimeout(timeout);
+			let res: Awaited<ReturnType<typeof net.fetch>>;
+			try {
+				res = await net.fetch(requestUrl, {
+					method: "POST",
+					headers,
+					body: requestBody,
+					signal: controller.signal,
+				});
+			} finally {
+				clearTimeout(timeout);
+			}
 
 			const latencyMs = Date.now() - startedAt;
 

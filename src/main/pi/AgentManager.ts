@@ -74,7 +74,8 @@ export class AgentManager {
 			createdAt: Date.now(),
 		};
 
-		const process = new PiProcess(project.path);
+		// 代理环境变量只能在子进程启动前注入；设置变更后通过 restart/new agent 创建新的进程快照。
+		const process = new PiProcess(project.path, this.settingsStore.get());
 		const runtime: AgentRuntime = { tab, process };
 		this.agents.set(id, runtime);
 		this.messages.set(id, []);

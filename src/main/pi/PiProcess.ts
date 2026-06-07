@@ -2,12 +2,21 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PiRpcClient } from "./PiRpcClient";
 import { PiLocator } from "./PiLocator";
+import type { AppSettings } from "../../shared/types";
+
+type PiProcessSettings = Pick<
+  AppSettings,
+  "piProxyEnabled" | "piProxyUrl" | "piProxyBypass"
+>;
 
 export class PiProcess extends EventEmitter {
   private proc?: ChildProcessWithoutNullStreams;
   private rpc?: PiRpcClient;
 
-  constructor(private readonly cwd: string) {
+  constructor(
+    private readonly cwd: string,
+    private readonly settings?: PiProcessSettings,
+  ) {
     super();
   }
 
@@ -24,7 +33,7 @@ export class PiProcess extends EventEmitter {
       cwd: this.cwd,
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
-      env: locator.createProcessEnv(),
+      env: locator.createProcessEnv(this.settings),
     });
 
     this.rpc = new PiRpcClient(this.proc.stdin, this.proc.stdout);

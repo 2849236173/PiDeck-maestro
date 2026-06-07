@@ -12,6 +12,12 @@ const defaultSettings: AppSettings = {
   enableNotifications: true,
   showThinking: true,
   showDevTools: false,
+  piProxyEnabled: false,
+  piProxyUrl: "http://127.0.0.1:7890",
+  piProxyBypass: "localhost,127.0.0.1,::1",
+  desktopProxyEnabled: false,
+  desktopProxyUrl: "http://127.0.0.1:7890",
+  desktopProxyBypass: "localhost,127.0.0.1,::1",
 };
 
 export class SettingsStore {

@@ -13,13 +13,19 @@ import { is } from "@electron-toolkit/utils";
 // 这解决了打包后 build/ 目录不在 asar 中导致托盘图标丢失的问题
 import iconPath from "../../build/icon.png?asset";
 import { ipcChannels } from "../shared/ipc";
-import type { CreateAgentInput, SendPromptInput } from "../shared/types";
+import type {
+	AppSettings,
+	CreateAgentInput,
+	SendPromptInput,
+} from "../shared/types";
 import { ProjectStore } from "./projects/ProjectStore";
 import { FileSystemService } from "./fs/FileSystemService";
 import { AgentManager } from "./pi/AgentManager";
 import { PiLocator } from "./pi/PiLocator";
+import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
 import { SettingsStore } from "./settings/SettingsStore";
+import { applyDesktopProxy } from "./settings/DesktopProxy";
 import { GitService } from "./git/GitService";
 import { ConfigManager } from "./config/ConfigManager";
 import { TerminalSessionManager } from "./terminal/TerminalSessionManager";
@@ -188,11 +194,27 @@ function registerIpc() {
 	});
 
 	ipcMain.handle(ipcChannels.settingsGet, () => settingsStore.get());
-	ipcMain.handle(ipcChannels.settingsUpdate, async (_event, patch) => {
-		const settings = await settingsStore.update(patch);
-		settingsStore.notifyTitleBarChange(mainWindow);
-		return settings;
-	});
+	ipcMain.handle(
+		ipcChannels.settingsUpdate,
+		async (_event, patch: Partial<AppSettings>) => {
+			const settings = await settingsStore.update(patch);
+			if (
+				"desktopProxyEnabled" in patch ||
+				"desktopProxyUrl" in patch ||
+				"desktopProxyBypass" in patch
+			) {
+				await applyDesktopProxy(settings);
+			}
+			if ("useNativeTitleBar" in patch) {
+				settingsStore.notifyTitleBarChange(mainWindow);
+			}
+			return settings;
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.settingsTestPiProxy,
+		() => testPiProxy(settingsStore.get()),
+	);
 
 	ipcMain.handle(ipcChannels.agentsList, () => agentManager.list());
 	ipcMain.handle(ipcChannels.agentsCreate, (_event, input: CreateAgentInput) =>
@@ -368,6 +390,7 @@ app.whenReady().then(async () => {
 	);
 
 	await settingsStore.load();
+	await applyDesktopProxy(settingsStore.get());
 	registerIpc();
 	createWindow();
 	setupTray();

@@ -122,6 +122,18 @@ export type AppSettings = {
 	showThinking: boolean;
 	/** 是否开启开发者控制台（DevTools） */
 	showDevTools: boolean;
+	/** 是否给 pi agent 子进程注入代理环境变量，不影响 desktop 自身网络请求 */
+	piProxyEnabled: boolean;
+	/** pi agent 使用的代理地址，例如 http://127.0.0.1:7890 */
+	piProxyUrl: string;
+	/** pi agent 代理绕过列表，对应 NO_PROXY 环境变量 */
+	piProxyBypass: string;
+	/** 是否给桌面端自身网络请求启用代理，不影响已启动的 pi agent 子进程 */
+	desktopProxyEnabled: boolean;
+	/** 桌面端自身网络请求使用的代理地址，例如 http://127.0.0.1:7890 */
+	desktopProxyUrl: string;
+	/** 桌面端代理绕过列表，对应 Electron proxyBypassRules */
+	desktopProxyBypass: string;
 };
 
 export type PiInstallStatus = {
@@ -130,6 +142,16 @@ export type PiInstallStatus = {
 	version?: string;
 	searchedDirs: string[];
 	error?: string;
+};
+
+export type PiProxyTestResult = {
+	success: boolean;
+	url: string;
+	elapsedMs: number;
+	statusCode?: number;
+	message?: string;
+	error?: string;
+	bypassed?: boolean;
 };
 
 export type AppInfo = {

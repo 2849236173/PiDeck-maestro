@@ -2,7 +2,12 @@ import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { app } from "electron";
-import type { PiInstallStatus } from "../../shared/types";
+import type { AppSettings, PiInstallStatus } from "../../shared/types";
+
+type PiProxySettings = Pick<
+  AppSettings,
+  "piProxyEnabled" | "piProxyUrl" | "piProxyBypass"
+>;
 
 /** Resolves the pi CLI across packaged Electron environments where shell PATH is often incomplete. */
 export class PiLocator {
@@ -37,10 +42,34 @@ export class PiLocator {
     return [...new Set(dirs.filter(Boolean))];
   }
 
-  createProcessEnv() {
-    return {
+  createProcessEnv(settings?: PiProxySettings) {
+    const env = {
       ...process.env,
       PATH: this.getSearchDirs().join(delimiter),
+    };
+
+    return this.applyPiProxyEnv(env, settings);
+  }
+
+  private applyPiProxyEnv(
+    env: NodeJS.ProcessEnv,
+    settings?: PiProxySettings,
+  ) {
+    if (!settings?.piProxyEnabled) return env;
+    const proxyUrl = settings.piProxyUrl.trim();
+    if (!proxyUrl) return env;
+    const bypass = settings.piProxyBypass.trim();
+
+    // 这里只给 pi agent 子进程注入标准代理环境变量，避免误影响 desktop 自身的更新、外链和配置管理请求。
+    return {
+      ...env,
+      HTTP_PROXY: proxyUrl,
+      HTTPS_PROXY: proxyUrl,
+      ALL_PROXY: proxyUrl,
+      http_proxy: proxyUrl,
+      https_proxy: proxyUrl,
+      all_proxy: proxyUrl,
+      ...(bypass ? { NO_PROXY: bypass, no_proxy: bypass } : {}),
     };
   }
 

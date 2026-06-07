@@ -1435,8 +1435,12 @@ export function SettingsModal(props: {
 	notice: string;
 	piStatus: PiInstallStatus | null;
 	piChecking: boolean;
+	piProxyChecking: boolean;
+	piProxyNotice: string;
+	piProxyNoticeTone: "info" | "success" | "error";
 	appInfo: AppInfo;
 	onCheckPi: () => void;
+	onTestPiProxy: () => void;
 	onCheckUpdate: () => void;
 	onToggleDevTools: () => void;
 	onClose: () => void;
@@ -1527,6 +1531,109 @@ export function SettingsModal(props: {
 							</option>
 						</select>
 					</div>
+					<label>
+						<input
+							type="checkbox"
+							checked={props.settings.piProxyEnabled}
+							onChange={(event) =>
+								props.onChange({ piProxyEnabled: event.target.checked })
+							}
+						/>{" "}
+						为 pi agent 启用代理
+						<small className="setting-hint">
+							只注入给新启动的 pi agent 子进程，不影响桌面端网络请求
+						</small>
+					</label>
+					{props.settings.piProxyEnabled && (
+						<div className="setting-proxy-panel">
+							<div className="setting-field">
+								<span>代理地址</span>
+								<input
+									type="text"
+									value={props.settings.piProxyUrl}
+									placeholder="http://127.0.0.1:7890"
+									onChange={(event) =>
+										props.onChange({ piProxyUrl: event.target.value })
+									}
+								/>
+							</div>
+							<div className="setting-field">
+								<span>绕过代理</span>
+								<input
+									type="text"
+									value={props.settings.piProxyBypass}
+									placeholder="localhost,127.0.0.1,::1"
+									onChange={(event) =>
+										props.onChange({ piProxyBypass: event.target.value })
+									}
+								/>
+								<small className="setting-hint">
+									对应 NO_PROXY，多个条目用英文逗号分隔
+								</small>
+							</div>
+							<div className="setting-row">
+								<div>
+									<strong>代理检测</strong>
+									<small>检测代理是否能连通 OpenAI API，不校验 API Key</small>
+									{props.piProxyNotice && (
+										<small
+											className={`setting-status ${props.piProxyNoticeTone}`}
+										>
+											{props.piProxyNotice}
+										</small>
+									)}
+								</div>
+								<button
+									onClick={props.onTestPiProxy}
+									disabled={props.piProxyChecking}
+								>
+									{props.piProxyChecking ? "检测中..." : "检测代理"}
+								</button>
+							</div>
+						</div>
+					)}
+					<label>
+						<input
+							type="checkbox"
+							checked={props.settings.desktopProxyEnabled}
+							onChange={(event) =>
+								props.onChange({ desktopProxyEnabled: event.target.checked })
+							}
+						/>{" "}
+						为桌面端网络启用代理
+						<small className="setting-hint">
+							影响模型拉取、模型测试等桌面自身请求，不影响已启动的 pi agent
+						</small>
+					</label>
+					{props.settings.desktopProxyEnabled && (
+						<div className="setting-proxy-panel">
+							<div className="setting-field">
+								<span>代理地址</span>
+								<input
+									type="text"
+									value={props.settings.desktopProxyUrl}
+									placeholder="http://127.0.0.1:7890"
+									onChange={(event) =>
+										props.onChange({ desktopProxyUrl: event.target.value })
+									}
+								/>
+							</div>
+							<div className="setting-field">
+								<span>绕过代理</span>
+								<input
+									type="text"
+									value={props.settings.desktopProxyBypass}
+									placeholder="localhost,127.0.0.1,::1"
+									onChange={(event) =>
+										props.onChange({ desktopProxyBypass: event.target.value })
+									}
+								/>
+								<small className="setting-hint">
+									用于 Electron 网络栈，多个条目可用逗号或分号分隔
+								</small>
+							</div>
+						</div>
+					)}
 					<div className="setting-row">
 						<div>
 							<strong>pi 环境</strong>

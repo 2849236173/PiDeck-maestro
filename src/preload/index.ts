@@ -12,6 +12,7 @@ import type {
 	GitBranchInfo,
 	PiCommand,
 	PiInstallStatus,
+	PiProxyTestResult,
 	Project,
 	SendPromptInput,
 	SessionSummary,
@@ -86,6 +87,10 @@ const api = {
 				ipcChannels.settingsUpdate,
 				patch,
 			) as Promise<AppSettings>,
+		testPiProxy: () =>
+			ipcRenderer.invoke(
+				ipcChannels.settingsTestPiProxy,
+			) as Promise<PiProxyTestResult>,
 		onApplyWindow: (callback: (settings: AppSettings) => void) =>
 			subscribe(ipcChannels.settingsApplyWindow, callback),
 	},
