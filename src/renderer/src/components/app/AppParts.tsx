@@ -13,6 +13,9 @@ import {
 	ChevronRight,
 	GitBranch,
 	Brain,
+	Network,
+	Settings2,
+	Wrench,
 } from "lucide-react";
 import type {
 	AgentRuntimeState,
@@ -1446,6 +1449,33 @@ export function SettingsModal(props: {
 	onClose: () => void;
 	onChange: (patch: Partial<AppSettings>) => void;
 }) {
+	const [activeTab, setActiveTab] = useState<SettingsTabId>("base");
+	const tabs: Array<{
+		id: SettingsTabId;
+		label: string;
+		description: string;
+		icon: ReactNode;
+	}> = [
+		{
+			id: "base",
+			label: "基础设置",
+			description: "界面、输入和会话行为",
+			icon: <Settings2 size={16} />,
+		},
+		{
+			id: "proxy",
+			label: "代理设置",
+			description: "agent 与桌面端网络",
+			icon: <Network size={16} />,
+		},
+		{
+			id: "dev",
+			label: "开发设置",
+			description: "环境、版本和调试",
+			icon: <Wrench size={16} />,
+		},
+	];
+
 	return (
 		<div className="modal-backdrop">
 			<div
@@ -1455,219 +1485,284 @@ export function SettingsModal(props: {
 					<strong>设置</strong>
 					<button onClick={props.onClose}>×</button>
 				</div>
-				<div className="settings-panel">
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.useNativeTitleBar}
-							onChange={(event) =>
-								props.onChange({ useNativeTitleBar: event.target.checked })
-							}
-						/>{" "}
-						使用原生标题栏
-					</label>
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.showNativeMenu}
-							onChange={(event) =>
-								props.onChange({ showNativeMenu: event.target.checked })
-							}
-						/>{" "}
-						显示原生菜单
-					</label>
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.closeToTray}
-							onChange={(event) =>
-								props.onChange({ closeToTray: event.target.checked })
-							}
-						/>{" "}
-						关闭窗口时隐藏到系统托盘
-					</label>
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.enableNotifications}
-							onChange={(event) =>
-								props.onChange({ enableNotifications: event.target.checked })
-							}
-						/>{" "}
-						会话结束时发送系统通知
-					</label>
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.showThinking}
-							onChange={(event) =>
-								props.onChange({ showThinking: event.target.checked })
-							}
-						/>{" "}
-						显示思考过程
-						<small className="setting-hint">
-							开启后可看到模型推理过程，帮助理解 agent 为什么“卡住”
-						</small>
-					</label>
-					<div className="setting-field">
-						<span>发送快捷键</span>
-						<select
-							value={props.settings.sendShortcut}
-							onChange={(event) =>
-								props.onChange({
-									sendShortcut: event.target
-										.value as AppSettings["sendShortcut"],
-								})
-							}
-						>
-							<option value="enter-send">
-								Enter 发送，Ctrl/Shift+Enter 换行
-							</option>
-							<option value="ctrl-enter-send">
-								Ctrl/⌘ + Enter 发送，Enter 换行
-							</option>
-							<option value="shift-enter-send">
-								Shift + Enter 发送，Enter 换行
-							</option>
-						</select>
-					</div>
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.piProxyEnabled}
-							onChange={(event) =>
-								props.onChange({ piProxyEnabled: event.target.checked })
-							}
-						/>{" "}
-						为 pi agent 启用代理
-						<small className="setting-hint">
-							只注入给新启动的 pi agent 子进程，不影响桌面端网络请求
-						</small>
-					</label>
-					{props.settings.piProxyEnabled && (
-						<div className="setting-proxy-panel">
-							<div className="setting-field">
-								<span>代理地址</span>
-								<input
-									type="text"
-									value={props.settings.piProxyUrl}
-									placeholder="http://127.0.0.1:7890"
-									onChange={(event) =>
-										props.onChange({ piProxyUrl: event.target.value })
-									}
-								/>
-							</div>
-							<div className="setting-field">
-								<span>绕过代理</span>
-								<input
-									type="text"
-									value={props.settings.piProxyBypass}
-									placeholder="localhost,127.0.0.1,::1"
-									onChange={(event) =>
-										props.onChange({ piProxyBypass: event.target.value })
-									}
-								/>
-								<small className="setting-hint">
-									对应 NO_PROXY，多个条目用英文逗号分隔
-								</small>
-							</div>
-							<div className="setting-row">
-								<div>
-									<strong>代理检测</strong>
-									<small>检测代理是否能连通 OpenAI API，不校验 API Key</small>
-									{props.piProxyNotice && (
-										<small
-											className={`setting-status ${props.piProxyNoticeTone}`}
+				<div className="settings-layout">
+					<nav className="settings-tabs" aria-label="设置分类">
+						{tabs.map((tab) => (
+							<button
+								key={tab.id}
+								className={activeTab === tab.id ? "active" : ""}
+								onClick={() => setActiveTab(tab.id)}
+							>
+								<span className="settings-tab-icon">{tab.icon}</span>
+								<span>
+									<strong>{tab.label}</strong>
+									<small>{tab.description}</small>
+								</span>
+							</button>
+						))}
+					</nav>
+					<div className="settings-panel">
+						{activeTab === "base" && (
+							<>
+								<SettingsSection title="界面">
+									<SettingSwitch
+										title="使用原生标题栏"
+										checked={props.settings.useNativeTitleBar}
+										onChange={(checked) =>
+											props.onChange({ useNativeTitleBar: checked })
+										}
+									/>
+									<SettingSwitch
+										title="显示原生菜单"
+										checked={props.settings.showNativeMenu}
+										onChange={(checked) =>
+											props.onChange({ showNativeMenu: checked })
+										}
+									/>
+								</SettingsSection>
+								<SettingsSection title="会话">
+									<SettingSwitch
+										title="关闭窗口时隐藏到系统托盘"
+										checked={props.settings.closeToTray}
+										onChange={(checked) =>
+											props.onChange({ closeToTray: checked })
+										}
+									/>
+									<SettingSwitch
+										title="会话结束时发送系统通知"
+										checked={props.settings.enableNotifications}
+										onChange={(checked) =>
+											props.onChange({ enableNotifications: checked })
+										}
+									/>
+									<SettingSwitch
+										title="显示思考过程"
+										description="开启后可看到模型推理过程，帮助理解 agent 为什么“卡住”"
+										checked={props.settings.showThinking}
+										onChange={(checked) =>
+											props.onChange({ showThinking: checked })
+										}
+									/>
+									<div className="setting-field">
+										<span>发送快捷键</span>
+										<select
+											value={props.settings.sendShortcut}
+											onChange={(event) =>
+												props.onChange({
+													sendShortcut: event.target
+														.value as AppSettings["sendShortcut"],
+												})
+											}
 										>
-											{props.piProxyNotice}
-										</small>
-									)}
-								</div>
-								<button
-									onClick={props.onTestPiProxy}
-									disabled={props.piProxyChecking}
+											<option value="enter-send">
+												Enter 发送，Ctrl/Shift+Enter 换行
+											</option>
+											<option value="ctrl-enter-send">
+												Ctrl/⌘ + Enter 发送，Enter 换行
+											</option>
+											<option value="shift-enter-send">
+												Shift + Enter 发送，Enter 换行
+											</option>
+										</select>
+									</div>
+								</SettingsSection>
+							</>
+						)}
+						{activeTab === "proxy" && (
+							<>
+								<SettingsSection
+									title="pi agent 代理"
+									description="只注入给新启动的 pi agent 子进程"
 								>
-									{props.piProxyChecking ? "检测中..." : "检测代理"}
-								</button>
-							</div>
-						</div>
-					)}
-					<label>
-						<input
-							type="checkbox"
-							checked={props.settings.desktopProxyEnabled}
-							onChange={(event) =>
-								props.onChange({ desktopProxyEnabled: event.target.checked })
-							}
-						/>{" "}
-						为桌面端网络启用代理
-						<small className="setting-hint">
-							影响模型拉取、模型测试等桌面自身请求，不影响已启动的 pi agent
-						</small>
-					</label>
-					{props.settings.desktopProxyEnabled && (
-						<div className="setting-proxy-panel">
-							<div className="setting-field">
-								<span>代理地址</span>
-								<input
-									type="text"
-									value={props.settings.desktopProxyUrl}
-									placeholder="http://127.0.0.1:7890"
-									onChange={(event) =>
-										props.onChange({ desktopProxyUrl: event.target.value })
-									}
-								/>
-							</div>
-							<div className="setting-field">
-								<span>绕过代理</span>
-								<input
-									type="text"
-									value={props.settings.desktopProxyBypass}
-									placeholder="localhost,127.0.0.1,::1"
-									onChange={(event) =>
-										props.onChange({ desktopProxyBypass: event.target.value })
-									}
-								/>
-								<small className="setting-hint">
-									用于 Electron 网络栈，多个条目可用逗号或分号分隔
-								</small>
-							</div>
-						</div>
-					)}
-					<div className="setting-row">
-						<div>
-							<strong>pi 环境</strong>
-							<small>
-								{props.piStatus
-									? props.piStatus.installed
-										? `已找到 ${props.piStatus.version ?? "pi"}`
-										: "未检测到 pi CLI"
-									: "检查 pi CLI 是否可用"}
-							</small>
-						</div>
-						<button onClick={props.onCheckPi} disabled={props.piChecking}>
-							{props.piChecking ? "检测中…" : "检测环境"}
-						</button>
+									<SettingSwitch
+										title="启用 pi agent 代理"
+										description="设置变更后，新建或重启 agent 才会生效"
+										checked={props.settings.piProxyEnabled}
+										onChange={(checked) =>
+											props.onChange({ piProxyEnabled: checked })
+										}
+									/>
+									{props.settings.piProxyEnabled && (
+										<div className="setting-proxy-panel">
+											<div className="setting-field">
+												<span>代理地址</span>
+												<input
+													type="text"
+													value={props.settings.piProxyUrl}
+													placeholder="http://127.0.0.1:7890"
+													onChange={(event) =>
+														props.onChange({ piProxyUrl: event.target.value })
+													}
+												/>
+											</div>
+											<div className="setting-field">
+												<span>绕过代理</span>
+												<input
+													type="text"
+													value={props.settings.piProxyBypass}
+													placeholder="localhost,127.0.0.1,::1"
+													onChange={(event) =>
+														props.onChange({ piProxyBypass: event.target.value })
+													}
+												/>
+												<small className="setting-hint">
+													对应 NO_PROXY，多个条目用英文逗号分隔
+												</small>
+											</div>
+											<div className="setting-row">
+												<div>
+													<strong>代理检测</strong>
+													<small>
+														检测代理是否能连通 OpenAI API，不校验 API Key
+													</small>
+													{props.piProxyNotice && (
+														<small
+															className={`setting-status ${props.piProxyNoticeTone}`}
+														>
+															{props.piProxyNotice}
+														</small>
+													)}
+												</div>
+												<button
+													onClick={props.onTestPiProxy}
+													disabled={props.piProxyChecking}
+												>
+													{props.piProxyChecking ? "检测中..." : "检测代理"}
+												</button>
+											</div>
+										</div>
+									)}
+								</SettingsSection>
+								<SettingsSection
+									title="桌面端代理"
+									description="用于模型拉取、模型测试等桌面自身请求"
+								>
+									<SettingSwitch
+										title="启用桌面端网络代理"
+										description="不影响已启动的 pi agent"
+										checked={props.settings.desktopProxyEnabled}
+										onChange={(checked) =>
+											props.onChange({ desktopProxyEnabled: checked })
+										}
+									/>
+									{props.settings.desktopProxyEnabled && (
+										<div className="setting-proxy-panel">
+											<div className="setting-field">
+												<span>代理地址</span>
+												<input
+													type="text"
+													value={props.settings.desktopProxyUrl}
+													placeholder="http://127.0.0.1:7890"
+													onChange={(event) =>
+														props.onChange({
+															desktopProxyUrl: event.target.value,
+														})
+													}
+												/>
+											</div>
+											<div className="setting-field">
+												<span>绕过代理</span>
+												<input
+													type="text"
+													value={props.settings.desktopProxyBypass}
+													placeholder="localhost,127.0.0.1,::1"
+													onChange={(event) =>
+														props.onChange({
+															desktopProxyBypass: event.target.value,
+														})
+													}
+												/>
+												<small className="setting-hint">
+													用于 Electron 网络栈，多个条目可用逗号或分号分隔
+												</small>
+											</div>
+										</div>
+									)}
+								</SettingsSection>
+							</>
+						)}
+						{activeTab === "dev" && (
+							<>
+								<SettingsSection title="环境">
+									<div className="setting-row">
+										<div>
+											<strong>pi 环境</strong>
+											<small>
+												{props.piStatus
+													? props.piStatus.installed
+														? `已找到 ${props.piStatus.version ?? "pi"}`
+														: "未检测到 pi CLI"
+													: "检查 pi CLI 是否可用"}
+											</small>
+										</div>
+										<button onClick={props.onCheckPi} disabled={props.piChecking}>
+											{props.piChecking ? "检测中…" : "检测环境"}
+										</button>
+									</div>
+									<div className="setting-row">
+										<div>
+											<strong>当前版本</strong>
+											<small>v{props.appInfo.version}</small>
+										</div>
+										<button onClick={props.onCheckUpdate}>检测更新</button>
+									</div>
+								</SettingsSection>
+								<SettingsSection title="调试">
+									<div className="setting-row">
+										<div>
+											<strong>开发者控制台</strong>
+											<small>打开 DevTools 查看控制台日志，排查问题</small>
+										</div>
+										<button onClick={props.onToggleDevTools}>
+											打开/关闭
+										</button>
+									</div>
+								</SettingsSection>
+							</>
+						)}
+						<p>{props.notice || "标题栏设置保存后需要重启应用生效。"}</p>
 					</div>
-					<div className="setting-row">
-						<div>
-							<strong>当前版本</strong>
-							<small>v{props.appInfo.version}</small>
-						</div>
-						<button onClick={props.onCheckUpdate}>检测更新</button>
-					</div>
-					<div className="setting-row">
-						<div>
-							<strong>开发者控制台</strong>
-							<small>打开 DevTools 查看控制台日志，排查问题</small>
-						</div>
-						<button onClick={props.onToggleDevTools}>
-							打开/关闭
-						</button>
-					</div>
-					<p>{props.notice || "标题栏设置保存后需要重启应用生效。"}</p>
 				</div>
 			</div>
 		</div>
+	);
+}
+
+type SettingsTabId = "base" | "proxy" | "dev";
+
+function SettingsSection(props: {
+	title: string;
+	description?: string;
+	children: ReactNode;
+}) {
+	return (
+		<section className="settings-section">
+			<div className="settings-section-header">
+				<strong>{props.title}</strong>
+				{props.description && <small>{props.description}</small>}
+			</div>
+			<div className="settings-section-body">{props.children}</div>
+		</section>
+	);
+}
+
+function SettingSwitch(props: {
+	title: string;
+	description?: string;
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+}) {
+	return (
+		<label className="setting-switch-row">
+			<span>
+				<strong>{props.title}</strong>
+				{props.description && <small>{props.description}</small>}
+			</span>
+			<input
+				type="checkbox"
+				checked={props.checked}
+				onChange={(event) => props.onChange(event.target.checked)}
+			/>
+		</label>
 	);
 }

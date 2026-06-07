@@ -923,11 +923,15 @@ export function App() {
 	async function updateSettings(patch: Partial<AppSettings>) {
 		const next = await api.settings.update(patch);
 		setSettings(next);
+		let notice = "设置已保存。";
 		if (
 			"piProxyEnabled" in patch ||
 			"piProxyUrl" in patch ||
 			"piProxyBypass" in patch
 		) {
+			notice = next.piProxyEnabled
+				? "pi agent 代理设置已保存；新建或重启 agent 后生效。"
+				: "pi agent 代理已关闭。";
 			setPiProxyNoticeTone("info");
 			setPiProxyNotice(
 				next.piProxyEnabled
@@ -940,12 +944,17 @@ export function App() {
 			"desktopProxyUrl" in patch ||
 			"desktopProxyBypass" in patch
 		) {
-			setSettingsNotice(
-				next.desktopProxyEnabled
-					? "桌面端代理设置已保存；模型拉取和模型测试会使用该代理。"
-					: "桌面端代理已关闭。",
-			);
+			notice = next.desktopProxyEnabled
+				? "桌面端代理设置已保存；模型拉取和模型测试会使用该代理。"
+				: "桌面端代理已关闭。";
 		}
+		if ("sendShortcut" in patch) {
+			notice = "发送快捷键设置已保存。";
+		}
+		if ("useNativeTitleBar" in patch) {
+			notice = "标题栏样式已保存，重启应用后生效。";
+		}
+		setSettingsNotice(notice);
 	}
 
 	async function testPiProxy() {
@@ -1688,8 +1697,11 @@ export function App() {
 					onCheckPi={() => checkPiInstall("manual")}
 					onTestPiProxy={() => testPiProxy()}
 					onCheckUpdate={() => api.app.openExternal(appInfo.releasesUrl)}
-					onToggleDevTools={() => {
-						void api.app.toggleDevTools();
+					onToggleDevTools={async () => {
+						const opened = await api.app.toggleDevTools();
+						setSettingsNotice(
+							opened ? "开发者控制台已打开。" : "开发者控制台已关闭。",
+						);
 					}}
 					onClose={() => setSettingsOpen(false)}
 					onChange={updateSettings}
