@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.4.7-green)
+![Version](https://img.shields.io/badge/version-0.4.8-green)
 
 `pi-desktop` is **not** a fork of pi. It is a lightweight Electron shell that orchestrates multiple `pi --mode rpc` processes, providing a native desktop UI for projects, sessions, conversations, configuration, and tool orchestration — all powered by pi's native agent capabilities.
 
@@ -16,12 +16,12 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.4.7** (2026-06-07)
+> **Latest: v0.4.8** (2026-06-07)
 
-### v0.4.7 Added
-- 🖥️ Embedded terminal: each agent can open its own terminal dock with multiple tabs next to the conversation.
-- 🎨 Terminal themes: switch between Pi Soft, Solarized, One Dark, Monokai, and other classic looks.
-- 🧩 UI cleanup: split the large app and config components so future terminal and panel changes are easier to maintain.
+### v0.4.8 Added
+- 🌐 Proxy settings: configure pi agent process proxy and desktop model fetch/test proxy separately.
+- 🧭 Settings tabs: Basic, Proxy, and Developer settings are split into focused tabs with clearer save feedback.
+- 🧩 Provider headers: new providers no longer write a default User-Agent header, preserving runtime defaults unless configured.
 
 [View Full Changelog →](CHANGELOG.md)
 
@@ -33,6 +33,7 @@
 |---|---|
 | **Multi-Project Workspace** | Add, search, and switch between local project folders. Run multiple pi agents simultaneously with per-project isolation. |
 | **Configuration Management** | Visual editors for pi's `models.json`, `auth.json`, and `settings.json` — manage providers, API keys, model discovery, connection tests, and request headers without touching JSON files manually. |
+| **Proxy Settings** | Manage pi agent process proxy and desktop proxy separately; model discovery and connection tests can use the desktop proxy. |
 | **Slash Commands & `!` Shell** | Built-in slash command suggestions (`/reload`, `/compact`, `/session`, …) and `!command` / `!!command` for inline shell execution directly in the chat composer. |
 | **Embedded Terminal Dock** | Agent-scoped terminal tabs with PowerShell/cmd/sh fallback, multiple tabs, theme switching, height resizing, and close-all confirmation. |
 | **Session Management** | Create new sessions, restore historical ones, rename sessions inline, export to HTML, and close agents — all from the sidebar or context menu. |
@@ -92,7 +93,7 @@ pi-desktop
 │  ├─ Configuration modal (Models / Auth / Settings / Source)
 │  ├─ Agent-scoped Terminal Dock
 │  ├─ Model & context status bar
-│  └─ Settings UI
+│  └─ Settings UI (Basic / Proxy / Developer tabs)
 │
 └─ Pi Runtime
    ├─ One pi RPC process per agent tab
@@ -202,7 +203,7 @@ See [CHANGELOG.md](CHANGELOG.md) (English) or [CHANGELOG.zh-CN.md](CHANGELOG.zh-
 
 ## Security
 
-This app starts local `pi` processes and exposes limited file operations through Electron IPC. Only run from trusted source code. The app sends no telemetry and uploads no files — all model/provider network behavior is handled by pi and your configured providers.
+This app starts local `pi` processes and exposes limited file operations through Electron IPC. Only run from trusted source code. The app sends no telemetry and uploads no files. pi agent process proxy and desktop model fetch/test proxy can be configured separately; external links opened in the system browser still follow the browser/system network settings.
 
 ## License
 

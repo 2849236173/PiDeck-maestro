@@ -4,6 +4,16 @@
 
 All notable changes to pi-desktop are documented here.
 
+## v0.4.8 - 2026-06-07
+
+### Added
+- pi agent proxy settings: inject proxy environment variables into newly started pi agent processes, with an OpenAI API connectivity check.
+- Desktop proxy settings: route model discovery and provider connection tests through Electron's desktop network proxy.
+
+### Improved
+- Reorganized the settings modal into Basic Settings, Proxy Settings, and Developer Settings tabs with clearer save feedback.
+- New providers no longer write a default User-Agent header; leaving the field empty preserves the pi / SDK runtime default.
+
 ## v0.4.7 - 2026-06-07
 
 ### Added

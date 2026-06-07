@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.4.7-green)
+![Version](https://img.shields.io/badge/version-0.4.8-green)
 
 `pi-desktop` **不是** pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，将项目管理、会话管理、对话界面、配置管理和工具编排整合到一个原生桌面应用中——所有 Agent 能力由 pi 原生提供。
 
@@ -16,12 +16,12 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.4.7**（2026-06-07）
+> **最新版本 v0.4.8**（2026-06-07）
 
-### v0.4.7 新增
-- 🖥️ 内嵌终端：每个 Agent 拥有独立终端 Dock 和多 tab，直接在会话旁运行命令。
-- 🎨 终端主题：支持 Pi Soft、Solarized、One Dark、Monokai 等经典主题。
-- 🧩 UI 拆分：配置弹窗和主界面组件拆分，后续扩展终端和面板更稳。
+### v0.4.8 新增
+- 🌐 代理设置：分别配置 pi agent 子进程代理和桌面端模型拉取/测试代理。
+- 🧭 设置页重构：基础设置、代理设置、开发设置分为独立页签，保存反馈更清晰。
+- 🧩 Provider headers：新增 Provider 时默认不写入 User-Agent，保留运行时默认行为。
 
 [查看完整更新日志 →](CHANGELOG.zh-CN.md)
 
@@ -33,6 +33,7 @@
 |---|---|
 | **多项目工作区** | 添加、搜索和切换本地项目目录，同时运行多个 pi Agent，项目间完全隔离。 |
 | **配置管理** | 可视化编辑器管理 pi 的 `models.json`、`auth.json`、`settings.json`，支持 Provider 重命名、模型拉取、连接测试和请求头/User-Agent 配置。 |
+| **代理设置** | 独立管理 pi agent 子进程代理和桌面端代理，模型拉取与连接测试可走桌面端代理。 |
 | **斜线命令 & `!` Shell** | 内置斜线命令建议（`/compact`、`/session` 等），支持 `!command` / `!!command` 在聊天输入框直接执行 Shell 命令。 |
 | **内嵌终端 Dock** | 当前 Agent 绑定独立终端 tab，支持 PowerShell/cmd/sh fallback、多 tab、主题切换、拖拽高度和关闭确认。 |
 | **会话管理** | 新建会话、恢复历史会话、内联重命名、导出 HTML、关闭 Agent——通过侧边栏或右键菜单即可完成。 |
@@ -92,7 +93,7 @@ pi-desktop
 │  ├─ 配置管理弹窗（Models / Auth / Settings / 源文件）
 │  ├─ Agent 绑定的 Terminal Dock
 │  ├─ 模型与上下文状态栏
-│  └─ 设置 UI
+│  └─ 设置 UI（基础设置 / 代理设置 / 开发设置）
 │
 └─ Pi 运行时
    ├─ 每个 Agent Tab 一个独立 pi RPC 进程
@@ -202,7 +203,7 @@ src/
 
 ## 安全说明
 
-本应用启动本地 `pi` 进程并通过 Electron IPC 暴露有限的文件操作。请仅运行你信任的源码。应用不发送遥测数据，不上传文件——所有模型和 Provider 的网络行为由 pi 及其配置决定。
+本应用启动本地 `pi` 进程并通过 Electron IPC 暴露有限的文件操作。请仅运行你信任的源码。应用不发送遥测数据，不上传文件。pi agent 子进程代理和桌面端模型拉取/测试代理可独立配置；系统浏览器打开的外部链接仍由系统浏览器网络设置决定。
 
 ## License
 
