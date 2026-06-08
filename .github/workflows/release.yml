@@ -55,13 +55,13 @@ jobs:
         include:
           - platform: windows
             os: windows-latest
-            command: npm run dist:win
+            command: npm run build && npx electron-builder --win nsis portable zip --publish never
           - platform: macos
             os: macos-latest
-            command: npm run dist:mac
+            command: npm run build && npx electron-builder --mac dmg zip --publish never
           - platform: linux
             os: ubuntu-latest
-            command: npm run dist:linux
+            command: npm run build && npx electron-builder --linux AppImage deb tar.gz --publish never
 
     runs-on: ${{ matrix.os }}
 
@@ -85,6 +85,10 @@ jobs:
         run: ${{ matrix.command }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub Releases occasionally returns 504 for Electron/electron-builder binaries;
+          # use a stable mirror for CI downloads while keeping publishing on GitHub Releases.
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
