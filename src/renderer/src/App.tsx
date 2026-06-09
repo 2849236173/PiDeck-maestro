@@ -2035,7 +2035,10 @@ export function App() {
 							.filter(Boolean)
 							.join(" ");
 						return (
-							<div key={project.id} className="project-group">
+							<div
+								key={project.id}
+								className={`project-group${projectIsChat ? " chat-project-group" : ""}`}
+							>
 								<button
 									className={projectRowClass}
 									draggable={canDragProject}

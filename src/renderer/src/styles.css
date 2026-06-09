@@ -39,11 +39,12 @@ button:disabled {
 	display: grid;
 	place-items: center;
 	border-radius: 16px;
-	background: linear-gradient(145deg, #19c15f, #087d3d);
+	/* 品牌主色统一为更鲜明的 #14b814，深色端保留层次，避免启动页 logo 变成单一色块。 */
+	background: linear-gradient(145deg, #14b814, #0b8f0b);
 	color: #fff;
 	font-size: 36px;
 	font-weight: 900;
-	box-shadow: 0 12px 28px rgba(23, 126, 67, 0.2);
+	box-shadow: 0 12px 28px rgba(20, 184, 20, 0.2);
 }
 .boot-screen span {
 	color: #7d8794;
@@ -232,13 +233,14 @@ button:disabled {
 	border-radius: 10px;
 	display: grid;
 	place-items: center;
-	background: linear-gradient(145deg, #19c15f 0%, #0aa84f 60%, #087d3d 100%);
+	/* 与应用图标保持一致：以 #14b814 作为品牌绿，深色端只用于保证桌面小尺寸下的可读性。 */
+	background: linear-gradient(145deg, #14b814 0%, #12a812 60%, #0b8f0b 100%);
 	color: #fff;
 	font-size: 22px;
 	font-weight: 900;
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.22),
-		0 8px 18px rgba(23, 126, 67, 0.18);
+		0 8px 18px rgba(20, 184, 20, 0.18);
 	overflow: hidden;
 }
 .logo-mark::before {
@@ -409,9 +411,12 @@ button:disabled {
 	overflow: hidden;
 }
 .project-avatar {
-	/* 去除外层渐变背景，使用简洁的单色背景 */
-	background: #6366f1;
+	/* 普通项目使用低饱和灰蓝，避免品牌绿在项目列表里铺得过满。 */
+	background: #64748b;
 	font-size: 15px;
+}
+.chat-project .project-avatar {
+	background: #14b814;
 }
 .project-avatar span {
 	display: grid;
@@ -520,6 +525,11 @@ button:disabled {
 	/* 项目组之间添加分隔，让层次更清晰 */
 	margin-bottom: 4px;
 }
+.project-group.chat-project-group {
+	margin-bottom: 12px;
+	padding-bottom: 12px;
+	border-bottom: 2px solid #cbd5e1;
+}
 /* 项目行布局：去掉折叠箭头列，与普通对话行一致 */
 .project-group > .conversation:first-child {
 	grid-template-columns: 36px minmax(0, 1fr) max-content;
@@ -554,6 +564,9 @@ button:disabled {
 .project-fold {
 	/* 直接隐藏折叠 logo */
 	display: none;
+}
+.project-fold.has-agents {
+	color: #64748b;
 }
 .project-row-actions {
 	display: flex;
