@@ -5,6 +5,8 @@ node_modules/
 out/
 dist/
 release/
+docs-site/.vitepress/cache/
+docs-site/.vitepress/dist/
 *.asar
 
 # Electron/Vite
