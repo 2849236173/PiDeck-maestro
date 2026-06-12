@@ -14,6 +14,7 @@ import {
 	ChevronRight,
 	GitBranch,
 	Brain,
+	Folder,
 	Globe2,
 	Network,
 	Pencil,
@@ -513,15 +514,9 @@ export function LogoMark() {
 }
 
 export function ProjectAvatar(props: { name: string }) {
-	// 项目名以 . 开头时,首字符头像会只显示一个点;跳过前导点/空白,保证隐藏目录也能显示可识别的业务名称首字母。
-	const avatarText =
-		props.name
-			.replace(/^[.\s]+/, "")
-			.slice(0, 1)
-			.toUpperCase() || "π";
 	return (
-		<div className="conversation-avatar project-avatar">
-			<span>{avatarText}</span>
+		<div className="conversation-avatar project-avatar" title={`${props.name} 项目目录`}>
+			<Folder size={16} strokeWidth={1.8} />
 		</div>
 	);
 }

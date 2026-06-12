@@ -27,6 +27,7 @@ import { createBrowserApi } from "./browserApi";
 import { ConfigModal } from "./ConfigModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { getComposerEnterIntent } from "./composerBehavior";
+import { getVisibleAgentsForProject } from "./agentListDisplay";
 import {
 	pruneTerminalDockState,
 	setTerminalDockCollapsed,
@@ -34,7 +35,6 @@ import {
 	type TerminalDockStateByAgent,
 } from "./terminalDockState";
 import {
-	AgentAvatar,
 	AgentRun,
 	AgentContextMenu,
 	BranchSelector,
@@ -176,6 +176,13 @@ export function App() {
 	const activeAgentIdRef = useRef<string | undefined>(activeAgentId);
 	activeAgentIdRef.current = activeAgentId;
 	const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
+		new Set(),
+	);
+	/**
+	 * “更多 Agent”只是左侧目录树的展示状态：不停止、不隐藏后端 agent，
+	 * 也不跨项目互相影响，避免项目多开时列表默认过长。
+	 */
+	const [expandedAgentProjects, setExpandedAgentProjects] = useState<Set<string>>(
 		new Set(),
 	);
 	const [activeAgentByProject, setActiveAgentByProject] = useState<
@@ -2146,6 +2153,10 @@ export function App() {
 							(agent) => agent.projectId === project.id,
 						);
 						const isCollapsed = collapsedProjects.has(project.id);
+						const agentDisplay = getVisibleAgentsForProject(
+							projectAgents,
+							expandedAgentProjects.has(project.id),
+						);
 						const isDraggingProject = draggingProjectId === project.id;
 						const isProjectDropTarget = dragOverProjectId === project.id;
 						const projectRowClass = [
@@ -2255,7 +2266,7 @@ export function App() {
 									</span>
 								</button>
 								{!isCollapsed &&
-									projectAgents.map((agent) => (
+									agentDisplay.visibleAgents.map((agent) => (
 										<button
 											key={agent.id}
 											className={
@@ -2276,7 +2287,6 @@ export function App() {
 												setActiveAgentId(agent.id);
 											}}
 										>
-											<AgentAvatar status={agent.status} />
 											<div className="conversation-body">
 												<div className="conversation-title">
 													<strong>{agent.title}</strong>
@@ -2293,6 +2303,21 @@ export function App() {
 											</span>
 										</button>
 									))}
+								{!isCollapsed && agentDisplay.hasHiddenAgents && (
+									<button
+										className="agent-more-row"
+										onClick={() => {
+											setExpandedAgentProjects((prev) => {
+												const next = new Set(prev);
+												next.add(project.id);
+												return next;
+											});
+										}}
+									>
+										<span className="agent-more-branch" />
+										<span>更多 {agentDisplay.hiddenCount} 个 Agent</span>
+									</button>
+								)}
 							</div>
 						);
 					})}

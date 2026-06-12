@@ -497,10 +497,10 @@ button:disabled {
 }
 
 .conversation-list {
-	/* 只允许垂直滚动，禁止横向滚动条 */
+	/* 只允许垂直滚动，禁止横向滚动条；目录树行更紧凑，留出底部折叠按钮空间。 */
 	overflow-x: hidden;
 	overflow-y: auto;
-	padding: 6px 8px 48px;
+	padding: 4px 6px 48px;
 }
 .list-collapsed .conversation-list {
 	padding: 6px 8px 48px;
@@ -509,31 +509,39 @@ button:disabled {
 	position: relative;
 	width: 100%;
 	display: grid;
-	grid-template-columns: 36px minmax(0, 1fr) 20px;
-	gap: 8px;
+	grid-template-columns: 24px minmax(0, 1fr) 20px;
+	gap: 7px;
 	align-items: center;
-	border: 1px solid transparent;
-	border-radius: 8px;
+	border: 0;
+	border-radius: 6px;
 	background: transparent;
 	text-align: left;
-	padding: 6px 8px;
+	padding: 4px 6px;
 	color: #1f2329;
 }
 .conversation::after {
 	display: none;
 }
 .conversation:hover {
-	background: #f2f5f8;
-	border-color: #dfe5ed;
+	background: #edf3f8;
 }
 .conversation.active {
-	border-color: #b9e2c4;
-	background: #eef8f0;
+	background: #e9f6ec;
+}
+.conversation.active::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 5px;
+	bottom: 5px;
+	width: 3px;
+	border-radius: 999px;
+	background: #14a514;
 }
 .conversation-avatar {
-	width: 36px;
-	height: 36px;
-	border-radius: 8px;
+	width: 24px;
+	height: 24px;
+	border-radius: 5px;
 	display: grid;
 	place-items: center;
 	color: white;
@@ -541,65 +549,13 @@ button:disabled {
 	overflow: hidden;
 }
 .project-avatar {
-	/* 普通项目使用低饱和灰蓝，避免品牌绿在项目列表里铺得过满。 */
-	background: #64748b;
-	font-size: 15px;
+	/* 项目节点改用普通文件夹图标，不再用首字母色块，降低左侧目录树的信息噪音。 */
+	background: transparent;
+	color: #64748b;
+	font-size: 12px;
 }
 .chat-project .project-avatar {
-	background: #14b814;
-}
-.project-avatar span {
-	display: grid;
-	place-items: center;
-	width: 24px;
-	height: 24px;
-	border-radius: 7px;
-	/* 去除内层背景，让字母直接显示 */
-	background: transparent;
-	color: white;
-	font-weight: 700;
-	box-shadow: none;
-}
-.agent-avatar {
-	position: relative;
-	/* 去除渐变，使用简洁的单色背景 */
-	background: #10b981;
-	font-size: 20px;
-}
-.agent-avatar span {
-	transform: translateY(-1px);
-}
-.agent-avatar svg {
-	position: relative;
-}
-.agent-avatar::after {
-	content: "";
-	position: absolute;
-	right: 2px;
-	bottom: 2px;
-	width: 8px;
-	height: 8px;
-	border: 2px solid #fff;
-	border-radius: 999px;
-	background: #9ca3af;
-}
-.list-collapsed .chat-list-pane .agent-avatar::after {
-	right: 2px;
-	bottom: 2px;
-	width: 8px;
-	height: 8px;
-	border-width: 2px;
-}
-.agent-avatar.idle::after {
-	background: #10b981;
-}
-.agent-avatar.running::after {
-	background: #f59e0b;
-	/* 运行状态添加脉冲动画 */
-	animation: pulse-running 1.5s ease-in-out infinite;
-}
-.agent-avatar.error::after {
-	background: #ef4444;
+	color: #14a514;
 }
 @keyframes pulse-running {
 	0%,
@@ -627,7 +583,7 @@ button:disabled {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 13px;
-	font-weight: 600;
+	font-weight: 500;
 }
 .conversation-title span {
 	color: #8a9099;
@@ -643,7 +599,7 @@ button:disabled {
 	color: #d33;
 }
 .conversation p {
-	margin: 2px 0 0;
+	margin: 1px 0 0;
 	color: #8a9099;
 	font-size: 11px;
 	overflow: hidden;
@@ -651,24 +607,22 @@ button:disabled {
 	white-space: nowrap;
 }
 .project-group {
+	position: relative;
 	display: block;
-	/* 项目组之间添加分隔，让层次更清晰 */
-	margin-bottom: 4px;
+	margin-bottom: 2px;
 }
 .project-group.chat-project-group {
-	margin-bottom: 12px;
-	padding-bottom: 12px;
-	border-bottom: 2px solid #cbd5e1;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #dbe3ec;
 }
-/* 项目行布局：去掉折叠箭头列，与普通对话行一致 */
 .project-group > .conversation:first-child {
-	grid-template-columns: 36px minmax(0, 1fr) max-content;
-	border-color: #e0e6ef;
-	background: #f8fafc;
+	grid-template-columns: 24px minmax(0, 1fr) max-content;
+	min-height: 30px;
+	font-weight: 500;
 }
 .project-group > .conversation.active:first-child {
-	border-color: #b9e2c4;
-	background: #eef8f0;
+	background: #e9f6ec;
 }
 .project-group > .conversation.project-draggable:first-child {
 	cursor: grab;
@@ -680,7 +634,7 @@ button:disabled {
 	opacity: 0.58;
 }
 .project-group > .conversation.drag-over:first-child {
-	border-color: #82c99a;
+	background: #eef8f0;
 	box-shadow: inset 0 0 0 1px #82c99a;
 }
 .chat-project-guide {
@@ -692,7 +646,6 @@ button:disabled {
 	justify-content: center;
 }
 .project-fold {
-	/* 直接隐藏折叠 logo */
 	display: none;
 }
 .project-fold.has-agents {
@@ -702,22 +655,22 @@ button:disabled {
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
-	gap: 2px;
+	gap: 1px;
 	min-width: max-content;
-	padding: 2px;
-	border-radius: 8px;
-	background: rgba(255, 255, 255, 0.34);
+	padding: 0;
+	border-radius: 6px;
+	background: transparent;
 }
 .project-action,
 .project-info {
-	width: 22px;
-	height: 22px;
+	width: 21px;
+	height: 21px;
 	display: grid;
 	place-items: center;
-	border-radius: 7px;
+	border-radius: 5px;
 	color: #8a9099;
 	cursor: help;
-	opacity: 0.86;
+	opacity: 0.8;
 	transition:
 		background 0.12s ease,
 		color 0.12s ease,
@@ -728,7 +681,7 @@ button:disabled {
 }
 .project-action:hover,
 .project-info:hover {
-	background: #d7dbe1;
+	background: #dfe6ee;
 	color: #1f2329;
 	opacity: 1;
 }
@@ -737,47 +690,90 @@ button:disabled {
 	color: #dc2626;
 }
 .agent-row {
-	grid-template-columns: 30px minmax(0, 1fr) 18px;
+	grid-template-columns: minmax(0, 1fr) 18px;
 	gap: 7px;
-	padding: 5px 8px;
-	margin: 4px 0 0 6px;
-	border-color: transparent;
-	border-left: 2px solid #d7e4f7;
-	background: rgba(255, 255, 255, 0.5);
+	min-height: 26px;
+	padding: 3px 6px 3px 34px;
+	margin: 1px 0 0 0;
+	background: transparent;
 }
-.agent-row .conversation-avatar {
-	width: 30px;
-	height: 30px;
-	border-radius: 7px;
-	font-size: 18px;
+.agent-row::before {
+	/* 目录连接线只表达层级，不参与点击区域，保持文件树式扁平视觉。 */
+	content: "";
+	position: absolute;
+	left: 17px;
+	top: -1px;
+	bottom: -1px;
+	width: 1px;
+	background: #d8e1ec;
 }
-.agent-row .agent-avatar svg {
-	width: 21px;
-	height: 21px;
+.agent-row::after {
+	content: "";
+	position: absolute;
+	left: 17px;
+	top: 50%;
+	width: 9px;
+	height: 1px;
+	background: #d8e1ec;
 }
-.agent-row .agent-avatar::after {
-	right: 2px;
-	bottom: 2px;
-	width: 8px;
-	height: 8px;
-	border-width: 2px;
-}
-/* agent 行激活状态时，左侧连接线高亮 */
 .agent-row.active {
-	border-color: #cfe0ff;
-	border-left-color: #4f8cff;
-	background: #f3f7ff;
+	background: #edf6ff;
 }
-/* agent 行 hover 时的视觉反馈 */
+.agent-row.active::before,
+.agent-row.active::after {
+	background: #70a7ef;
+}
 .agent-row:hover {
-	background: #f6f9ff;
-	border-color: #dce8fb;
+	background: #f0f5fb;
 }
 .list-collapsed .chat-list-pane .agent-row {
-	margin: 4px 0 0;
-	border-left-color: #d7e4f7;
+	grid-template-columns: 36px;
+	justify-content: center;
+	margin: 2px 0 0;
+	padding: 5px 8px;
 }
-/* agent 行 hover 时显示关闭按钮 */
+.list-collapsed .chat-list-pane .agent-row::before,
+.list-collapsed .chat-list-pane .agent-row::after {
+	display: none;
+}
+.agent-more-row {
+	position: relative;
+	width: 100%;
+	display: grid;
+	grid-template-columns: 22px minmax(0, 1fr);
+	gap: 7px;
+	align-items: center;
+	min-height: 26px;
+	margin: 1px 0 2px;
+	padding: 3px 6px 3px 28px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: #64748b;
+	font-size: 12px;
+	text-align: left;
+}
+.agent-more-row::before {
+	content: "";
+	position: absolute;
+	left: 17px;
+	top: -1px;
+	bottom: -1px;
+	width: 1px;
+	background: #d8e1ec;
+}
+.agent-more-branch {
+	width: 9px;
+	height: 1px;
+	background: #d8e1ec;
+}
+.agent-more-row:hover {
+	background: #f0f5fb;
+	color: #1f5f9f;
+}
+.list-collapsed .chat-list-pane .agent-more-row {
+	display: none;
+}
 .agent-row:hover .conversation-close {
 	opacity: 1;
 }
@@ -790,7 +786,6 @@ button:disabled {
 	place-items: center;
 	border-radius: 999px;
 	color: #777;
-	/* 调整位置，不要太靠右 */
 	margin-right: 0;
 	line-height: 1;
 }
