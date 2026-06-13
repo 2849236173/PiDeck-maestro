@@ -3506,6 +3506,14 @@ body.is-composer-resizing .composer-resize-handle::after {
 	background: var(--overlay-backdrop);
 	backdrop-filter: blur(2px);
 }
+.custom-titlebar-enabled .modal-backdrop {
+	inset: var(--window-drag-height) 0 0 0;
+}
+.custom-titlebar-enabled .feedback-modal,
+.custom-titlebar-enabled .settings-modal,
+.custom-titlebar-enabled .config-modal {
+	height: 100%;
+}
 .context-backdrop {
 	position: fixed;
 	inset: 0;
