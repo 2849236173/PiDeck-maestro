@@ -1202,6 +1202,10 @@ body.is-terminal-resizing {
 	flex: 0 0 auto;
 	overflow: visible;
 }
+.session-group button:not(.primary-action),
+.panel-group button:not(.active) {
+	background: transparent;
+}
 .branch-group {
 	position: relative;
 	overflow: visible;
@@ -1244,8 +1248,8 @@ body.is-terminal-resizing {
 	gap: 6px;
 	height: 30px;
 	border: 1px solid transparent;
-	background: #fff;
-	color: #2b3038;
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
 	border-radius: var(--radius-lg);
 	padding: 0 8px 0 9px;
 	font-size: var(--font-size-control);
@@ -1257,15 +1261,15 @@ body.is-terminal-resizing {
 		box-shadow 0.15s;
 }
 .branch-trigger:hover {
-	background: #f0fdf4;
-	border-color: #86efac;
+	background: var(--color-bg-active);
+	border-color: color-mix(in srgb, var(--color-accent) 36%, transparent);
 }
 .branch-trigger:focus-visible {
-	outline: 2px solid #22c55e;
+	outline: 2px solid var(--color-accent);
 	outline-offset: 1px;
 }
 .branch-icon {
-	color: #22c55e;
+	color: var(--color-accent);
 	font-size: 14px;
 	flex-shrink: 0;
 	display: flex;
@@ -1273,8 +1277,8 @@ body.is-terminal-resizing {
 }
 .branch-badge {
 	font-size: var(--font-size-micro);
-	color: #7d8794;
-	background: #f0f3f7;
+	color: var(--color-text-tertiary);
+	background: var(--color-bg-hover);
 	padding: 1px 6px;
 	border-radius: 999px;
 	font-weight: 500;
@@ -1282,7 +1286,7 @@ body.is-terminal-resizing {
 }
 .branch-empty-hint {
 	text-align: center;
-	color: #b3bac4;
+	color: var(--color-text-tertiary);
 	font-size: var(--font-size-caption);
 	padding: 8px 10px;
 }

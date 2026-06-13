@@ -2761,7 +2761,7 @@ export function App() {
                   disabled={!activeAgentId || activeAgent?.status !== "running"}
                   onClick={() => abortAgent()}
                 >
-                  Stop
+                  {t("app.stop")}
                 </button>
                 {!isLanWeb && (
                   <button
