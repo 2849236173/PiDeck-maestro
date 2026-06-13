@@ -2856,13 +2856,13 @@ body.is-composer-resizing .composer-resize-handle::after {
 	justify-content: center;
 	border: 1px solid var(--color-border-subtle);
 	border-right: 0;
-	background: rgba(255, 255, 255, 0.94);
+	background: color-mix(in srgb, var(--color-bg-panel) 94%, transparent);
 	color: var(--color-text-secondary);
 	border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 	width: 18px;
 	height: 46px;
 	padding: 0;
-	box-shadow: -4px 0 12px rgba(20, 24, 31, 0.08);
+	box-shadow: var(--shadow-popover);
 	line-height: 1;
 }
 .drawer-restore:hover {
@@ -2954,7 +2954,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	overflow: hidden;
 }
 .session-card:hover {
-	border-color: rgba(35, 134, 54, 0.32);
+	border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border-subtle));
 	background: var(--color-bg-active);
 }
 .session-card-display {
@@ -3004,7 +3004,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	cursor: pointer;
 }
 .session-rename-button:hover:not(:disabled) {
-	border-color: rgba(35, 134, 54, 0.28);
+	border-color: color-mix(in srgb, var(--color-accent) 28%, var(--color-border-subtle));
 	background: var(--color-bg-active);
 	color: var(--color-accent);
 }
@@ -3016,7 +3016,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-danger);
 }
 .session-rename-button.danger:hover:not(:disabled) {
-	border-color: rgba(180, 35, 24, 0.22);
+	border-color: color-mix(in srgb, var(--color-danger) 22%, var(--color-border-subtle));
 	background: var(--color-danger-soft);
 	color: var(--color-danger);
 }
@@ -3041,7 +3041,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 .mini-loader {
 	width: 11px;
 	height: 11px;
-	border: 2px solid rgba(35, 134, 54, 0.18);
+	border: 2px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border-subtle));
 	border-top-color: var(--color-accent);
 	border-radius: var(--radius-pill);
 	animation: spin 0.8s linear infinite;
