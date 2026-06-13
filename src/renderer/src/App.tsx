@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ChevronDown,
   Info,
+  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -236,6 +237,7 @@ export function App() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
+  const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
   const [switchingBranch, setSwitchingBranch] = useState<string | null>(null);
   const [promptByAgent, setPromptByAgent] = useState<Record<string, string>>(
     {},
@@ -347,6 +349,10 @@ export function App() {
   const [_debugOpen, _setDebugOpen] = useState(false);
   /** RPC 日志弹窗目标 agent */
   const [rpcLogAgentId, setRpcLogAgentId] = useState<string | null>(null);
+  /** 是否自动滚动到最新消息 */
+  const [autoScroll, setAutoScroll] = useState(true);
+  /** 是否显示"移动到最新"按钮 */
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const [settings, setSettings] = useState<AppSettings>({
     useNativeTitleBar: true,
@@ -727,10 +733,14 @@ export function App() {
       })),
     );
     const offLog = api.agents.onLog((payload) =>
-      setLogs((current) => [
-        ...current.slice(-200),
-        `[${payload.agentId.slice(0, 8)}] ${payload.text}`,
-      ]),
+      setLogs((current) => {
+        // 优化：只在超过200条时才slice，减少不必要的数组操作
+        const newLog = `[${payload.agentId.slice(0, 8)}] ${payload.text}`;
+        if (current.length < 200) {
+          return [...current, newLog];
+        }
+        return [...current.slice(-199), newLog];
+      }),
     );
     const offSettings = api.settings.onApplyWindow(() =>
       setSettingsNotice(t("settings.restartNotice")),
@@ -753,17 +763,21 @@ export function App() {
     // 监听 RPC 日志，保留最近 2000 条用于调试；message_update 高频事件很多，
     // 200 条很容易在一次长响应中被刷掉，但仍设置上限避免 renderer 内存无限增长。
     const offRpcLog = api.agents.onRpcLog((payload) =>
-      setRpcLogs((current) => [
-        ...current.slice(-1999),
-        {
+      setRpcLogs((current) => {
+        // 优化：避免频繁创建新数组，只在超过上限时才slice
+        const newLog = {
           id: crypto.randomUUID(),
           agentId: payload.agentId,
           direction: payload.direction,
           summary: payload.summary,
           data: payload.data,
           time: Date.now(),
-        },
-      ]),
+        };
+        if (current.length < 2000) {
+          return [...current, newLog];
+        }
+        return [...current.slice(-1999), newLog];
+      }),
     );
 
     return () => {
@@ -897,6 +911,14 @@ export function App() {
     ensureComposerTailVisible();
   }
 
+  function scrollToBottom() {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    timeline.scrollTo({ top: timeline.scrollHeight, behavior: 'smooth' });
+    setAutoScroll(true);
+    setShowScrollToBottom(false);
+  }
+
   useEffect(() => {
     let frame = 0;
     const scheduleSync = () => {
@@ -965,12 +987,37 @@ export function App() {
 
   useEffect(() => {
     const timeline = timelineRef.current;
-    if (!timeline) return;
+    if (!timeline || !autoScroll) return;
     // 历史会话加载后默认跳到最新消息，符合聊天软件的阅读习惯，避免用户手动滚动到底部。
     requestAnimationFrame(() => {
       timeline.scrollTop = timeline.scrollHeight;
     });
-  }, [activeAgentId, activeMessages.length]);
+  }, [activeAgentId, activeMessages.length, autoScroll]);
+
+  // 监听用户滚动，判断是否需要显示"移动到最新"按钮
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = timeline;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+      
+      if (isAtBottom) {
+        setAutoScroll(true);
+        setShowScrollToBottom(false);
+      } else {
+        setAutoScroll(false);
+        setShowScrollToBottom(true);
+      }
+    };
+
+    // 初始化时检查一次
+    handleScroll();
+
+    timeline.addEventListener('scroll', handleScroll);
+    return () => timeline.removeEventListener('scroll', handleScroll);
+  }, [activeAgentId]);
 
   // 追踪 agent 会话开始/结束时间，计算会话时长
   useEffect(() => {
@@ -2539,14 +2586,21 @@ export function App() {
             );
             const projectSessions = sessionsByProject[project.id] ?? [];
             const projectSearch = search.trim();
-            const visibleProjectSessions = projectSearch
+            // 过滤掉已激活为 Agent 的历史会话，避免重复显示
+            const activeAgentSessionPaths = new Set(
+              projectAgents
+                .filter((agent) => agent.sessionPath)
+                .map((agent) => agent.sessionPath),
+            );
+            const visibleProjectSessions = (projectSearch
               ? projectSessions.filter((session) =>
                   matches(
                     `${session.name ?? ""}${session.preview}${session.filePath}`,
                     projectSearch,
                   ),
                 )
-              : projectSessions;
+              : projectSessions
+            ).filter((session) => !activeAgentSessionPaths.has(session.filePath));
             const sessionDisplayCount =
               visibleSessionCountByProject[project.id] ??
               SIDEBAR_SESSION_PAGE_SIZE;
@@ -2801,7 +2855,7 @@ export function App() {
                 title={t("feedback.title")}
                 onClick={() => setFeedbackOpen(true)}
               >
-                <Info size={17} />
+                <MessageSquare size={17} />
               </button>
             </div>
             <button
@@ -2877,39 +2931,58 @@ export function App() {
                   onClick={() => createAgent()}
                   title={t("app.newSession")}
                 >
-                  {t("app.newSession")}
+                  {t("app.new")}
                 </button>
-                <button
-                  disabled={!activeAgentId || activeAgent?.status !== "running"}
-                  onClick={() => abortAgent()}
+                <div 
+                  className="session-dropdown-wrapper"
+                  onMouseEnter={() => activeAgentId && setSessionActionsOpen(true)}
+                  onMouseLeave={() => setSessionActionsOpen(false)}
                 >
-                  {t("app.stop")}
-                </button>
-                {!isLanWeb && (
                   <button
-                    disabled={
-                      !activeAgentId ||
-                      activeAgent?.status === "starting" ||
-                      !!loadingAction
-                    }
-                    title={t("app.restartTitle")}
-                    onClick={async () => {
-                      if (!activeAgentId) return;
-                      setLoadingAction("restart");
-                      try {
-                        const tab = await api.agents.restart(activeAgentId);
-                        setActiveAgentId(tab.id);
-                        void refreshRuntimeState(tab.id);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
+                    className="session-dropdown-trigger"
+                    disabled={!activeAgentId}
+                    title={t("app.sessionActions")}
                   >
-                    {loadingAction === "restart"
-                      ? t("app.restarting")
-                      : t("app.restart")}
+                    <ChevronDown size={14} />
                   </button>
-                )}
+                  {sessionActionsOpen && activeAgentId && (
+                    <div className="session-dropdown-menu">
+                      <button
+                        disabled={activeAgent?.status !== "running"}
+                        onClick={() => {
+                          abortAgent();
+                          setSessionActionsOpen(false);
+                        }}
+                      >
+                        {t("app.stop")}
+                      </button>
+                      {!isLanWeb && (
+                        <button
+                          disabled={
+                            activeAgent?.status === "starting" ||
+                            !!loadingAction
+                          }
+                          onClick={async () => {
+                            if (!activeAgentId) return;
+                            setLoadingAction("restart");
+                            setSessionActionsOpen(false);
+                            try {
+                              const tab = await api.agents.restart(activeAgentId);
+                              setActiveAgentId(tab.id);
+                              void refreshRuntimeState(tab.id);
+                            } finally {
+                              setLoadingAction(null);
+                            }
+                          }}
+                        >
+                          {loadingAction === "restart"
+                            ? t("app.restarting")
+                            : t("app.restart")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="header-action-group panel-group">
                 {!isLanWeb && (
@@ -2995,6 +3068,16 @@ export function App() {
                 />
               )}
             </div>
+          )}
+
+          {showScrollToBottom && (
+            <button
+              className="scroll-to-bottom-btn"
+              onClick={scrollToBottom}
+              title={t("app.scrollToBottom")}
+            >
+              <ChevronDown size={18} />
+            </button>
           )}
         </section>
 
@@ -3667,35 +3750,41 @@ function FeedbackModal({
           <CloseIconButton label={t("common.close")} onClick={onClose} />
         </div>
         <div className="feedback-body">
-          <label>
-            <span>{t("feedback.descriptionLabel")}</span>
+          <div className="feedback-form-section">
+            <div className="feedback-section-header">
+              <strong>{t("feedback.descriptionLabel")}</strong>
+              <small>{t("feedback.descriptionHint")}</small>
+            </div>
             <textarea
+              className="feedback-textarea"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder={t("feedback.descriptionPlaceholder")}
             />
-          </label>
-          <label>
-            <span>{t("feedback.stepsLabel")}</span>
+            <div className="feedback-section-header">
+              <strong>{t("feedback.stepsLabel")}</strong>
+              <small>{t("feedback.stepsHint")}</small>
+            </div>
             <textarea
+              className="feedback-textarea"
               value={steps}
               onChange={(event) => setSteps(event.target.value)}
               placeholder={t("feedback.stepsPlaceholder")}
             />
-          </label>
-          <div className="feedback-report-block">
-            <div>
-              <strong>{t("feedback.reportTitle")}</strong>
-              <span>
-                {loading ? t("feedback.reportLoading") : t("feedback.reportReady")}
-              </span>
+          </div>
+          <div className="feedback-environment-section">
+            <div className="feedback-section-header">
+              <strong>{t("feedback.environmentTitle")}</strong>
+              <small>
+                {loading ? t("feedback.reportLoading") : t("feedback.environmentHint")}
+              </small>
             </div>
-            <pre>{report}</pre>
+            <pre className="feedback-environment-content">{report}</pre>
           </div>
         </div>
         <div className="feedback-actions">
-          <button onClick={() => onOpenExternal(authorUrl)}>{t("feedback.authorGithub")}</button>
           <button onClick={copyReport}>{t("feedback.copyReport")}</button>
+          <button onClick={() => onOpenExternal(authorUrl)}>{t("feedback.authorGithub")}</button>
           <button className="primary" onClick={() => onOpenExternal(issueUrl)}>
             {t("feedback.openIssue")}
           </button>

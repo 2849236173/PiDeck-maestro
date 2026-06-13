@@ -1,5 +1,6 @@
 import {
 	isValidElement,
+	memo,
 	useEffect,
 	useRef,
 	useState,
@@ -415,7 +416,12 @@ export function ThinkingPicker(props: {
 				onClick={(event) => event.stopPropagation()}
 			>
 				<div className="picker-palette-header">
-					<span>{t("app.thinkingPickerTitle")}</span>
+					<div className="thinking-picker-header-content">
+						<span>{t("app.thinkingPickerTitle")}</span>
+						<small className="thinking-picker-hint">
+							{t("app.thinkingPickerHint")}
+						</small>
+					</div>
 					<IconButton
 						className="picker-palette-close"
 						label={t("common.close")}
@@ -809,7 +815,7 @@ export function ThinkingBubble(props: { thinking?: string; showThinking?: boolea
 }
 
 
-export function ToolGroup(props: { group: ToolGroupItem }) {
+export const ToolGroup = memo(function ToolGroup(props: { group: ToolGroupItem }) {
 	const [expanded, setExpanded] = useState(false);
 	// 工具消息按 toolCallId 原地更新;最后一条仍为 running 时,表示当前工具组还没收尾。
 	const running =
@@ -864,7 +870,7 @@ export function ToolGroup(props: { group: ToolGroupItem }) {
 			)}
 		</article>
 	);
-}
+});
 
 function ToolChip(props: { message: ChatMessage }) {
 	const status = String(props.message.meta?.status ?? "done");
@@ -914,7 +920,7 @@ function ToolSummary(props: { message: ChatMessage }) {
 	);
 }
 
-export function AgentRun(props: {
+export const AgentRun = memo(function AgentRun(props: {
 	run: AgentRunItem;
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
@@ -956,7 +962,7 @@ export function AgentRun(props: {
 			</div>
 		</article>
 	);
-}
+});
 
 export function ImagePreviewModal(props: {
 	image: ImageContent;
@@ -988,7 +994,7 @@ function stripAnsi(text: string): string {
 	return text.replace(ANSI_RE, "");
 }
 
-export function ChatBubble(props: {
+export const ChatBubble = memo(function ChatBubble(props: {
 	message: ChatMessage;
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
@@ -1160,7 +1166,7 @@ export function ChatBubble(props: {
 			</div>
 		</article>
 	);
-}
+});
 
 function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
 	const text = extractText(props.children);

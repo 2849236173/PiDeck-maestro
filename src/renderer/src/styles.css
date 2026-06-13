@@ -646,6 +646,8 @@ select:focus-visible {
 	overflow: hidden;
 	border-right: 0;
 	box-shadow: none;
+	border-top-right-radius: var(--radius-lg);
+	border-bottom-right-radius: var(--radius-lg);
 }
 .list-toolbar {
 	height: 50px;
@@ -1440,17 +1442,72 @@ body.is-terminal-resizing {
 	position: relative;
 	overflow: visible;
 }
+.session-dropdown-wrapper {
+	position: relative;
+	display: inline-flex;
+}
+.session-dropdown-trigger {
+	min-width: 28px !important;
+	padding: 0 6px !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.session-dropdown-menu {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	min-width: 140px;
+	z-index: 100;
+	padding: var(--space-1);
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-panel);
+	box-shadow: var(--shadow-popover);
+	animation: session-dropdown-in 0.15s ease-out;
+}
+@keyframes session-dropdown-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+.session-dropdown-menu button {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	min-height: 32px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-primary);
+	padding: 6px var(--space-3);
+	font-size: var(--font-size-control);
+	text-align: left;
+	cursor: pointer;
+}
+.session-dropdown-menu button:hover:not(:disabled) {
+	background: var(--color-bg-hover);
+}
+.session-dropdown-menu button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
 .chat-header-actions button,
 .panel-action-row button,
 .empty-state button {
 	flex: 0 0 auto;
-	min-width: 64px;
+	min-width: 60px;
 	height: var(--control-height-md);
 	border: 1px solid transparent;
 	background: var(--color-bg-panel);
 	color: var(--color-text-secondary);
 	border-radius: var(--radius-sm);
-	padding: 0 var(--space-3);
+	padding: 0 var(--space-2);
 	white-space: nowrap;
 	font-size: var(--font-size-control);
 	transition:
@@ -1459,12 +1516,11 @@ body.is-terminal-resizing {
 		color 0.15s;
 }
 .chat-header-actions .primary-action {
-	min-width: 96px;
-	background: var(--color-accent);
-	border-color: var(--color-accent);
-	color: var(--color-text-inverse);
-	font-weight: 600;
-	box-shadow: 0 1px 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+	min-width: 60px;
+	background: var(--color-bg-panel);
+	border-color: var(--color-border-subtle);
+	color: var(--color-text-secondary);
+	font-weight: 500;
 }
 
 /* ---- Branch custom dropdown ---- */
@@ -1475,15 +1531,16 @@ body.is-terminal-resizing {
 .branch-trigger {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	height: 30px;
+	gap: 4px;
+	height: var(--control-height-md);
+	min-width: 60px;
 	border: 1px solid transparent;
 	background: var(--color-bg-panel);
 	color: var(--color-text-primary);
-	border-radius: var(--radius-lg);
-	padding: 0 8px 0 9px;
+	border-radius: var(--radius-sm);
+	padding: 0 6px;
 	font-size: var(--font-size-control);
-	max-width: 200px;
+	max-width: 120px;
 	cursor: pointer;
 	transition:
 		background 0.15s,
@@ -1586,7 +1643,7 @@ body.is-terminal-resizing {
 .branch-dropdown button.active {
 	color: var(--color-accent);
 	font-weight: 600;
-	background: var(--color-accent-soft);
+	background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 .branch-item-icon {
 	font-size: var(--font-size-caption);
@@ -1661,15 +1718,10 @@ body.is-terminal-resizing {
 	background: var(--color-bg-hover);
 	border-color: var(--color-border-strong);
 }
-.chat-header-actions .primary-action:hover {
-	background: var(--color-accent-strong);
-	border-color: var(--color-accent-strong);
-	box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent) 26%, transparent);
-}
 .chat-header-actions button.active {
-	background: var(--color-accent);
+	background: transparent;
 	border-color: var(--color-accent);
-	color: var(--color-text-inverse);
+	color: var(--color-accent);
 	box-shadow: 0 1px 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 .chat-header-actions.loading {
@@ -1691,6 +1743,35 @@ body.is-terminal-resizing {
 .message-timeline::-webkit-scrollbar {
 	width: 0;
 	height: 0;
+}
+.scroll-to-bottom-btn {
+	position: absolute;
+	bottom: 24px;
+	right: 24px;
+	z-index: 10;
+	width: 40px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: 50%;
+	background: var(--color-bg-panel);
+	color: var(--color-text-secondary);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+.scroll-to-bottom-btn:hover {
+	background: var(--color-bg-hover);
+	color: var(--color-accent);
+	border-color: var(--color-accent);
+	box-shadow: 0 4px 12px color-mix(in srgb, var(--color-accent) 20%, transparent);
+	transform: translateY(-2px);
+}
+.scroll-to-bottom-btn:active {
+	transform: translateY(0);
+	box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 .message-list {
 	min-width: 0;
@@ -2370,6 +2451,9 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	max-height: 420px;
 	overflow: auto;
 	white-space: pre-wrap;
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-caption);
+	line-height: 1.6;
 }
 .typing-bubble {
 	display: inline-flex;
@@ -2560,7 +2644,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: var(--font-size-control);
+	font-size: var(--font-size-body);
+	font-weight: 500;
 }
 .tool-summary small,
 .tool-more {
@@ -2576,8 +2661,12 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .tool-summary button {
 	border: 0;
 	background: transparent;
-	color: var(--color-info);
+	color: var(--color-text-secondary);
 	padding: 0;
+	font-size: var(--font-size-caption);
+	font-family: var(--font-family-base);
+	cursor: pointer;
+	transition: color 0.15s;
 }
 .tool-summary button:hover {
 	color: var(--color-accent);
@@ -2589,6 +2678,9 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	background: var(--color-code-bg);
 	color: var(--color-code-text);
 	padding: var(--space-3);
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-caption);
+	line-height: 1.6;
 }
 .tool-more {
 	padding: 2px 4px;
@@ -2718,7 +2810,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .composer {
 	background: var(--color-bg-muted);
 	border-top: 1px solid var(--color-border-subtle);
-	padding: var(--space-2) var(--space-3) var(--space-2);
+	padding: var(--space-1) var(--space-2) var(--space-1);
 	min-width: 0;
 	overflow: hidden;
 	display: flex;
@@ -2727,11 +2819,11 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 .composer-box {
 	position: relative;
-	min-height: 156px;
-	max-height: 42vh;
+	min-height: 160px;
+	max-height: 50vh;
 	min-width: 0;
 	display: grid;
-	grid-template-rows: 32px minmax(82px, 1fr) 36px;
+	grid-template-rows: 32px minmax(90px, 1fr) 32px;
 	border: 1px solid var(--color-border-subtle);
 	background: var(--color-bg-panel);
 	border-radius: var(--radius-lg);
@@ -2808,7 +2900,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	max-width: 100%;
 	min-width: 0;
 	height: 100%;
-	min-height: 82px;
+	min-height: 90px;
 	resize: none;
 	overflow-x: hidden;
 	overflow-y: auto;
@@ -2817,7 +2909,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	outline: none;
 	background: transparent;
 	color: var(--color-text-primary);
-	padding: 15px 16px 10px;
+	padding: 10px 12px;
 	font-size: var(--font-size-body);
 	line-height: var(--line-height-body);
 	white-space: pre-wrap;
@@ -2874,7 +2966,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	justify-content: space-between;
 	align-items: center;
 	gap: 10px;
-	padding: 0 8px 8px 14px;
+	padding: 0 8px 8px 6px;
 	color: var(--color-text-tertiary);
 	font-size: var(--font-size-caption);
 	grid-row: 3;
@@ -3660,94 +3752,115 @@ body.is-composer-resizing .composer-resize-handle::after {
 }
 .feedback-body {
 	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--space-5);
+	min-height: 0;
+	padding: var(--space-5);
+	overflow: auto;
+	background: var(--color-bg-muted);
+}
+.feedback-form-section {
+	display: flex;
+	flex-direction: column;
 	gap: var(--space-4);
 	min-height: 0;
-	padding: 18px;
-	overflow: auto;
 }
-.feedback-body label {
-	display: grid;
-	gap: 7px;
-	color: var(--color-text-primary);
-	font-size: var(--font-size-control);
-	font-weight: 600;
-}
-.feedback-body textarea {
-	min-height: 94px;
-	resize: vertical;
-	border: 1px solid var(--color-border-subtle);
-	border-radius: var(--radius-md);
-	background: var(--color-bg-muted);
-	color: var(--color-text-primary);
-	padding: 10px var(--space-3);
-	line-height: 1.55;
-	outline: none;
-}
-.feedback-body textarea:focus {
-	border-color: var(--color-accent);
-	box-shadow: var(--focus-ring);
-}
-.feedback-report-block {
-	display: grid;
-	gap: 10px;
+.feedback-environment-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	min-height: 0;
 	border: 1px solid var(--color-border-subtle);
 	border-radius: var(--radius-lg);
-	background: var(--color-bg-muted);
-	padding: 12px;
+	background: var(--color-bg-panel);
+	padding: var(--space-4);
+	overflow: hidden;
 }
-.feedback-report-block > div {
+.feedback-section-header {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	color: var(--color-text-primary);
-	font-size: var(--font-size-control);
+	flex-direction: column;
+	gap: 4px;
 }
-.feedback-report-block span {
+.feedback-section-header strong {
+	color: var(--color-text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 600;
+}
+.feedback-section-header small {
 	color: var(--color-text-tertiary);
 	font-size: var(--font-size-caption);
 	font-weight: 400;
+	line-height: 1.4;
 }
-.feedback-report-block pre {
-	max-height: 230px;
+.feedback-textarea {
+	min-height: 120px;
+	resize: vertical;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
+	padding: 12px var(--space-3);
+	font-size: var(--font-size-control);
+	line-height: 1.5;
+	outline: none;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.feedback-textarea:focus {
+	border-color: var(--color-accent);
+	box-shadow: var(--focus-ring);
+}
+.feedback-textarea::placeholder {
+	color: var(--color-text-tertiary);
+}
+.feedback-environment-content {
+	flex: 1;
 	margin: 0;
 	overflow: auto;
 	white-space: pre-wrap;
 	word-break: break-word;
-	border-radius: var(--radius-lg);
+	border-radius: var(--radius-md);
 	background: var(--color-code-bg);
 	color: var(--color-code-text);
 	padding: 12px;
 	font-family: var(--font-family-mono);
 	font-size: var(--font-size-caption);
-	line-height: 1.55;
+	line-height: 1.6;
 }
 .feedback-actions {
 	display: flex;
 	justify-content: flex-end;
-	gap: 10px;
-	padding: 14px 18px 18px;
+	gap: var(--space-2);
+	padding: 16px 20px;
 	border-top: 1px solid var(--color-border-subtle);
-	background: var(--color-bg-sidebar);
+	background: var(--color-bg-panel);
 }
 .feedback-actions button {
-	height: 34px;
+	height: 36px;
 	border: 1px solid var(--color-border-subtle);
-	border-radius: var(--radius-lg);
+	border-radius: var(--radius-md);
 	background: var(--color-bg-panel);
 	color: var(--color-text-secondary);
-	padding: 0 14px;
+	padding: 0 16px;
+	font-size: var(--font-size-control);
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s ease;
 }
-.feedback-actions button:hover {
+.feedback-actions button:hover:not(:disabled) {
 	background: var(--color-bg-hover);
+	color: var(--color-text-primary);
 }
 .feedback-actions button.primary {
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: var(--color-text-inverse);
 }
-.feedback-actions button.primary:hover {
+.feedback-actions button.primary:hover:not(:disabled) {
 	background: var(--color-accent-strong);
+}
+.feedback-actions button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 .context-menu {
 	position: fixed;
@@ -4167,9 +4280,9 @@ body.is-composer-resizing .composer-resize-handle::after {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-2);
-	padding: var(--space-4);
+	padding: var(--space-5);
 	border-right: 1px solid var(--color-border-subtle);
-	background: var(--color-bg-sidebar);
+	background: var(--color-bg-panel);
 }
 .settings-tabs button {
 	display: grid;
@@ -4183,17 +4296,19 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-text-secondary);
 	padding: 10px;
 	text-align: left;
+	cursor: pointer;
+	transition: all 0.15s ease;
 }
 .settings-tabs button:hover {
-	background: var(--color-bg-panel);
+	background: var(--color-bg-hover);
 	border-color: var(--color-border-subtle);
 	color: var(--color-text-primary);
 }
 .settings-tabs button.active {
-	background: var(--color-bg-panel);
+	background: var(--color-bg-active);
 	border-color: color-mix(in srgb, var(--color-accent) 24%, var(--color-border-subtle));
 	color: var(--color-text-primary);
-	box-shadow: 0 8px 22px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--color-text-primary) 4%, transparent);
 }
 .settings-tabs button span:last-child {
 	min-width: 0;
@@ -4225,11 +4340,11 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-accent);
 }
 .modal-header {
-	height: 64px;
+	height: 68px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 8px 18px;
+	padding: 12px 20px;
 	border-bottom: 1px solid var(--color-border-subtle);
 	background: var(--color-bg-panel);
 }
@@ -4284,7 +4399,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	display: flex;
 	gap: var(--space-2);
 	align-items: center;
-	padding: 6px 8px 0;
+	padding: 6px 8px 0 6px;
 }
 .composer-toolbar button {
 	height: var(--control-height-xs);
@@ -4347,6 +4462,19 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-text-secondary);
 	font-size: var(--font-size-caption);
 	font-weight: 500;
+}
+.thinking-picker-header-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+}
+.thinking-picker-hint {
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-micro);
+	font-weight: 400;
+	line-height: 1.4;
 }
 .picker-palette-close {
 	width: var(--control-height-xs);
@@ -4488,8 +4616,9 @@ body.is-composer-resizing .composer-resize-handle::after {
 	min-height: 0;
 	overflow-y: auto;
 	flex: 1;
-	padding: 18px 20px 20px;
+	padding: var(--space-5);
 	color: var(--color-text-primary);
+	background: var(--color-bg-muted);
 }
 .settings-section {
 	position: relative;
@@ -4953,11 +5082,12 @@ body.is-composer-resizing .composer-resize-handle::after {
 	display: flex;
 	gap: 0;
 	border-bottom: 1px solid var(--color-border-subtle);
-	padding: 0 18px;
+	padding: 0 20px;
+	background: var(--color-bg-panel);
 }
 
 .config-tabs button {
-	height: 42px;
+	height: 44px;
 	border: 0;
 	border-bottom: 2px solid transparent;
 	background: transparent;
@@ -4983,10 +5113,10 @@ body.is-composer-resizing .composer-resize-handle::after {
 .config-content {
 	flex: 1;
 	overflow-y: auto;
-	padding: var(--space-4);
+	padding: var(--space-5);
 	position: relative;
 	min-height: 320px;
-	background: var(--color-bg-panel);
+	background: var(--color-bg-muted);
 }
 
 .config-loading {
@@ -5190,7 +5320,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 :root[data-theme="dark"] .config-tabs,
 :root[data-theme="dark"] .settings-tabs,
 :root[data-theme="dark"] .feedback-actions {
-	background: var(--color-bg-sidebar);
+	background: var(--color-bg-panel);
 	border-color: var(--color-border-subtle);
 }
 
