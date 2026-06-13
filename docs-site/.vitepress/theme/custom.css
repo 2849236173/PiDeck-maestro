@@ -1,5 +1,46 @@
+@font-face {
+  font-family: "PiDeckPlantin";
+  src: url("./fonts/PlantinNowVariable-Upright.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PiDeckPlantin";
+  src: url("./fonts/PlantinNowVariable-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PiDeckCommitMono";
+  src: url("./fonts/CommitMono-400-Regular.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PiDeckDepartureMono";
+  src: url("./fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
-  --vp-c-brand-1: #0f766e;
+  --pideck-color-brand-green: #0f766e;
+  --pideck-color-brand-blue: #2563eb;
+  --pideck-color-brand-amber: #b45309;
+  --pideck-hero-gradient: linear-gradient(
+    120deg,
+    var(--pideck-color-brand-green) 0%,
+    var(--pideck-color-brand-blue) 54%,
+    var(--pideck-color-brand-amber) 100%
+  );
+  --vp-c-brand-1: var(--pideck-color-brand-green);
   --vp-c-brand-2: #0d9488;
   --vp-c-brand-3: #14b8a6;
   --vp-c-brand-soft: rgba(20, 184, 166, 0.14);
@@ -9,9 +50,11 @@
   --vp-c-text-1: #14211f;
   --vp-c-text-2: #43524f;
   --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #0f766e 0%, #2563eb 54%, #b45309 100%);
+  --vp-home-hero-name-background: var(--pideck-hero-gradient);
   --vp-font-family-base: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --vp-font-family-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --vp-font-family-mono: "PiDeckCommitMono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --pideck-font-brand: "PiDeckPlantin", Georgia, "Times New Roman", serif;
+  --pideck-font-display-mono: "PiDeckDepartureMono", "PiDeckCommitMono", ui-monospace, monospace;
 }
 
 .dark {
@@ -31,6 +74,24 @@
 
 .VPHero .name,
 .VPHero .text {
+  letter-spacing: 0;
+}
+
+.VPHero .name {
+  font-family: var(--pideck-font-brand);
+  font-style: italic;
+  font-weight: 760;
+}
+
+.VPHero .text {
+  font-family: var(--pideck-font-brand);
+  font-weight: 560;
+}
+
+.VPNavBarTitle .title {
+  font-family: var(--pideck-font-brand);
+  font-style: italic;
+  font-weight: 680;
   letter-spacing: 0;
 }
 
@@ -88,6 +149,8 @@
   display: block;
   margin-top: 10px;
   letter-spacing: 0;
+  font-family: var(--pideck-font-brand);
+  font-weight: 620;
 }
 
 .screenshot-card span {
@@ -115,6 +178,32 @@
 .info-strip strong {
   display: block;
   margin-bottom: 6px;
+  font-family: var(--pideck-font-brand);
+  font-weight: 620;
+}
+
+.VPFeature .title,
+.content h1,
+.content h2 {
+  font-family: var(--pideck-font-brand);
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+.VPFeature .title {
+  font-style: italic;
+}
+
+.VPDoc code,
+.VPDoc pre,
+.VPDoc kbd,
+.VPDoc table code {
+  font-family: var(--vp-font-family-mono);
+}
+
+.VPDoc table td:first-child code,
+.VPDoc table td:first-child {
+  font-family: var(--pideck-font-display-mono);
 }
 
 @media (max-width: 760px) {

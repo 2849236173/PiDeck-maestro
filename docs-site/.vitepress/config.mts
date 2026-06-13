@@ -3,7 +3,7 @@ import { defineConfig } from "vitepress";
 const base = process.env.VITEPRESS_BASE ?? "/pi-desktop/";
 
 export default defineConfig({
-  title: "pi-desktop",
+  title: "PiDeck",
   description: "面向本地开发工作的 pi Agent 桌面工作台",
   lang: "zh-CN",
   base,
@@ -11,13 +11,13 @@ export default defineConfig({
   lastUpdated: true,
   head: [
     ["link", { rel: "icon", href: `${base}icon.svg` }],
-    ["meta", { property: "og:title", content: "pi-desktop" }],
+    ["meta", { property: "og:title", content: "PiDeck" }],
     ["meta", { property: "og:description", content: "在桌面端管理多个 pi 编码助手会话。" }],
     ["meta", { property: "og:type", content: "website" }],
   ],
   themeConfig: {
     logo: "/icon.svg",
-    siteTitle: "pi-desktop",
+    siteTitle: "PiDeck",
     nav: [
       { text: "首页", link: "/" },
       { text: "快速开始", link: "/guide/getting-started" },

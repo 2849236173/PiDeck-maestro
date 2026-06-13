@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: pi-desktop
+  name: PiDeck
   text: 多项目 pi Agent 桌面工作台
   tagline: 在一个原生桌面应用里管理项目、会话、配置、终端和工具调用，让本地 pi 编码助手工作流更稳定。
   actions:
