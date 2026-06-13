@@ -13,13 +13,6 @@
 	font-display: swap;
 }
 @font-face {
-	font-family: "PiDeckDepartureMono";
-	src: url("./assets/fonts/DepartureMono-Regular.woff2") format("woff2");
-	font-style: normal;
-	font-weight: 400;
-	font-display: swap;
-}
-@font-face {
 	font-family: "PiDeckCommitMono";
 	src: url("./assets/fonts/CommitMono-400-Regular.otf") format("opentype");
 	font-style: normal;
@@ -35,9 +28,7 @@
 	--font-family-brand: "PiDeckPlantin", Georgia, "Times New Roman", serif;
 	--font-family-mono: "PiDeckCommitMono", ui-monospace, SFMono-Regular,
 		Menlo, Consolas, "Liberation Mono", monospace;
-	--font-family-display-mono: "PiDeckDepartureMono", "PiDeckCommitMono",
-		ui-monospace, monospace;
-	--font-family-business: var(--font-family-display-mono);
+	--font-family-business: var(--font-family-mono);
 	--font-size-micro: 11px;
 	--font-size-caption: 12px;
 	--font-size-control: 13px;
@@ -973,28 +964,28 @@ select:focus-visible {
 	width: 6px;
 	background: color-mix(in srgb, var(--color-border-strong) 42%, transparent);
 }
-body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover,
-.list-collapsed .chat-list-pane:focus-within {
+body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-list-pane:hover,
+.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within {
 	width: var(--list-hover-width);
 	overflow: hidden;
 	background: var(--color-bg-sidebar);
 	border-right: 1px solid var(--color-border-subtle);
 	box-shadow: 12px 0 28px color-mix(in srgb, var(--color-text-primary) 12%, transparent);
 }
-body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover > *,
-.list-collapsed .chat-list-pane:focus-within > * {
+body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-list-pane:hover > *,
+.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within > * {
 	display: flex;
 }
-body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover .search-row,
-.list-collapsed .chat-list-pane:focus-within .search-row {
+body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-list-pane:hover .search-row,
+.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within .search-row {
 	display: grid;
 }
-body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover .conversation-list,
-.list-collapsed .chat-list-pane:focus-within .conversation-list {
+body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-list-pane:hover .conversation-list,
+.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within .conversation-list {
 	display: block;
 }
-body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover .list-collapse,
-.list-collapsed .chat-list-pane:focus-within .list-collapse {
+body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-list-pane:hover .list-collapse,
+.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within .list-collapse {
 	display: grid;
 	right: 10px;
 	top: 10px;
@@ -1406,7 +1397,7 @@ body.is-terminal-resizing {
 	grid-template-columns: minmax(180px, 1fr) minmax(0, auto);
 	gap: var(--space-3);
 	align-items: center;
-	padding: 10px var(--space-5) 10px 28px;
+	padding: 8px var(--space-5) 14px 28px;
 	border-bottom: 1px solid var(--color-border-subtle);
 	background: linear-gradient(
 		180deg,
@@ -1435,7 +1426,7 @@ body.is-terminal-resizing {
 	color: var(--color-text-tertiary);
 	font-size: var(--font-size-caption);
 	line-height: var(--line-height-caption);
-	margin-top: 2px;
+	margin-top: 3px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

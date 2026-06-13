@@ -147,11 +147,22 @@ function isChatProject(project?: Project) {
   return project?.kind === "chat";
 }
 
+// 会话文件路径可能来自扫描器或 Agent 状态回写，比较时统一分隔符和大小写，避免重复恢复同一历史会话。
+function normalizeSessionPathForCompare(sessionPath?: string) {
+  return sessionPath?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function isSameSessionPath(left?: string, right?: string) {
+  const normalizedLeft = normalizeSessionPathForCompare(left);
+  const normalizedRight = normalizeSessionPathForCompare(right);
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
 function isReplacementForPendingAgent(agent: AgentTab, pending: AgentTab) {
   if (!pending.id.startsWith("pending-")) return false;
   if (agent.projectId !== pending.projectId || agent.cwd !== pending.cwd)
     return false;
-  if (pending.sessionPath && agent.sessionPath === pending.sessionPath)
+  if (isSameSessionPath(agent.sessionPath, pending.sessionPath))
     return true;
   if (pending.sessionPath && agent.createdAt >= pending.createdAt - 1000)
     return true;
@@ -393,6 +404,8 @@ export function App() {
     Record<string, number>
   >({});
   const [listCollapsed, setListCollapsed] = useState(false);
+  const [listHoverRevealSuppressed, setListHoverRevealSuppressed] =
+    useState(false);
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
   const [drawerPinnedByAgent, setDrawerPinnedByAgent] = useState<
     Record<string, DrawerPanel>
@@ -1683,7 +1696,9 @@ export function App() {
     if (!project) return;
     const existing = sessionPath
       ? [...displayAgents, ...pendingAgentsRef.current].find(
-          (agent) => agent.sessionPath === sessionPath,
+          (agent) =>
+            agent.projectId === projectId &&
+            isSameSessionPath(agent.sessionPath, sessionPath),
         )
       : undefined;
     if (existing) {
@@ -2365,17 +2380,40 @@ export function App() {
     window.addEventListener("pointerup", onUp);
   }
 
+  function toggleListCollapsed() {
+    const nextCollapsed = !listCollapsed;
+    if (!nextCollapsed) setListWidth(DEFAULT_LIST_WIDTH);
+    if (nextCollapsed) {
+      // 点击折叠后鼠标和焦点仍在侧栏内；先释放焦点并抑制 hover，避免刚折叠就被 CSS 展开。
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+    setListHoverRevealSuppressed(nextCollapsed);
+    setListCollapsed(nextCollapsed);
+  }
+
+  function releaseListHoverSuppression(event: PointerEvent<HTMLDivElement>) {
+    if (
+      listCollapsed &&
+      listHoverRevealSuppressed &&
+      event.clientX > 24
+    ) {
+      setListHoverRevealSuppressed(false);
+    }
+  }
+
   return (
     <div
       className={[
         "wechat-shell",
         drawer ? "drawer-open" : "",
         listCollapsed ? "list-collapsed" : "",
+        listHoverRevealSuppressed ? "list-hover-suppressed" : "",
         drawerCollapsed ? "drawer-collapsed" : "",
         settings.useNativeTitleBar ? "" : "custom-titlebar-enabled",
       ]
         .filter(Boolean)
         .join(" ")}
+      onPointerMove={releaseListHoverSuppression}
       style={
         {
           "--list-width": `${listCollapsed ? 0 : listWidth}px`,
@@ -2429,7 +2467,12 @@ export function App() {
           </button>
         </div>
       )}
-      <aside className="chat-list-pane">
+      <aside
+        className="chat-list-pane"
+        onPointerLeave={() => {
+          if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
+        }}
+      >
         <div className="list-toolbar">
           <div className="app-badge">
             <LogoMark />
@@ -2441,10 +2484,7 @@ export function App() {
         <button
           className="collapse-button list-collapse"
           title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
-          onClick={() => {
-            if (listCollapsed) setListWidth(DEFAULT_LIST_WIDTH);
-            setListCollapsed((value) => !value);
-          }}
+          onClick={toggleListCollapsed}
         >
           {listCollapsed ? (
             <ChevronRight size={16} />
@@ -2679,7 +2719,7 @@ export function App() {
                       <button
                         key={session.filePath}
                         className={
-                          activeAgent?.sessionPath === session.filePath &&
+                          isSameSessionPath(activeAgent?.sessionPath, session.filePath) &&
                           !activeSessionShownAsAgent
                             ? "conversation agent-row session-row active"
                             : "conversation agent-row session-row"
@@ -2737,11 +2777,11 @@ export function App() {
           <div className="toolbar-actions sidebar-bottom-actions">
             <div className="sidebar-bottom-primary-actions">
               <button
-                className="icon-button feedback-icon"
-                title={t("feedback.title")}
-                onClick={() => setFeedbackOpen(true)}
+                className="icon-button settings-icon"
+                title={t("settings.title")}
+                onClick={() => setSettingsOpen(true)}
               >
-                <Info size={17} />
+                <Settings size={17} />
               </button>
               <button
                 className="icon-button config-icon"
@@ -2751,20 +2791,17 @@ export function App() {
                 <Sliders size={17} />
               </button>
               <button
-                className="icon-button settings-icon"
-                title={t("settings.title")}
-                onClick={() => setSettingsOpen(true)}
+                className="icon-button feedback-icon"
+                title={t("feedback.title")}
+                onClick={() => setFeedbackOpen(true)}
               >
-                <Settings size={17} />
+                <Info size={17} />
               </button>
             </div>
             <button
               className="icon-button sidebar-collapse-logo"
               title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
-              onClick={() => {
-                if (listCollapsed) setListWidth(DEFAULT_LIST_WIDTH);
-                setListCollapsed((value) => !value);
-              }}
+              onClick={toggleListCollapsed}
             >
               {listCollapsed ? (
                 <PanelLeftOpen size={18} strokeWidth={1.9} />
