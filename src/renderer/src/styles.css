@@ -44,6 +44,7 @@
 	--font-size-title: 16px;
 	--font-size-brand: 18px;
 	--font-size-heading: 20px;
+	--font-size-logo: 36px;
 	--line-height-micro: 16px;
 	--line-height-caption: 18px;
 	--line-height-control: 20px;
@@ -106,6 +107,12 @@
 	--overlay-backdrop: rgba(15, 18, 24, 0.35);
 	--overlay-backdrop-soft: rgba(15, 23, 42, 0.14);
 	--overlay-backdrop-subtle: rgba(15, 23, 42, 0.08);
+	--image-preview-backdrop: rgba(0, 0, 0, 0.78);
+	--image-preview-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+	--image-preview-control-border: rgba(255, 255, 255, 0.3);
+	--image-preview-control-bg: rgba(255, 255, 255, 0.12);
+	--image-preview-control-bg-hover: rgba(255, 255, 255, 0.22);
+	--image-thumbnail-remove-bg: rgba(0, 0, 0, 0.6);
 	--brand-wordmark-gradient: linear-gradient(
 		120deg,
 		var(--color-brand-green) 0%,
@@ -220,7 +227,7 @@ select:focus-visible {
 	border-radius: var(--radius-lg);
 	background: var(--logo-boot-gradient);
 	color: var(--color-text-inverse);
-	font-size: 36px;
+	font-size: var(--font-size-logo);
 	font-weight: 900;
 	box-shadow: 0 12px 28px color-mix(in srgb, var(--color-logo-green) 20%, transparent);
 }
@@ -6031,9 +6038,9 @@ body.is-composer-resizing .composer-resize-handle::after {
 	right: 2px;
 	width: 20px;
 	height: 20px;
-	border-radius: 50%;
-	background: rgba(0, 0, 0, 0.6);
-	color: #fff;
+	border-radius: var(--radius-pill);
+	background: var(--image-thumbnail-remove-bg);
+	color: var(--color-text-inverse);
 	border: none;
 	padding: 0;
 	cursor: pointer;
@@ -6094,7 +6101,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	position: fixed;
 	inset: 0;
 	z-index: 1000;
-	background: rgba(0, 0, 0, 0.78);
+	background: var(--image-preview-backdrop);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -6106,7 +6113,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	max-height: 88vh;
 	object-fit: contain;
 	border-radius: var(--radius-lg);
-	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+	box-shadow: var(--image-preview-shadow);
 }
 
 .image-preview-close {
@@ -6115,10 +6122,10 @@ body.is-composer-resizing .composer-resize-handle::after {
 	right: 28px;
 	width: 38px;
 	height: 38px;
-	border-radius: 50%;
-	border: 1px solid rgba(255, 255, 255, 0.3);
-	background: rgba(255, 255, 255, 0.12);
-	color: #fff;
+	border-radius: var(--radius-pill);
+	border: 1px solid var(--image-preview-control-border);
+	background: var(--image-preview-control-bg);
+	color: var(--color-text-inverse);
 	padding: 0;
 	cursor: pointer;
 	display: grid;
@@ -6130,7 +6137,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 }
 
 .image-preview-close:hover {
-	background: rgba(255, 255, 255, 0.22);
+	background: var(--image-preview-control-bg-hover);
 }
 
 /* RPC 日志弹窗 */
