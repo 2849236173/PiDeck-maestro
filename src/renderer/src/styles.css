@@ -314,7 +314,7 @@ select:focus-visible {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 16px;
+	font-size: var(--font-size-title);
 	font-weight: 700;
 }
 .env-success-info {
@@ -667,7 +667,7 @@ select:focus-visible {
 	gap: 0;
 	position: relative;
 	font-family: "PiDeckPlantin", var(--font-family-base);
-	font-size: 16px;
+	font-size: var(--font-size-title);
 	line-height: 1;
 	font-style: normal;
 	font-weight: 800;
@@ -738,7 +738,7 @@ select:focus-visible {
 	/* 与应用图标保持一致：以 #14b814 作为品牌绿，深色端只用于保证桌面小尺寸下的可读性。 */
 	background: linear-gradient(145deg, #14b814 0%, #12a812 60%, #0b8f0b 100%);
 	color: #fff;
-	font-size: 22px;
+	font-size: var(--font-size-heading);
 	font-weight: 900;
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -838,7 +838,7 @@ select:focus-visible {
 	display: grid;
 	place-items: center;
 	box-shadow: none;
-	font-size: 16px;
+	font-size: var(--font-size-title);
 }
 .collapse-button:hover {
 	color: var(--color-accent);
@@ -1464,7 +1464,7 @@ body.is-terminal-resizing {
 }
 .branch-icon {
 	color: var(--color-accent);
-	font-size: 14px;
+	font-size: var(--font-size-body);
 	flex-shrink: 0;
 	display: flex;
 	align-items: center;
@@ -2917,7 +2917,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--color-text-tertiary);
-	font-size: 16px;
+	font-size: var(--font-size-title);
 	cursor: pointer;
 	transition:
 		background-color 0.1s,
@@ -3880,7 +3880,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	padding: 0;
 	display: grid;
 	place-items: center;
-	font-size: 15px;
+	font-size: var(--font-size-body);
 	box-shadow: var(--shadow-popover);
 	cursor: ns-resize;
 	touch-action: none;
@@ -3938,7 +3938,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-text-tertiary);
 	cursor: ns-resize;
 	touch-action: none;
-	font-size: 13px;
+	font-size: var(--font-size-control);
 	line-height: 1;
 }
 .outline-drag-handle:hover {
@@ -4107,7 +4107,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--color-text-tertiary);
-	font-size: 22px;
+	font-size: var(--font-size-heading);
 }
 .modal-header button:hover {
 	background: var(--color-bg-hover);
@@ -4215,7 +4215,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	border-radius: var(--radius-xs);
 	background: transparent;
 	color: var(--color-text-tertiary);
-	font-size: 16px;
+	font-size: var(--font-size-title);
 	cursor: pointer;
 	transition:
 		background-color 0.1s,
@@ -5033,7 +5033,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-text-tertiary);
 	border-radius: var(--radius-xs);
 	cursor: pointer;
-	font-size: 16px;
+	font-size: var(--font-size-title);
 	line-height: 1;
 	display: flex;
 	align-items: center;
@@ -5051,7 +5051,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	border-radius: var(--radius-xs);
 	background: transparent;
 	color: var(--color-text-tertiary);
-	font-size: 14px;
+	font-size: var(--font-size-body);
 	cursor: pointer;
 	display: grid;
 	place-items: center;
@@ -5482,7 +5482,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 	background: var(--color-bg-panel);
 	color: var(--color-text-secondary);
 	cursor: pointer;
-	font-size: 15px;
+	font-size: var(--font-size-body);
 	display: grid;
 	place-items: center;
 	transition:
