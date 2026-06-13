@@ -487,7 +487,7 @@ select:focus-visible {
 	min-width: 0;
 	overflow: hidden;
 	border-right: 1px solid var(--color-border-subtle);
-	box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.72);
+	box-shadow: inset -1px 0 0 color-mix(in srgb, var(--color-bg-panel) 72%, transparent);
 }
 .list-toolbar {
 	height: 50px;
@@ -518,8 +518,8 @@ select:focus-visible {
 }
 
 .toolbar-actions .feedback-icon:hover {
-	background: rgba(59, 130, 246, 0.1);
-	color: #2563eb;
+	background: color-mix(in srgb, var(--color-info) 10%, var(--color-bg-panel));
+	color: var(--color-info);
 }
 .sidebar-bottom-actions {
 	margin-top: auto;
@@ -655,7 +655,7 @@ select:focus-visible {
 	bottom: 11px;
 	width: 24px;
 	height: 24px;
-	color: #647180;
+	color: var(--color-text-tertiary);
 	display: none;
 }
 .list-collapsed .chat-list-pane {
@@ -684,7 +684,7 @@ select:focus-visible {
 	top: 0;
 	bottom: 0;
 	width: 6px;
-	background: rgba(120, 145, 156, 0.18);
+	background: color-mix(in srgb, var(--color-border-strong) 42%, transparent);
 }
 body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover,
 .list-collapsed .chat-list-pane:focus-within {
@@ -692,7 +692,7 @@ body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover,
 	overflow: hidden;
 	background: var(--color-bg-sidebar);
 	border-right: 1px solid var(--color-border-subtle);
-	box-shadow: 12px 0 28px rgba(31, 41, 55, 0.12);
+	box-shadow: 12px 0 28px color-mix(in srgb, var(--color-text-primary) 12%, transparent);
 }
 body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover > *,
 .list-collapsed .chat-list-pane:focus-within > * {
@@ -712,9 +712,9 @@ body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover .list-collapse
 	right: 10px;
 	top: 10px;
 	bottom: auto;
-	background: rgba(255, 255, 255, 0.72);
-	border: 1px solid rgba(148, 163, 184, 0.2);
-	box-shadow: 0 6px 16px rgba(31, 41, 55, 0.08);
+	background: color-mix(in srgb, var(--color-bg-panel) 72%, transparent);
+	border: 1px solid color-mix(in srgb, var(--color-border-strong) 38%, transparent);
+	box-shadow: 0 6px 16px color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 .list-collapsed .splitter-left {
 	display: none;
@@ -812,13 +812,13 @@ body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover .list-collapse
 	font-size: var(--font-size-caption);
 }
 .conversation-title span.running {
-	color: #d08a00;
+	color: var(--color-warning);
 }
 .conversation-title span.idle {
-	color: #14a514;
+	color: var(--color-accent);
 }
 .conversation-title span.error {
-	color: #d33;
+	color: var(--color-danger);
 }
 .conversation p {
 	margin: 1px 0 0;
@@ -859,17 +859,17 @@ body:not(.is-list-resizing) .list-collapsed .chat-list-pane:hover .list-collapse
 }
 .project-group > .conversation.drag-over:first-child {
 	background: var(--color-accent-soft);
-	box-shadow: inset 0 0 0 1px rgba(35, 134, 54, 0.32);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
 .chat-project-guide {
-	color: #5f7f6a;
+	color: color-mix(in srgb, var(--color-accent) 58%, var(--color-text-secondary));
 	font-size: var(--font-size-micro);
 }
 .project-fold {
 	display: none;
 }
 .project-fold.has-agents {
-	color: #64748b;
+	color: var(--color-text-tertiary);
 }
 .project-row-actions {
 	display: flex;
