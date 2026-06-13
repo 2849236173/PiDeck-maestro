@@ -565,7 +565,7 @@ export function ModelsTab(props: {
 															)}
 															{props.testResult.requestBody && (
 																<div className="config-test-result-row">
-																	<span>Body</span>
+																	<span>{t("config.requestBody")}</span>
 																	<code className="config-test-request-body">
 																		{props.testResult.requestBody}
 																	</code>
@@ -694,8 +694,8 @@ export function ModelsTab(props: {
 										<div className="config-models-grid-header">
 											<span>{t("config.modelId")}</span>
 											<span>{t("config.modelDisplayName")}</span>
-											<span>Context</span>
-											<span>MaxTokens</span>
+											<span>{t("config.contextWindow")}</span>
+											<span>{t("config.maxTokens")}</span>
 											<span>{t("config.reasoning")}</span>
 											<span></span>
 										</div>
