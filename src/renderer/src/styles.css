@@ -34,6 +34,8 @@
 	--color-danger-soft: #fdecea;
 	--color-warning: #b7791f;
 	--color-info: #2563eb;
+	--color-code-bg: #111418;
+	--color-code-text: #d1d5db;
 	--space-1: 4px;
 	--space-2: 8px;
 	--space-3: 12px;
@@ -87,6 +89,8 @@
 	--color-danger-soft: #3b1f1d;
 	--color-warning: #d4a72c;
 	--color-info: #6aa4ff;
+	--color-code-bg: #111418;
+	--color-code-text: #d1d5db;
 	--shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.06);
 	--shadow-popover: 0 14px 36px rgba(0, 0, 0, 0.38);
 	--shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.55);
@@ -629,9 +633,16 @@ select:focus-visible {
 	align-items: baseline;
 	gap: 1px;
 	position: relative;
-	font-size: 15px;
+	font-family:
+		"Bahnschrift",
+		"Segoe UI Variable Display",
+		"Aptos Display",
+		"Trebuchet MS",
+		var(--font-family-base);
+	font-size: 16px;
 	line-height: 1;
-	font-weight: 650;
+	font-stretch: condensed;
+	font-weight: 700;
 	letter-spacing: 0;
 	color: var(--color-text-primary);
 	transform: translateY(-1px);
@@ -654,11 +665,12 @@ select:focus-visible {
 }
 .brand-wordmark-pi {
 	color: var(--color-accent);
-	font-weight: 760;
+	font-weight: 800;
 }
 .brand-wordmark-deck {
 	color: color-mix(in srgb, var(--color-text-primary) 88%, var(--color-text-secondary));
-	font-weight: 580;
+	font-weight: 600;
+	font-style: italic;
 }
 .logo-mark {
 	position: relative;
@@ -2401,8 +2413,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	grid-column: 1 / -1;
 	max-height: 260px;
 	border-radius: var(--radius-lg);
-	background: #111418;
-	color: #d1d5db;
+	background: var(--color-code-bg);
+	color: var(--color-code-text);
 	padding: var(--space-3);
 }
 .tool-more {
@@ -3519,8 +3531,8 @@ body.is-composer-resizing .composer-resize-handle::after {
 	white-space: pre-wrap;
 	word-break: break-word;
 	border-radius: var(--radius-lg);
-	background: #111827;
-	color: #d9f99d;
+	background: var(--color-code-bg);
+	color: var(--color-code-text);
 	padding: 12px;
 	font-family: "Cascadia Code", Consolas, monospace;
 	font-size: var(--font-size-caption);
@@ -4922,8 +4934,8 @@ body.is-composer-resizing .composer-resize-handle::after {
 :root[data-theme="dark"] .update-notes,
 :root[data-theme="dark"] pre,
 :root[data-theme="dark"] code {
-	background: #111418;
-	color: var(--color-text-primary);
+	background: var(--color-code-bg);
+	color: var(--color-code-text);
 	border-color: var(--color-border-subtle);
 }
 
@@ -6414,8 +6426,8 @@ body.is-composer-resizing .composer-resize-handle::after {
 	overflow: auto;
 	padding: 8px;
 	border-radius: var(--radius-sm);
-	background: #0f172a;
-	color: #e2e8f0;
+	background: var(--color-code-bg);
+	color: var(--color-code-text);
 }
 
 .update-notes pre code {
