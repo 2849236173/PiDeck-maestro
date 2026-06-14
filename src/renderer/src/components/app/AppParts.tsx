@@ -951,25 +951,6 @@ export const AgentRun = memo(function AgentRun(props: {
 	const toolGroups = props.run.items.filter((item) => item.kind === "tool-group");
 	const toolGroupCount = toolGroups.length;
 
-	// 自动折叠逻辑
-	const isComplete = props.run.endedAt > 0;
-	const hasMultipleTools = toolGroupCount > 1;
-	const [autoCollapsed, setAutoCollapsed] = useState(false);
-
-	useEffect(() => {
-		if (isComplete && hasMultipleTools && !autoCollapsed) {
-			// 完成后 0.8 秒自动折叠
-			const timer = setTimeout(() => {
-				setAutoCollapsed(true);
-			}, 800);
-			return () => clearTimeout(timer);
-		}
-	}, [isComplete, hasMultipleTools, autoCollapsed]);
-
-	// 手动展开/折叠
-	const [manuallyExpanded, setManuallyExpanded] = useState(false);
-	const isCollapsed = autoCollapsed && !manuallyExpanded;
-
 	// 统计信息
 	const totalToolCalls = toolGroups.reduce(
 		(sum, tg) => sum + tg.messages.length,
@@ -983,6 +964,51 @@ export const AgentRun = memo(function AgentRun(props: {
 			).length,
 		0
 	);
+
+	// 自动折叠逻辑
+	const isComplete = props.run.endedAt > 0;
+	const hasMultipleTools = toolGroupCount > 1;
+	const hasError = failedToolCalls > 0;
+	const [autoCollapsed, setAutoCollapsed] = useState(false);
+
+	useEffect(() => {
+		// 智能折叠策略：
+		// 1. 只在完成时折叠
+		// 2. 需要多个工具组
+		// 3. 没有错误（有错误保持展开）
+		// 4. 用户没有手动展开过
+		if (isComplete && hasMultipleTools && !hasError && !autoCollapsed) {
+			// 完成后 0.8 秒自动折叠
+			const timer = setTimeout(() => {
+				setAutoCollapsed(true);
+			}, 800);
+			return () => clearTimeout(timer);
+		}
+	}, [isComplete, hasMultipleTools, hasError, autoCollapsed]);
+
+	// 手动展开/折叠
+	const [manuallyExpanded, setManuallyExpanded] = useState(false);
+	const isCollapsed = autoCollapsed && !manuallyExpanded;
+
+	// Timeline 数据
+	const timelineSteps = props.run.items.map((item, index) => {
+		if (item.kind === "tool-group") {
+			const running = item.messages.some((m) => m.meta?.status === "running");
+			const failed = item.messages.some(
+				(m) => m.meta?.status === "error" || m.meta?.isError === true
+			);
+			return {
+				type: "tool" as const,
+				status: running ? "running" : failed ? "error" : "done",
+				isLast: index === props.run.items.length - 1,
+			};
+		}
+		return {
+			type: item.message.role === "assistant" ? "assistant" : "other" as const,
+			status: "done",
+			isLast: index === props.run.items.length - 1,
+		};
+	});
 
 	return (
 		<article className="agent-run" data-message-id={props.run.id}>
@@ -1000,7 +1026,10 @@ export const AgentRun = memo(function AgentRun(props: {
 				{isCollapsed && toolGroupCount > 0 && (
 					<button
 						className="agent-run-summary"
-						onClick={() => setManuallyExpanded(true)}
+						onClick={() => {
+							setManuallyExpanded(true);
+							setAutoCollapsed(false); // 记住用户手动展开
+						}}
 					>
 						<span className="summary-icon">▸</span>
 						<span className="summary-text">
@@ -1012,36 +1041,57 @@ export const AgentRun = memo(function AgentRun(props: {
 					</button>
 				)}
 				<div className="agent-run-stack" style={{ display: isCollapsed ? 'none' : 'block' }}>
-					{props.run.items.map((item, itemIndex) => {
-						if (item.kind === "tool-group") {
-							// 计算当前工具组在所有工具组中的索引
-							const toolGroupIndex = toolGroups.findIndex((tg) => tg.id === item.id);
+					{/* Timeline 在左侧 */}
+					{!isCollapsed && toolGroupCount > 1 && (
+						<div className="agent-run-timeline">
+							{timelineSteps.map((step, index) => (
+								<div
+									key={index}
+									className={`timeline-step ${step.type} ${step.status}`}
+								>
+									<div className="timeline-dot">
+										{step.status === "done" && step.type === "tool" && "✓"}
+										{step.status === "running" && "●"}
+										{step.status === "error" && "✗"}
+										{step.type === "assistant" && ""}
+									</div>
+									{!step.isLast && <div className="timeline-line" />}
+								</div>
+							))}
+						</div>
+					)}
+					<div className="agent-run-items">
+						{props.run.items.map((item, itemIndex) => {
+							if (item.kind === "tool-group") {
+								// 计算当前工具组在所有工具组中的索引
+								const toolGroupIndex = toolGroups.findIndex((tg) => tg.id === item.id);
+								return (
+									<ToolGroup
+										key={item.id}
+										group={item}
+										index={toolGroupIndex}
+										total={toolGroupCount}
+									/>
+								);
+							}
+							const fileSummary = props.fileSummariesByMessage?.[item.message.id];
 							return (
-								<ToolGroup
-									key={item.id}
-									group={item}
-									index={toolGroupIndex}
-									total={toolGroupCount}
-								/>
+								<div key={item.message.id} className="agent-run-message-stack">
+									<ChatBubble
+										message={item.message}
+										onPreviewImage={props.onPreviewImage}
+										onOpenExternal={props.onOpenExternal}
+										onResendUserMessage={props.onResendUserMessage}
+										showThinking={props.showThinking}
+										compact
+									/>
+									{item.message.role === "assistant" && fileSummary && fileSummary.length > 0 && (
+										<SessionFileSummary files={fileSummary} />
+									)}
+								</div>
 							);
-						}
-						const fileSummary = props.fileSummariesByMessage?.[item.message.id];
-						return (
-							<div key={item.message.id} className="agent-run-message-stack">
-								<ChatBubble
-									message={item.message}
-									onPreviewImage={props.onPreviewImage}
-									onOpenExternal={props.onOpenExternal}
-									onResendUserMessage={props.onResendUserMessage}
-									showThinking={props.showThinking}
-									compact
-								/>
-								{item.message.role === "assistant" && fileSummary && fileSummary.length > 0 && (
-									<SessionFileSummary files={fileSummary} />
-								)}
-							</div>
-						);
-					})}
+						})}
+					</div>
 				</div>
 			</div>
 		</article>
