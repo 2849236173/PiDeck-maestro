@@ -2533,6 +2533,23 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-border-subtle));
 	background: color-mix(in srgb, var(--color-warning) 8%, var(--color-bg-panel));
 }
+/* 流式高亮 */
+.tool-group.streaming {
+	border-left: 3px solid var(--color-success);
+	border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border-subtle));
+	background: color-mix(in srgb, var(--color-success) 5%, var(--color-bg-panel));
+	animation: pulse-tool-group 2s ease-in-out infinite;
+}
+@keyframes pulse-tool-group {
+	0%, 100% {
+		border-left-color: var(--color-success);
+		opacity: 1;
+	}
+	50% {
+		border-left-color: color-mix(in srgb, var(--color-success) 60%, transparent);
+		opacity: 0.96;
+	}
+}
 .tool-group.error {
 	border-color: color-mix(in srgb, var(--color-danger) 26%, var(--color-border-subtle));
 	background: var(--color-danger-soft);
@@ -2547,6 +2564,46 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	max-width: 100%;
 	margin: 0;
 	border-radius: var(--radius-lg);
+}
+
+/* Agent Run 摘要按钮 */
+.agent-run-summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 14px;
+	margin-bottom: 10px;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-lg);
+	background: var(--color-bg-muted);
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-body);
+	text-align: left;
+	transition: all 0.15s ease;
+}
+.agent-run-summary:hover {
+	background: var(--color-bg-hover);
+	border-color: var(--color-border-interactive);
+	color: var(--color-text-primary);
+}
+.agent-run-summary .summary-icon {
+	color: var(--color-accent);
+	font-size: 14px;
+	transition: transform 0.15s ease;
+}
+.agent-run-summary:hover .summary-icon {
+	transform: translateX(2px);
+}
+.agent-run-summary .summary-text {
+	flex: 1;
+	font-weight: 500;
+}
+.agent-run-summary em {
+	color: var(--color-info);
+	font-family: var(--font-family-business);
+	font-style: normal;
+	font-size: var(--font-size-caption);
 }
 
 /* ResponseBubble 内各区块之间保持间距 */
@@ -2573,6 +2630,27 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	background: var(--color-accent);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
 	flex: 0 0 auto;
+}
+/* 进度指示器 */
+.tool-progress {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 7px;
+	background: color-mix(in srgb, var(--color-info) 10%, transparent);
+	color: var(--color-info);
+	border-radius: var(--radius-xs);
+	font-size: var(--font-size-micro);
+	font-weight: 600;
+	line-height: 1.2;
+	font-variant-numeric: tabular-nums;
+}
+.tool-group.streaming .tool-progress {
+	background: color-mix(in srgb, var(--color-success) 14%, transparent);
+	color: var(--color-success);
+}
+.tool-group.streaming .tool-status-dot {
+	background: var(--color-success);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 16%, transparent);
 }
 .tool-group.running .tool-status-dot {
 	background: var(--color-warning);

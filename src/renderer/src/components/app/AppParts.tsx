@@ -815,7 +815,11 @@ export function ThinkingBubble(props: { thinking?: string; showThinking?: boolea
 }
 
 
-export const ToolGroup = memo(function ToolGroup(props: { group: ToolGroupItem }) {
+export const ToolGroup = memo(function ToolGroup(props: {
+	group: ToolGroupItem;
+	index?: number;
+	total?: number;
+}) {
 	const [expanded, setExpanded] = useState(false);
 	// 工具消息按 toolCallId 原地更新;最后一条仍为 running 时,表示当前工具组还没收尾。
 	const running =
@@ -832,9 +836,14 @@ export const ToolGroup = memo(function ToolGroup(props: { group: ToolGroupItem }
 	);
 	const visibleChips = props.group.messages.slice(0, 6);
 	const hiddenCount = props.group.messages.length - visibleChips.length;
+
+	// 计算进度
+	const showProgress = props.index !== undefined && props.total !== undefined && props.total > 1;
+	const progressText = showProgress ? `${(props.index ?? 0) + 1}/${props.total ?? 0}` : '';
+
 	return (
 		<article
-			className={`tool-group ${running ? "running" : failed ? "error" : "done"}`}
+			className={`tool-group ${running ? "running streaming" : failed ? "error" : "done"}`}
 			data-message-id={props.group.id}
 		>
 			<button
@@ -842,6 +851,9 @@ export const ToolGroup = memo(function ToolGroup(props: { group: ToolGroupItem }
 				onClick={() => setExpanded((value) => !value)}
 			>
 				<span className="tool-status-dot" />
+				{showProgress && (
+					<span className="tool-progress">{progressText}</span>
+				)}
 				<span className="tool-group-title">
 					{running ? t("tool.running") : failed ? t("tool.error") : t("tool.done")}
 				</span>
@@ -928,6 +940,43 @@ export const AgentRun = memo(function AgentRun(props: {
 	onResendUserMessage?: (message: ChatMessage) => void;
 	fileSummariesByMessage?: Record<string, SessionModifiedFile[]>;
 }) {
+	// 计算工具组的总数和索引
+	const toolGroups = props.run.items.filter((item) => item.kind === "tool-group");
+	const toolGroupCount = toolGroups.length;
+
+	// 自动折叠逻辑
+	const isComplete = props.run.endedAt > 0;
+	const hasMultipleTools = toolGroupCount > 1;
+	const [autoCollapsed, setAutoCollapsed] = useState(false);
+
+	useEffect(() => {
+		if (isComplete && hasMultipleTools && !autoCollapsed) {
+			// 完成后 0.8 秒自动折叠
+			const timer = setTimeout(() => {
+				setAutoCollapsed(true);
+			}, 800);
+			return () => clearTimeout(timer);
+		}
+	}, [isComplete, hasMultipleTools, autoCollapsed]);
+
+	// 手动展开/折叠
+	const [manuallyExpanded, setManuallyExpanded] = useState(false);
+	const isCollapsed = autoCollapsed && !manuallyExpanded;
+
+	// 统计信息
+	const totalToolCalls = toolGroups.reduce(
+		(sum, tg) => sum + tg.messages.length,
+		0
+	);
+	const failedToolCalls = toolGroups.reduce(
+		(sum, tg) =>
+			sum +
+			tg.messages.filter(
+				(m) => m.meta?.status === "error" || m.meta?.isError === true
+			).length,
+		0
+	);
+
 	return (
 		<article className="agent-run" data-message-id={props.run.id}>
 			<div className="msg-avatar">P</div>
@@ -936,10 +985,33 @@ export const AgentRun = memo(function AgentRun(props: {
 					<span>pi</span>
 					<time>{formatTime(props.run.endedAt)}</time>
 				</div>
-				<div className="agent-run-stack">
-					{props.run.items.map((item) => {
+				{isCollapsed && toolGroupCount > 0 && (
+					<button
+						className="agent-run-summary"
+						onClick={() => setManuallyExpanded(true)}
+					>
+						<span className="summary-icon">▸</span>
+						<span className="summary-text">
+							执行了 {totalToolCalls} 个操作
+							{failedToolCalls > 0 && ` (${failedToolCalls} 个失败)`}
+							{failedToolCalls === 0 && " ✓"}
+						</span>
+						<em>点击展开</em>
+					</button>
+				)}
+				<div className="agent-run-stack" style={{ display: isCollapsed ? 'none' : 'block' }}>
+					{props.run.items.map((item, itemIndex) => {
 						if (item.kind === "tool-group") {
-							return <ToolGroup key={item.id} group={item} />;
+							// 计算当前工具组在所有工具组中的索引
+							const toolGroupIndex = toolGroups.findIndex((tg) => tg.id === item.id);
+							return (
+								<ToolGroup
+									key={item.id}
+									group={item}
+									index={toolGroupIndex}
+									total={toolGroupCount}
+								/>
+							);
 						}
 						const fileSummary = props.fileSummariesByMessage?.[item.message.id];
 						return (
