@@ -841,6 +841,12 @@ export const ToolGroup = memo(function ToolGroup(props: {
 	const showProgress = props.index !== undefined && props.total !== undefined && props.total > 1;
 	const progressText = showProgress ? `${(props.index ?? 0) + 1}/${props.total ?? 0}` : '';
 
+	// 计算时长
+	const firstTimestamp = props.group.messages[0]?.timestamp ?? 0;
+	const lastTimestamp = props.group.messages[props.group.messages.length - 1]?.timestamp ?? 0;
+	const duration = lastTimestamp > firstTimestamp ? lastTimestamp - firstTimestamp : 0;
+	const showDuration = !running && duration > 100; // 只显示已完成且超过 100ms 的
+
 	return (
 		<article
 			className={`tool-group ${running ? "running streaming" : failed ? "error" : "done"}`}
@@ -861,6 +867,7 @@ export const ToolGroup = memo(function ToolGroup(props: {
 					{props.group.messages.length}
 					{t("tool.countSuffix")}
 					{errorCount > 0 ? ` · ${errorCount}${t("tool.failedSuffix")}` : ""}
+					{showDuration && ` · ${formatDuration(duration)}`}
 				</strong>
 				<em>{expanded ? t("common.collapse") : t("common.details")}</em>
 			</button>
@@ -984,6 +991,11 @@ export const AgentRun = memo(function AgentRun(props: {
 				<div className="msg-name">
 					<span>pi</span>
 					<time>{formatTime(props.run.endedAt)}</time>
+					{isComplete && props.run.startedAt > 0 && (
+						<span className="agent-run-duration">
+							⏱ {formatDuration(props.run.endedAt - props.run.startedAt)}
+						</span>
+					)}
 				</div>
 				{isCollapsed && toolGroupCount > 0 && (
 					<button
