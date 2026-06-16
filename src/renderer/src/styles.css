@@ -5965,7 +5965,9 @@ body.is-composer-resizing .composer-resize-handle::after {
 	opacity: 0.85;
 }
 .config-btn.danger-fill:disabled {
-	opacity: 0.5;
+	background: var(--color-bg-hover);
+	color: var(--color-text-tertiary);
+	border-color: var(--color-border-subtle);
 	cursor: not-allowed;
 }
 
