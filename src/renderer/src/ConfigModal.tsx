@@ -227,6 +227,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const [testModelIdByProvider, setTestModelIdByProvider] = useState<
 		Record<string, string>
 	>({});
+	// 删除确认对话框
+	const [deleteConfirm, setDeleteConfirm] = useState<{
+		type: "provider" | "model" | "auth" | "batch";
+		title: string;
+		message: string;
+		onConfirm: () => void;
+	} | null>(null);
 
 	const loadConfig = useCallback(
 		async (target: ConfigTab) => {
@@ -365,10 +372,18 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleDeleteProvider = (name: string) => {
-		const providers = { ...modelsData.providers };
-		delete providers[name];
-		setModelsData({ ...modelsData, providers });
-		if (expandedProvider === name) setExpandedProvider(null);
+		setDeleteConfirm({
+			type: "provider",
+			title: t("common.deleteConfirm"),
+			message: t("common.deleteConfirmMsg", { name }),
+			onConfirm: () => {
+				const providers = { ...modelsData.providers };
+				delete providers[name];
+				setModelsData({ ...modelsData, providers });
+				if (expandedProvider === name) setExpandedProvider(null);
+				setDeleteConfirm(null);
+			},
+		});
 	};
 
 	const handleDuplicateProvider = (name: string) => {
@@ -508,12 +523,22 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const handleDeleteModel = (providerName: string, index: number) => {
 		const provider = modelsData.providers[providerName];
 		if (!provider) return;
-		const models = provider.models.filter((_, i) => i !== index);
-		setModelsData({
-			...modelsData,
-			providers: {
-				...modelsData.providers,
-				[providerName]: { ...provider, models },
+		const model = provider.models[index];
+		if (!model) return;
+		setDeleteConfirm({
+			type: "model",
+			title: t("common.deleteConfirm"),
+			message: t("common.deleteConfirmMsg", { name: `${providerName}/${model.id}` }),
+			onConfirm: () => {
+				const models = provider.models.filter((_, i) => i !== index);
+				setModelsData({
+					...modelsData,
+					providers: {
+						...modelsData.providers,
+						[providerName]: { ...provider, models },
+					},
+				});
+				setDeleteConfirm(null);
 			},
 		});
 	};
@@ -544,10 +569,18 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleDeleteAuth = (provider: string) => {
-		const updated = { ...authData };
-		delete updated[provider];
-		setAuthData(updated);
-		if (expandedAuth === provider) setExpandedAuth(null);
+		setDeleteConfirm({
+			type: "auth",
+			title: t("common.deleteConfirm"),
+			message: t("common.deleteConfirmMsg", { name: provider }),
+			onConfirm: () => {
+				const updated = { ...authData };
+				delete updated[provider];
+				setAuthData(updated);
+				if (expandedAuth === provider) setExpandedAuth(null);
+				setDeleteConfirm(null);
+			},
+		});
 	};
 
 	const handleSaveAuth = async () => {
@@ -967,6 +1000,23 @@ function ConfigModalContent(props: ConfigModalProps) {
 				)}
 
 				{toast && <div className="config-toast">{toast}</div>}
+
+				{deleteConfirm && (
+					<div className="config-modal-overlay" onClick={() => setDeleteConfirm(null)}>
+						<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
+							<strong>{deleteConfirm.title}</strong>
+							<p>{deleteConfirm.message}</p>
+							<div className="config-modal-actions">
+								<button className="config-btn danger" onClick={deleteConfirm.onConfirm}>
+									{t("common.delete")}
+								</button>
+								<button className="config-btn" onClick={() => setDeleteConfirm(null)}>
+									{t("common.cancel")}
+								</button>
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 	);
