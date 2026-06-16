@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import type { ModelItem, ModelsFile } from "./configTypes";
 import { ApiTypeInput, ConfigSelect, SecretInput } from "./ConfigShared";
@@ -327,7 +327,7 @@ export function ModelsTab(props: {
 										}}
 										title={t("config.duplicateProvider")}
 									>
-										⎘
+										<Copy size={14} />
 									</button>
 									<button
 										className="config-icon-btn danger"
