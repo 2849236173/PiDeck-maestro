@@ -275,6 +275,7 @@ const zhCN = {
   "config.custom": "自定义",
   "config.deleteModel": "删除模型",
   "config.deleteProvider": "删除 provider",
+  "config.duplicateProvider": "复制 provider",
   "config.deleteSkillConfirmTitle": "删除 Skill",
   "config.deleteSkillConfirmBody":
     "确认删除「{name}」吗？此操作会删除本地 Skill 文件，且不可撤销。",
@@ -944,6 +945,7 @@ const enUS: Record<TranslationKey, string> = {
   "config.custom": "Custom",
   "config.deleteModel": "Delete model",
   "config.deleteProvider": "Delete provider",
+  "config.duplicateProvider": "Duplicate provider",
   "config.deleteSkillConfirmTitle": "Delete Skill",
   "config.deleteSkillConfirmBody":
     'Delete "{name}"? This removes the local skill files and cannot be undone.',

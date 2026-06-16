@@ -138,6 +138,7 @@ export function ModelsTab(props: {
 	onConfirmRename: (oldName: string) => void;
 	onCancelRename: () => void;
 	onDeleteProvider: (name: string) => void;
+	onDuplicateProvider: (name: string) => void;
 	onAddModel: (providerName: string) => void;
 	onUpdateModel: (
 		providerName: string,
@@ -318,6 +319,16 @@ export function ModelsTab(props: {
 											✎
 										</button>
 									)}
+									<button
+										className="config-icon-btn"
+										onClick={(e) => {
+											e.stopPropagation();
+											props.onDuplicateProvider(name);
+										}}
+										title={t("config.duplicateProvider")}
+									>
+										⎘
+									</button>
 									<button
 										className="config-icon-btn danger"
 										onClick={(e) => {

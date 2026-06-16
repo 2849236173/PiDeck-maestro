@@ -371,6 +371,33 @@ function ConfigModalContent(props: ConfigModalProps) {
 		if (expandedProvider === name) setExpandedProvider(null);
 	};
 
+	const handleDuplicateProvider = (name: string) => {
+		const sourceProvider = modelsData.providers[name];
+		if (!sourceProvider) return;
+		
+		// 生成新名称：原名称 + " copy" 或 " copy 2" 依此类推
+		let newName = `${name} copy`;
+		let counter = 2;
+		while (modelsData.providers[newName]) {
+			newName = `${name} copy ${counter}`;
+			counter++;
+		}
+		
+		// 深拷贝 provider 配置，包括 models 数组
+		const duplicatedProvider = JSON.parse(JSON.stringify(sourceProvider));
+		
+		setModelsData({
+			...modelsData,
+			providers: {
+				...modelsData.providers,
+				[newName]: duplicatedProvider,
+			},
+		});
+		
+		// 展开新复制的 provider
+		setExpandedProvider(newName);
+	};
+
 	// 从 provider 的 baseUrl + apiKey 拉取可用模型列表
 	const handleFetchModels = async (providerName: string) => {
 		const provider = modelsData.providers[providerName];
@@ -797,6 +824,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onConfirmRename={handleConfirmRename}
 							onCancelRename={handleCancelRename}
 							onDeleteProvider={handleDeleteProvider}
+							onDuplicateProvider={handleDuplicateProvider}
 							onAddModel={handleAddModel}
 							onUpdateModel={handleUpdateModel}
 							onDeleteModel={handleDeleteModel}
