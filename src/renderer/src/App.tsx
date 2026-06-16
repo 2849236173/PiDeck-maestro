@@ -3195,49 +3195,41 @@ export function App() {
       <main ref={chatPaneRef} className="chat-pane">
         <header ref={chatHeaderRef} className="chat-header">
           <div className="chat-title-block">
-            <strong
-              title={activeAgent?.title ?? activeProject?.name ?? "PiDeck"}
-            >
-              {activeAgent?.title ??
-                (isChatProject(activeProject)
-                  ? t("app.chatProject")
-                  : activeProject?.name) ??
-                "PiDeck"}
-            </strong>
-            <div className="chat-subtitle-row">
-              <span
-                className="chat-path"
-                title={
-                  activeAgent
-                    ? `${activeAgent.status} · ${activeProject?.path ?? activeAgent.cwd}`
-                    : t("app.selectProject")
-                }
+            <div className="chat-title-row">
+              <strong
+                title={activeAgent?.title ?? activeProject?.name ?? "PiDeck"}
               >
-                {activeAgent ? (
-                  <>
-                    <span className={`agent-status-badge status-${activeAgent.status}`}>
-                      {activeAgent.status === 'running' && '●'}
-                      {activeAgent.status === 'idle' && '○'}
-                      {activeAgent.status === 'starting' && '◐'}
-                      {' '}
-                      {t(`app.status${activeAgent.status.charAt(0).toUpperCase() + activeAgent.status.slice(1)}` as any) || activeAgent.status}
-                    </span>
-                    {' · '}
-                    {displayPath(activeProject?.path ?? activeAgent.cwd)}
-                  </>
-                ) : (
-                  t("app.selectProject")
-                )}
-              </span>
+                {activeAgent?.title ??
+                  (isChatProject(activeProject)
+                    ? t("app.chatProject")
+                    : activeProject?.name) ??
+                  "PiDeck"}
+              </strong>
+              {activeAgent && (
+                <span className="chat-path" title={activeProject?.path ?? activeAgent.cwd}>
+                  {t("app.path")}: {displayPath(activeProject?.path ?? activeAgent.cwd)}
+                </span>
+              )}
             </div>
-            <SessionStatus
-              state={activeRuntimeState}
-              duration={
-                activeAgentId
-                  ? sessionDurationByAgent[activeAgentId]
-                  : undefined
-              }
-            />
+            <div className="chat-subtitle-row">
+              {activeAgent?.status && (
+                <span className={`agent-status-badge status-${activeAgent.status}`}>
+                  {activeAgent.status === 'running' && '●'}
+                  {activeAgent.status === 'idle' && '○'}
+                  {activeAgent.status === 'starting' && '◐'}
+                  {' '}
+                  {t(`app.status${activeAgent.status.charAt(0).toUpperCase() + activeAgent.status.slice(1)}` as any) || activeAgent.status}
+                </span>
+              )}
+              <SessionStatus
+                state={activeRuntimeState}
+                duration={
+                  activeAgentId
+                    ? sessionDurationByAgent[activeAgentId]
+                    : undefined
+                }
+              />
+            </div>
           </div>
           <div
             className={`chat-header-actions${activeAgent?.status === "starting" ? " loading" : ""}`}

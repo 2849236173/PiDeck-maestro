@@ -252,17 +252,17 @@ export function SessionStatus(props: {
 			<span className="model-chip">
 				{props.state.provider ? `${props.state.provider}/` : ""}{props.state.modelName ?? props.state.modelId ?? "model"}
 			</span>
-			<span>{t("app.think")}: {props.state.thinkingLevel ?? "-"}</span>
+			<span className="think-chip">{t("app.think")}: {props.state.thinkingLevel ?? "-"}</span>
 			{props.state.contextPercent != null && (
-				<span>
-					ctx:{" "}
+				<span className="ctx-chip">
+					{t("app.ctx")}:{" "}
 					{props.state.contextPercent?.toFixed?.(1) ??
 						props.state.contextPercent}
 					% / {formatCompact(props.state.contextWindow)}
 				</span>
 			)}
 			{props.state.cacheTotal != null && (
-				<span>cache: {formatCompact(props.state.cacheTotal)}</span>
+				<span className="cache-chip">{t("app.cache")}: {formatCompact(props.state.cacheTotal)}</span>
 			)}
 		</div>
 	);
@@ -346,6 +346,28 @@ export function ModelPicker(props: {
 					),
 			)
 		: props.models;
+	
+	// 按供应商分组
+	const groupedModels = filteredModels.reduce<Record<string, AvailableModel[]>>((groups, model) => {
+		const provider = model.provider || 'other';
+		if (!groups[provider]) {
+			groups[provider] = [];
+		}
+		groups[provider].push(model);
+		return groups;
+	}, {});
+	
+	// 供应商排序：常见的放前面
+	const providerOrder = ['anthropic', 'openai', 'google', 'deepseek', 'other'];
+	const sortedProviders = Object.keys(groupedModels).sort((a, b) => {
+		const aIndex = providerOrder.indexOf(a);
+		const bIndex = providerOrder.indexOf(b);
+		if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+		if (aIndex !== -1) return -1;
+		if (bIndex !== -1) return 1;
+		return a.localeCompare(b);
+	});
+	
 	return (
 		<div className="picker-backdrop" onClick={props.onClose}>
 			<div
@@ -371,24 +393,29 @@ export function ModelPicker(props: {
 					/>
 				</div>
 				<div className="picker-palette-list">
-					{filteredModels.length > 0 ? (
-						filteredModels.map((model) => {
-							const modelKey = `${model.provider}/${model.id}`;
-							const selected = modelKey === currentModelKey;
-							return (
-								<button
-									key={modelKey}
-									className={`picker-palette-item${selected ? " selected" : ""}`}
-									onClick={() => props.onPick(model)}
-								>
-									<span className="picker-palette-label">{model.name ?? model.id}</span>
-									<span className="picker-palette-desc">
-										{model.provider}/{model.id}
-									</span>
-									{selected && <span className="picker-palette-check">✓</span>}
-								</button>
-							);
-						})
+					{sortedProviders.length > 0 ? (
+						sortedProviders.map((provider) => (
+							<div key={provider} className="model-group">
+								<div className="model-group-header">{provider}</div>
+								{groupedModels[provider].map((model) => {
+									const modelKey = `${model.provider}/${model.id}`;
+									const selected = modelKey === currentModelKey;
+									return (
+										<button
+											key={modelKey}
+											className={`picker-palette-item${selected ? " selected" : ""}`}
+											onClick={() => props.onPick(model)}
+										>
+											<span className="picker-palette-label">{model.name ?? model.id}</span>
+											<span className="picker-palette-desc">
+												{model.provider}/{model.id}
+											</span>
+											{selected && <span className="picker-palette-check">✓</span>}
+										</button>
+									);
+								})}
+							</div>
+						))
 					) : (
 						<div className="picker-palette-empty">{t("app.modelPickerEmpty")}</div>
 					)}
