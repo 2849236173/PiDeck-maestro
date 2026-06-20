@@ -19,6 +19,7 @@ import type {
 	ConfigFileDiagnostic,
 	CreateAgentInput,
 	CreatePiSkillInput,
+	ExternalEditor,
 	FeedbackEnvironment,
 	FeishuBotConfig,
 	FeishuBridgeStatus,
@@ -45,6 +46,15 @@ import type {
 } from "../shared/types";
 
 const api = {
+	editors: {
+		list: () => ipcRenderer.invoke(ipcChannels.editorsList) as Promise<ExternalEditor[]>,
+		openProject: (editor: ExternalEditor, projectPath: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.editorsOpenProject,
+				editor,
+				projectPath,
+			) as Promise<void>,
+	},
 	projects: {
 		list: () =>
 			ipcRenderer.invoke(ipcChannels.projectsList) as Promise<Project[]>,

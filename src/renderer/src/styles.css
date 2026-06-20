@@ -1190,6 +1190,22 @@ body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-li
 	border-radius: var(--radius-md);
 	background: transparent;
 }
+
+.project-editor-select {
+	max-width: 92px;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-sm);
+	background: var(--color-bg-panel);
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-caption);
+	padding: 2px 4px;
+	cursor: pointer;
+}
+
+.project-editor-select:focus-visible {
+	outline: 2px solid var(--focus-ring);
+	outline-offset: 1px;
+}
 .project-action,
 .project-info {
 	width: 21px;

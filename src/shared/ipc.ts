@@ -4,6 +4,8 @@ export const ipcChannels = {
 	projectsRemove: "projects:remove",
 	projectsReorder: "projects:reorder",
 	projectsChanged: "projects:changed",
+	editorsList: "editors:list",
+	editorsOpenProject: "editors:open-project",
 	filesList: "files:list",
 	filesOpen: "files:open",
 	filesShowInFolder: "files:show-in-folder",

@@ -167,6 +167,10 @@ export function createPreviewApi(): PiDesktopApi {
 		return tab;
 	};
 	return {
+		editors: {
+			list: async () => [],
+			openProject: async () => undefined,
+		},
 		projects: {
 			list: async () => projects,
 			add: async () => projects[0],

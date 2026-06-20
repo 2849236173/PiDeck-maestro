@@ -41,6 +41,7 @@ import type {
 	AppUpdateDownloadProgress,
 	AppLogQuery,
 	AppUpdateDownloadResult,
+	ExternalEditor,
 	AppUpdateInfo,
 	CreateAgentInput,
 	FeishuBotConfig,
@@ -68,6 +69,7 @@ import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { AppLogger } from "./logging/AppLogger";
+import { detectExternalEditors, openProjectInEditor } from "./editors/EditorDetector";
 import { FeishuBridge } from "./feishu/FeishuBridge";
 import {
 	listBots,
@@ -813,6 +815,19 @@ function registerFeishuIpc() {
 
 function registerIpc() {
 	ipcMain.handle(ipcChannels.projectsList, () => projectStore.list());
+	ipcMain.handle(ipcChannels.editorsList, async () => detectExternalEditors());
+	ipcMain.handle(
+		ipcChannels.editorsOpenProject,
+		async (_event, editor: ExternalEditor, projectPath: string) => {
+			// 只接收已检测到的编辑器配置；打开项目不经过 shell 拼接命令,降低路径含空格时失败的概率。
+			await openProjectInEditor(editor, projectPath);
+			void appLogger.info("editor", "Project opened in external editor", {
+				editorId: editor.id,
+				editorName: editor.name,
+				projectPath,
+			});
+		},
+	);
 	ipcMain.handle(ipcChannels.projectsAdd, async () => {
 		const project = await projectStore.chooseAndAdd();
 		void appLogger.info("project", "Project added", { projectId: project?.id, path: project?.path });

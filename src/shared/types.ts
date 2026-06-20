@@ -8,6 +8,14 @@ export type Project = {
 	kind?: "chat";
 };
 
+export type ExternalEditor = {
+	id: string;
+	name: string;
+	command: string;
+	args?: string[];
+	detectedFrom: "path" | "common-path";
+};
+
 export type AgentStatus = "starting" | "idle" | "running" | "error" | "closed";
 
 export type AgentTab = {

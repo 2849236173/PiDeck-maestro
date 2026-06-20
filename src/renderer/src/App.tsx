@@ -98,6 +98,7 @@ import type {
   AppUpdateDownloadProgress,
   AppUpdateInfo,
   AvailableModel,
+  ExternalEditor,
   FeedbackEnvironment,
   ChatMessage,
   CodexImportReport,
@@ -265,6 +266,7 @@ export function App() {
     Record<string, AgentRuntimeState>
   >({});
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [externalEditors, setExternalEditors] = useState<ExternalEditor[]>([]);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
@@ -782,6 +784,7 @@ export function App() {
   useEffect(() => {
     window.setTimeout(() => void refreshProjects(), 0);
     window.setTimeout(() => void api.agents.list().then(setAgents), 0);
+    void api.editors.list().then(setExternalEditors).catch(() => setExternalEditors([]));
     void api.app
       .info()
       .then(setAppInfo)
@@ -3370,6 +3373,37 @@ ${goalTextRef.current}
                     >
                       <Info size={14} />
                     </span>
+                    {!projectIsChat && externalEditors.length > 0 && (
+                      <select
+                        className="project-editor-select"
+                        title={t("app.openProjectInEditor")}
+                        value=""
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          const editor = externalEditors.find(
+                            (item) => item.id === event.target.value,
+                          );
+                          event.currentTarget.value = "";
+                          if (!editor) return;
+                          void api.editors.openProject(editor, project.path).catch((error) => {
+                            showToast(
+                              t("app.openEditorFailed", {
+                                error: error instanceof Error ? error.message : String(error),
+                              }),
+                              3000,
+                            );
+                          });
+                        }}
+                      >
+                        <option value="">{t("app.openWithEditor")}</option>
+                        {externalEditors.map((editor) => (
+                          <option key={editor.id} value={editor.id}>
+                            {editor.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     {!projectIsChat && (
                       <span
                         className="project-action project-delete"
