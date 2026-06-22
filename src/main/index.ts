@@ -194,13 +194,13 @@ function selectRecommendedAsset(
 	if (platform === "win32") {
 		// Windows: 优先匹配当前安装形态（便携版 vs 安装版）和架构
 		if (isPortable) {
-			// 便携版 exe 是单文件绿色版，无需安装；优先推荐 .exe，其次 .zip
+			// 便携版 exe 是单文件绿色版，无需安装；优先推荐非 Setup 的便携 exe，其次 .zip
 			return (
 				candidates.find(
-					(asset) => asset.lowerName.endsWith(".exe") && matchesArch(asset.lowerName),
+					(asset) => !asset.lowerName.includes("setup") && asset.lowerName.endsWith(".exe") && matchesArch(asset.lowerName),
 				) ??
 				candidates.find(
-					(asset) => asset.lowerName.endsWith(".exe") && !isWrongArch(asset.lowerName),
+					(asset) => !asset.lowerName.includes("setup") && asset.lowerName.endsWith(".exe") && !isWrongArch(asset.lowerName),
 				) ??
 				candidates.find(
 					(asset) => asset.lowerName.endsWith(".zip") && matchesArch(asset.lowerName),
@@ -210,8 +210,14 @@ function selectRecommendedAsset(
 				)
 			);
 		} else {
-			// 安装版：优先推荐 exe
+			// 安装版：优先推荐带 Setup 的安装 exe，其次普通 exe，最后 zip
 			return (
+				candidates.find(
+					(asset) => asset.lowerName.includes("setup") && asset.lowerName.endsWith(".exe") && matchesArch(asset.lowerName),
+				) ??
+				candidates.find(
+					(asset) => asset.lowerName.includes("setup") && asset.lowerName.endsWith(".exe") && !isWrongArch(asset.lowerName),
+				) ??
 				candidates.find(
 					(asset) => asset.lowerName.endsWith(".exe") && matchesArch(asset.lowerName),
 				) ??
