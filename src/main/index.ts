@@ -1,6 +1,7 @@
 import {
 	app,
 	BrowserWindow,
+	dialog,
 	ipcMain,
 	Menu,
 	nativeImage,
@@ -42,6 +43,8 @@ import type {
 	AppLogQuery,
 	AppUpdateDownloadResult,
 	ExternalEditor,
+	ExternalEditorId,
+	ExternalEditorSetting,
 	AppUpdateInfo,
 	CreateAgentInput,
 	FeishuBotConfig,
@@ -69,7 +72,13 @@ import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { AppLogger } from "./logging/AppLogger";
-import { detectExternalEditors, openProjectInEditor } from "./editors/EditorDetector";
+import {
+	detectExternalEditors,
+	listConfiguredExternalEditors,
+	mergeDetectedExternalEditors,
+	openProjectInEditor,
+	validateExternalEditorCommand,
+} from "./editors/EditorDetector";
 import { FeishuBridge } from "./feishu/FeishuBridge";
 import {
 	listBots,
@@ -815,7 +824,57 @@ function registerFeishuIpc() {
 
 function registerIpc() {
 	ipcMain.handle(ipcChannels.projectsList, () => projectStore.list());
-	ipcMain.handle(ipcChannels.editorsList, async () => detectExternalEditors());
+	ipcMain.handle(ipcChannels.editorsList, async () => listConfiguredExternalEditors(settingsStore.get()));
+	ipcMain.handle(ipcChannels.editorsChooseExecutable, async () => {
+		const options = {
+			properties: ["openFile"],
+			filters: process.platform === "win32"
+				? [
+						{ name: "Applications", extensions: ["exe", "cmd", "bat"] },
+						{ name: "All Files", extensions: ["*"] },
+					]
+				: [{ name: "All Files", extensions: ["*"] }],
+		} satisfies Electron.OpenDialogOptions;
+		const result = mainWindow
+			? await dialog.showOpenDialog(mainWindow, options)
+			: await dialog.showOpenDialog(options);
+		return result.canceled ? null : result.filePaths[0] ?? null;
+	});
+	ipcMain.handle(ipcChannels.editorsRedetect, async () => {
+		const detected = await detectExternalEditors();
+		const settings = await settingsStore.update({
+			externalEditors: mergeDetectedExternalEditors(settingsStore.get().externalEditors, detected),
+		});
+		void appLogger.info("editor", "External editors redetected", { count: detected.length });
+		return settings;
+	});
+	ipcMain.handle(
+		ipcChannels.editorsUpdate,
+		async (_event, editorId: ExternalEditorId, patch: Partial<ExternalEditorSetting>) => {
+			const current = settingsStore.get().externalEditors;
+			const existing = current[editorId];
+			if (!existing) throw new Error(`Unsupported editor: ${editorId}`);
+			const command = typeof patch.command === "string" ? patch.command.trim() : existing.command;
+			if (command) {
+				const validation = await validateExternalEditorCommand(command);
+				if (!validation.valid) throw new Error(`Editor path does not exist: ${command}`);
+			}
+			const settings = await settingsStore.update({
+				externalEditors: {
+					...current,
+					[editorId]: {
+						...existing,
+						...patch,
+						command,
+						detectedFrom: patch.command !== undefined ? "manual" : (patch.detectedFrom ?? existing.detectedFrom),
+						updatedAt: Date.now(),
+					},
+				},
+			});
+			void appLogger.info("editor", "External editor settings updated", { editorId, keys: Object.keys(patch) });
+			return settings;
+		},
+	);
 	ipcMain.handle(
 		ipcChannels.editorsOpenProject,
 		async (_event, editor: ExternalEditor, projectPath: string) => {
@@ -1112,15 +1171,6 @@ function registerIpc() {
 			}
 			if ("useNativeTitleBar" in patch) {
 				settingsStore.notifyTitleBarChange(mainWindow);
-			}
-			if (
-				"customPiPath" in patch ||
-				"piProxyEnabled" in patch ||
-				"piProxyUrl" in patch ||
-				"piProxyBypass" in patch
-			) {
-				// pi 路径或代理变更后，预热池中的旧进程配置已过期，需清空让新 agent 重新 spawn
-				agentManager.clearWarmPool();
 			}
 			if (
 				"webServiceEnabled" in patch ||
@@ -1487,6 +1537,17 @@ function sendTelemetryHeartbeat() {
 	void telemetry.sendHeartbeat().catch(() => undefined);
 }
 
+async function detectExternalEditorsOnFirstLaunch() {
+	const current = settingsStore.get().externalEditors;
+	if (Object.values(current).some((editor) => editor.command)) return;
+	const detected = await detectExternalEditors();
+	if (detected.length === 0) return;
+	await settingsStore.update({
+		externalEditors: mergeDetectedExternalEditors(current, detected),
+	});
+	void appLogger.info("editor", "External editors detected on first launch", { count: detected.length });
+}
+
 app.whenReady().then(async () => {
 	projectStore = new ProjectStore();
 	fileSystemService = new FileSystemService();
@@ -1549,6 +1610,9 @@ app.whenReady().then(async () => {
 	sendTelemetryHeartbeat();
 	createWindow();
 	setupTray();
+	void detectExternalEditorsOnFirstLaunch().catch((error) => {
+		void appLogger.warn("editor", "External editor first launch detection failed", error);
+	});
 
 	// 项目列表可能位于杀软/同步盘较慢的 userData；窗口先显示，随后异步加载，避免 packaged app 打开时白屏等待。
 	void projectStore

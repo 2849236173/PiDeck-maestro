@@ -744,6 +744,11 @@ select:focus-visible {
 	background: var(--brand-wordmark-underline);
 	opacity: 0.56;
 }
+.homepage-icon:hover {
+	background: var(--color-bg-hover);
+	color: var(--color-accent);
+}
+
 .logo-mark {
 	position: relative;
 	width: 34px;
@@ -1564,6 +1569,38 @@ body.is-terminal-resizing {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
+}
+/* Header 面板按钮统一按同一控件模型排版；带下拉箭头的“新会话/文件”和普通“终端”保持相同基线、字号和高度。 */
+.header-action-group > button,
+.header-action-group .session-combo-trigger,
+.header-action-group .file-action-trigger {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	height: var(--control-height-md);
+	min-width: 60px;
+	padding: 0 var(--space-2);
+	font-size: var(--font-size-control);
+	font-weight: 500;
+	line-height: var(--line-height-control);
+}
+.header-action-group .session-combo-label,
+.header-action-group .file-action-trigger > span:first-child {
+	display: inline-flex;
+	align-items: center;
+	line-height: var(--line-height-control);
+}
+.header-action-group .session-combo-chevron,
+.header-action-group .file-action-trigger > svg {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 12px;
+	height: 12px;
+	margin-left: 0;
+	color: var(--color-text-tertiary);
+	flex: 0 0 12px;
 }
 .file-action-menu,
 .session-combo-menu {
@@ -10123,13 +10160,16 @@ a.config-btn {
 
 .logs-filters {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
+	align-items: flex-start;
 	gap: var(--space-2);
+	flex: 1 1 auto;
 	min-width: 0;
 }
 
 .logs-filters input,
-.logs-filters select {
+.logs-level-select .ui-select-control {
+	height: var(--control-height-md);
 	border: 1px solid var(--color-border-subtle);
 	border-radius: var(--radius-sm);
 	background: var(--color-bg-panel);
@@ -10138,16 +10178,139 @@ a.config-btn {
 	font-size: var(--font-size-control);
 }
 
+.logs-level-select {
+	position: relative;
+	flex: 0 0 132px;
+	min-width: 0;
+}
+
+.logs-level-select .ui-field-label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+.logs-search-input {
+	flex: 1 1 320px;
+	min-width: 220px;
+}
+
 .logs-filters input:focus-visible,
-.logs-filters select:focus-visible {
-	outline: 2px solid var(--focus-ring);
-	outline-offset: 1px;
+.logs-level-select .ui-select-control:focus-visible {
+	border-color: var(--color-accent);
+	box-shadow: var(--focus-ring);
+	outline: 0;
+}
+
+.logs-filters input[type="datetime-local"] {
+	flex: 0 0 210px;
+	min-width: 190px;
+}
+
+@media (max-width: 900px) {
+	.logs-toolbar {
+		flex-direction: column;
+	}
+
+	.logs-filters {
+		width: 100%;
+	}
 }
 
 .logs-list {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-2);
+}
+
+.editors-tab {
+	display: grid;
+	gap: var(--space-3);
+}
+
+.editors-list {
+	display: grid;
+	gap: var(--space-2);
+}
+
+.editor-config-row {
+	display: grid;
+	grid-template-columns: minmax(140px, 180px) auto minmax(220px, 1fr) auto;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-panel);
+}
+
+.editor-config-meta {
+	display: grid;
+	gap: var(--space-1);
+	min-width: 0;
+}
+
+.editor-config-meta strong {
+	color: var(--color-text-primary);
+	font-size: var(--font-size-control);
+}
+
+.editor-config-meta small {
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-caption);
+}
+
+.editor-config-enabled,
+.editor-config-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.editor-config-enabled {
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-control);
+	white-space: nowrap;
+}
+
+.editor-config-path-control {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.editor-config-path {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: var(--control-height-md);
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-sm);
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
+	padding: 7px 9px;
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-caption);
+}
+
+.editor-config-path:focus-visible {
+	border-color: var(--color-accent);
+	box-shadow: var(--focus-ring);
+	outline: 0;
+}
+
+@media (max-width: 980px) {
+	.editor-config-row {
+		grid-template-columns: 1fr;
+		align-items: stretch;
+	}
+
+	.editor-config-actions {
+		justify-content: flex-end;
+	}
 }
 
 .log-row {

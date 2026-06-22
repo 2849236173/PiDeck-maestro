@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu } from "electron";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AppSettings } from "../../shared/types";
+import { createDefaultExternalEditorSettings, type AppSettings } from "../../shared/types";
 
 const defaultSettings: AppSettings = {
   useNativeTitleBar: false,
@@ -28,6 +28,7 @@ const defaultSettings: AppSettings = {
   rpcTimeout: 600_000,
   linkOpenMode: "external",
   maxEditorFileSizeMB: 5,
+  externalEditors: createDefaultExternalEditorSettings(),
 };
 
 export class SettingsStore {
@@ -37,7 +38,15 @@ export class SettingsStore {
   async load() {
     try {
       const raw = await readFile(this.filePath, "utf8");
-      this.settings = { ...defaultSettings, ...(JSON.parse(raw) as Partial<AppSettings>) };
+      const parsed = JSON.parse(raw) as Partial<AppSettings>;
+      this.settings = {
+        ...defaultSettings,
+        ...parsed,
+        externalEditors: {
+          ...createDefaultExternalEditorSettings(),
+          ...(parsed.externalEditors ?? {}),
+        },
+      };
     } catch {
       this.settings = { ...defaultSettings };
     }

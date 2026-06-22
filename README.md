@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.0-green)
+![Version](https://img.shields.io/badge/version-0.6.1-green)
 
 `PiDeck` **不是** pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，将项目管理、会话管理、对话界面、配置管理和工具编排整合到一个原生桌面应用中——所有 Agent 能力由 pi 原生提供。
 
@@ -16,13 +16,19 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.6.0**（2026-06-14）
+> **最新版本 v0.6.1**（2026-06-16）
 
-### v0.6.0 更新
-- 🧭 会话流程：新增紧凑活动轨迹，思考、工具调用和回答片段按流程展示，工具详情可展开复制，长回答可换行和选中。
-- 🔁 会话迁移：项目右键支持导入 Claude 会话，并继续支持 Codex 会话导入，导入后进入 PiDeck 历史会话。
-- ⚡ 性能与输入：长历史会话分页和懒渲染减少卡顿，输入框更适合多行内容，命令历史可用方向键复用。
-- 🛠️ 稳定性：Windows 绿色版设置持久化、系统托盘行为和 bash 工具退出码展示更可靠。
+### v0.6.1 更新
+- 🚀 配置管理批量删除与复制：Provider 和 Auth 支持批量删除和一键复制
+- 🚀 删除确认对话框：删除 Provider、Model、Auth 时弹出确认提示
+- 🚀 Auth 供应商选择器：内置 29 个预配置供应商，附带环境变量和获取链接
+- 🚀 Provider 配置指南：API 类型说明、兼容性配置、排错指南
+- 🚀 Auth 配置指南：三步引导完成认证配置
+- 🚀 模型选择器分组折叠：按供应商分组，搜索时自动展开
+- 🚀 API 类型下拉优化：新增标签和详细描述
+- 🚀 User-Agent 预设扩展：新增 claude-cli、claude-code 等预设
+- ✨ 界面优化：会话区域 header 紧凑化、模型选择器树形展示、新会话排序、滚动条显示
+- 🐛 多项 Bug 修复：Agent 列表换行、状态切换丢失、连接测试误报等
 
 [查看完整更新日志 →](CHANGELOG.zh-CN.md)
 

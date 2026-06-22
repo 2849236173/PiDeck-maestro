@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.0-green)
+![Version](https://img.shields.io/badge/version-0.6.1-green)
 
 `PiDeck` is **not** a fork of pi. It is a lightweight Electron shell that orchestrates multiple `pi --mode rpc` processes, providing a native desktop UI for projects, sessions, conversations, configuration, and tool orchestration — all powered by pi's native agent capabilities.
 
@@ -16,13 +16,18 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.6.0** (2026-06-14)
+> **Latest: v0.6.1** (2026-06-16)
 
-### v0.6.0 Updates
-- 🧭 Session flow: a compact activity view now shows thinking, tool calls, and answer updates in order, with expandable/copyable tool details and wrapped selectable answers.
-- 🔁 Session migration: project context menus can import Claude sessions alongside Codex sessions, then browse them as PiDeck history sessions.
-- ⚡ Performance and input: long historical sessions use pagination and lazy rendering, the composer has more room for multi-line prompts, and command history is available from the keyboard.
-- 🛠️ Reliability: Windows portable settings, tray behavior, and bash tool exit-code display are more reliable.
+### v0.6.1 Updates
+- 🚀 Config management: batch delete and one-click duplicate for providers/auth, with delete confirmation dialogs
+- 🚀 Auth provider picker: 29 pre-configured providers with env vars and setup links
+- 🚀 Provider config guide: API type reference, compatibility guide, and troubleshooting
+- 🚀 Auth config guide: step-by-step guidance for setting up credentials
+- 🚀 Collapsible model groups: model picker supports collapsing provider groups, auto-expand on search
+- 🚀 API type dropdown with descriptions: helps users choose the right API type
+- 🚀 User-Agent presets: added claude-cli, claude-code, Kilo-Code and more
+- ✨ UI polish: compact chat header, tree-style model picker, new session sorting, visible scrollbars
+- 🐛 Bug fixes: agent status text wrapping, status loss on tab switch, false 404 in connection test, and more
 
 [View Full Changelog →](CHANGELOG.md)
 

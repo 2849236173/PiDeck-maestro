@@ -1,4 +1,5 @@
 import type { PiDesktopApi } from "../../preload";
+import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
 	AgentTab,
 	AppSettings,
@@ -142,6 +143,7 @@ let previewSettings: AppSettings = {
 	rpcTimeout: 600_000,
 	linkOpenMode: "external",
 	maxEditorFileSizeMB: 5,
+	externalEditors: createDefaultExternalEditorSettings(),
 };
 
 export function createPreviewApi(): PiDesktopApi {
@@ -169,6 +171,22 @@ export function createPreviewApi(): PiDesktopApi {
 	return {
 		editors: {
 			list: async () => [],
+			redetect: async () => ({ ...previewSettings }),
+			update: async (_editorId, patch) => {
+				previewSettings = {
+					...previewSettings,
+					externalEditors: {
+						...previewSettings.externalEditors,
+						[_editorId]: {
+							...previewSettings.externalEditors[_editorId],
+							...patch,
+							updatedAt: Date.now(),
+						},
+					},
+				};
+				return { ...previewSettings };
+			},
+			chooseExecutable: async () => null,
 			openProject: async () => undefined,
 		},
 		projects: {

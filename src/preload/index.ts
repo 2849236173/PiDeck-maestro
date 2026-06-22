@@ -20,6 +20,8 @@ import type {
 	CreateAgentInput,
 	CreatePiSkillInput,
 	ExternalEditor,
+	ExternalEditorId,
+	ExternalEditorSetting,
 	FeedbackEnvironment,
 	FeishuBotConfig,
 	FeishuBridgeStatus,
@@ -48,6 +50,16 @@ import type {
 const api = {
 	editors: {
 		list: () => ipcRenderer.invoke(ipcChannels.editorsList) as Promise<ExternalEditor[]>,
+		redetect: () =>
+			ipcRenderer.invoke(ipcChannels.editorsRedetect) as Promise<AppSettings>,
+		update: (editorId: ExternalEditorId, patch: Partial<ExternalEditorSetting>) =>
+			ipcRenderer.invoke(
+				ipcChannels.editorsUpdate,
+				editorId,
+				patch,
+			) as Promise<AppSettings>,
+		chooseExecutable: () =>
+			ipcRenderer.invoke(ipcChannels.editorsChooseExecutable) as Promise<string | null>,
 		openProject: (editor: ExternalEditor, projectPath: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.editorsOpenProject,

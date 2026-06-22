@@ -21,8 +21,7 @@ import type { SettingsStore } from "../settings/SettingsStore";
 export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
 	private readonly messages = new Map<string, ChatMessage[]>();
-	/** 预热池：已 park 的闲置 pi 进程，按 cwd 分组匹配复用 */
-	private readonly warmPool: PiProcess[] = [];
+
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
 	/** 当前正在流式更新的 assistant 消息；tool 事件插入时仍要继续更新同一个回答块。 */
@@ -31,6 +30,8 @@ export class AgentManager {
 	private readonly toolMessageIds = new Map<string, Map<string, string>>();
 	/** 每个 agent 只保留一条自动重试状态消息，避免短暂 5xx/网络错误把会话刷屏。 */
 	private readonly retryStatusMessageIds = new Map<string, string>();
+	/** 同一历史会话正在创建 Agent 时共享同一个 Promise，避免快速重复点击/IPC 竞态创建多个进程。 */
+	private readonly creatingSessionAgents = new Map<string, Promise<AgentTab>>();
 	/** 本地事件监听器（用于 FeishuBridge 等主进程内部订阅） */
 	private readonly localEventListeners = new Set<(agentId: string, event: unknown) => void>();
 
@@ -118,14 +119,43 @@ export class AgentManager {
 	}
 
 	async create(input: CreateAgentInput) {
+		const sessionKey = this.normalizeSessionPathForCompare(input.sessionPath);
+		if (!sessionKey) return this.createUnlocked(input);
+
+		const existingForSession = this.findRuntimeBySessionKey(sessionKey);
+		if (existingForSession) return existingForSession.tab;
+
+		const pendingCreate = this.creatingSessionAgents.get(sessionKey);
+		if (pendingCreate) return pendingCreate;
+
+		// 历史会话激活属于“一个 sessionPath 只能对应一个 Agent”的业务规则；
+		// 先登记 in-flight Promise，再启动真实创建，防止第二次点击绕过 agents map 检查。
+		const createPromise = this.createUnlocked(input).finally(() => {
+			this.creatingSessionAgents.delete(sessionKey);
+		});
+		this.creatingSessionAgents.set(sessionKey, createPromise);
+		return createPromise;
+	}
+
+	private normalizeSessionPathForCompare(sessionPath?: string) {
+		return sessionPath?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+	}
+
+	private findRuntimeBySessionKey(sessionKey: string) {
+		return [...this.agents.values()].find(
+			(runtime) =>
+				this.normalizeSessionPathForCompare(runtime.tab.sessionPath) === sessionKey,
+		);
+	}
+
+	private async createUnlocked(input: CreateAgentInput) {
 		const project = this.getProject(input.projectId);
 		if (!project) throw new Error(`Project not found: ${input.projectId}`);
 
 		const id = randomUUID();
-		const existingForSession = input.sessionPath
-			? [...this.agents.values()].find(
-					(runtime) => runtime.tab.sessionPath === input.sessionPath,
-				)
+		const existingForSessionKey = this.normalizeSessionPathForCompare(input.sessionPath);
+		const existingForSession = existingForSessionKey
+			? this.findRuntimeBySessionKey(existingForSessionKey)
 			: undefined;
 		if (existingForSession) return existingForSession.tab;
 
@@ -142,8 +172,8 @@ export class AgentManager {
 		if (input.sessionPath) await this.repairAssistantUsage(input.sessionPath);
 
 		// 代理环境变量只能在子进程启动前注入；设置变更后通过 restart/new agent 创建新的进程快照。
-		// 优先从预热池中取匹配 cwd 的闲置进程，避免重复 spawn
-		const process = this.acquireFromPool(project.path) ?? new PiProcess(project.path, this.settingsStore.get());
+		// 每个 Agent 独立启动 pi RPC，避免复用进程时 session、事件监听和配置快照串线。
+		const process = new PiProcess(project.path, this.settingsStore.get());
 		const runtime: AgentRuntime = { tab, process };
 		this.agents.set(id, runtime);
 		this.messages.set(id, []);
@@ -602,8 +632,6 @@ export class AgentManager {
 			}
 		}
 
-		// 配置变更后要清空预热池，避免旧配置进程被新 agent 复用
-		this.clearWarmPool();
 		// 停止旧进程并清理状态
 		runtime.process.stop();
 		this.agents.delete(agentId);
@@ -733,31 +761,8 @@ export class AgentManager {
 		const process = runtime.process;
 		this.agents.delete(agentId);
 		this.messages.delete(agentId);
-		// 放回预热池：不杀进程，后续同项目 agent 可复用
-		if (process.isRunning() && !process.isParked()) {
-			process.park();
-			this.warmPool.push(process);
-		} else {
-			process.stop();
-		}
+		process.stop();
 		this.emitState();
-	}
-
-	/** 清空预热池（配置变更时调用，杀掉所有闲置进程） */
-	clearWarmPool() {
-		for (const proc of this.warmPool) {
-			proc.stop();
-		}
-		this.warmPool.length = 0;
-	}
-
-	/** 从预热池中匹配 cwd 的闲置进程 */
-	private acquireFromPool(cwd: string): PiProcess | undefined {
-		const idx = this.warmPool.findIndex((p) => p.matches(cwd));
-		if (idx === -1) return undefined;
-		const [proc] = this.warmPool.splice(idx, 1);
-		proc.unpark();
-		return proc;
 	}
 
 	/** 注册本地事件监听器（供 FeishuBridge 等主进程内部模块使用） */
@@ -771,7 +776,6 @@ export class AgentManager {
 		for (const runtime of this.agents.values()) {
 			runtime.process.stop();
 		}
-		this.clearWarmPool();
 		this.agents.clear();
 		this.messages.clear();
 		this.emitState();

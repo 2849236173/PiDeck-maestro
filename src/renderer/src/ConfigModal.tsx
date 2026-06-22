@@ -6,6 +6,7 @@ import { RawTab } from "./config/RawTab";
 import { SettingsTab } from "./config/SettingsTab";
 import { SkillsTab } from "./config/SkillsTab";
 import { ExtensionsTab } from "./config/ExtensionsTab";
+import { EditorsTab } from "./config/EditorsTab";
 import { ImTab } from "./config/ImTab";
 import { LogsTab } from "./config/LogsTab";
 import { CloseIconButton } from "./components/ui/IconButton";
@@ -167,7 +168,7 @@ export function ConfigModal(props: ConfigModalProps) {
 
 function ConfigModalContent(props: ConfigModalProps) {
 	const { open, onClose, onSaved } = props;
-	const [section, setSection] = useState<"config" | "skills" | "extensions" | "im" | "logs">("config");
+	const [section, setSection] = useState<"config" | "skills" | "extensions" | "editors" | "im" | "logs">("config");
 	const [tab, setTab] = useState<ConfigTab>("models");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -328,6 +329,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			void refreshExtensions();
 			return;
 		}
+		if (section === "editors") return;
 		if (section === "logs") return;
 		void loadConfig(tab);
 	}, [open, section, tab, loadConfig]);
@@ -930,6 +932,15 @@ function ConfigModalContent(props: ConfigModalProps) {
 							</button>
 						</div>
 						<div className="config-sidebar-group">
+							<span>{t("config.group.other")}</span>
+							<button
+								className={section === "editors" ? "active" : ""}
+								onClick={() => setSection("editors")}
+							>
+								{t("config.nav.editors")}
+							</button>
+						</div>
+						<div className="config-sidebar-group">
 							<span>{t("config.group.diagnostics")}</span>
 							<button
 								className={section === "logs" ? "active" : ""}
@@ -1081,6 +1092,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onRefresh={refreshExtensions}
 							onUninstall={setUninstallExtensionConfirm}
 						/>
+					)}
+
+					{section === "editors" && !loading && (
+						<EditorsTab />
 					)}
 
 					{section === "config" && !loading && tab === "raw" && (

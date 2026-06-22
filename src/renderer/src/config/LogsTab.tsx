@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PiDesktopApi } from "../../../preload";
 import type { AppLogEntry, AppLogLevel } from "../../../shared/types";
+import { SelectField } from "../components/ui/SelectField";
 import { t } from "../i18n";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
@@ -26,7 +27,6 @@ export function LogsTab() {
 	const [level, setLevel] = useState<AppLogLevel | "all">("all");
 	const [search, setSearch] = useState("");
 	const [from, setFrom] = useState("");
-	const [to, setTo] = useState("");
 	const [expandedId, setExpandedId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -34,11 +34,10 @@ export function LogsTab() {
 		level,
 		search,
 		from: from ? new Date(from).getTime() : undefined,
-		to: to ? new Date(to).getTime() : undefined,
 		limit: 500,
-	}), [level, search, from, to]);
+	}), [level, search, from]);
 
-	const refresh = async () => {
+	const refresh = useCallback(async () => {
 		setLoading(true);
 		setError(null);
 		try {
@@ -48,12 +47,14 @@ export function LogsTab() {
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, [query]);
 
 	useEffect(() => {
-		void refresh();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+		const timer = window.setTimeout(() => {
+			void refresh();
+		}, 150);
+		return () => window.clearTimeout(timer);
+	}, [refresh]);
 
 	const clear = async () => {
 		if (!window.confirm(t("logs.clearConfirm"))) return;
@@ -65,18 +66,29 @@ export function LogsTab() {
 		<div className="logs-tab">
 			<div className="config-toolbar logs-toolbar">
 				<div className="logs-filters">
-					<select value={level} onChange={(event) => setLevel(event.target.value as AppLogLevel | "all")}> 
-						{LEVELS.map((item) => (
-							<option key={item} value={item}>{t(`logs.level.${item}`)}</option>
-						))}
-					</select>
+					<SelectField
+						className="logs-level-select"
+						label={t("logs.levelFilter")}
+						value={level}
+						options={LEVELS.map((item) => ({
+							value: item,
+							label: t(`logs.level.${item}`),
+						}))}
+						onChange={(value) => setLevel(value as AppLogLevel | "all")}
+					/>
 					<input
+						className="logs-search-input"
 						value={search}
 						onChange={(event) => setSearch(event.target.value)}
 						placeholder={t("logs.searchPlaceholder")}
 					/>
-					<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} />
-					<input type="datetime-local" value={to} onChange={(event) => setTo(event.target.value)} />
+					<input
+						type="datetime-local"
+						value={from}
+						onChange={(event) => setFrom(event.target.value)}
+						title={t("logs.sinceFilter")}
+						aria-label={t("logs.sinceFilter")}
+					/>
 				</div>
 				<div className="skills-toolbar-actions">
 					<button className="config-btn" onClick={refresh} disabled={loading}>{t("common.refresh")}</button>

@@ -12,37 +12,12 @@ type PiProcessSettings = Pick<
 export class PiProcess extends EventEmitter {
   private proc?: ChildProcessWithoutNullStreams;
   private rpc?: PiRpcClient;
-  /** 标记进程是否在预热池中（park 后为 true，复用前需 reset） */
-  private parked = false;
 
   constructor(
     private readonly cwd: string,
     private readonly settings?: PiProcessSettings,
   ) {
     super();
-  }
-
-  /** 判断当前进程是否匹配指定的 cwd，用于预热池查找 */
-  matches(targetCwd: string): boolean {
-    return this.cwd === targetCwd && this.isRunning();
-  }
-
-  /** 放回预热池：只 abort 当前操作 + 重置到新 session，不杀进程 */
-  park() {
-    if (!this.proc || !this.rpc) return;
-    this.parked = true;
-    this.rpc.notify({ type: "abort" });
-    this.rpc.request({ type: "new_session" }).catch(() => {});
-  }
-
-  /** 从预热池取出复用：清除 parked 标记 */
-  unpark() {
-    this.parked = false;
-  }
-
-  /** 是否在预热池中 */
-  isParked(): boolean {
-    return this.parked;
   }
 
   start(sessionPath?: string) {
@@ -99,8 +74,6 @@ export class PiProcess extends EventEmitter {
 
   stop() {
     if (!this.proc) return;
-    // 预热池中的进程不要 kill，由池子管理生命周期
-    if (this.parked) return;
     this.proc.kill();
   }
 }

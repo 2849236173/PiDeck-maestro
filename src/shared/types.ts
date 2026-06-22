@@ -8,12 +8,44 @@ export type Project = {
 	kind?: "chat";
 };
 
+export const SUPPORTED_EXTERNAL_EDITORS = [
+	{ id: "vscode", name: "Visual Studio Code" },
+	{ id: "cursor", name: "Cursor" },
+	{ id: "zed", name: "Zed" },
+	{ id: "idea", name: "IntelliJ IDEA" },
+	{ id: "webstorm", name: "WebStorm" },
+	{ id: "phpstorm", name: "PhpStorm" },
+	{ id: "pycharm", name: "PyCharm" },
+] as const;
+
+export type ExternalEditorId = typeof SUPPORTED_EXTERNAL_EDITORS[number]["id"];
+
+export type ExternalEditorDetectedFrom = "path" | "common-path" | "manual";
+
+export type ExternalEditorSetting = {
+	enabled: boolean;
+	command: string;
+	detectedFrom?: ExternalEditorDetectedFrom;
+	updatedAt?: number;
+};
+
+export type ExternalEditorSettings = Record<ExternalEditorId, ExternalEditorSetting>;
+
+export function createDefaultExternalEditorSettings(): ExternalEditorSettings {
+	return Object.fromEntries(
+		SUPPORTED_EXTERNAL_EDITORS.map((editor) => [
+			editor.id,
+			{ enabled: false, command: "" },
+		]),
+	) as ExternalEditorSettings;
+}
+
 export type ExternalEditor = {
-	id: string;
+	id: ExternalEditorId;
 	name: string;
 	command: string;
 	args?: string[];
-	detectedFrom: "path" | "common-path";
+	detectedFrom: ExternalEditorDetectedFrom;
 };
 
 export type AgentStatus = "starting" | "idle" | "running" | "error" | "closed";
@@ -243,6 +275,8 @@ export type AppSettings = {
 	linkOpenMode: LinkOpenMode;
 	/** 编辑器最大文件大小（MB），超过此大小的文件不加载编辑器。默认 5MB。 */
 	maxEditorFileSizeMB: number;
+	/** 外部编辑器配置：首次异步检测后保存，用户可在设置中手动覆盖路径。 */
+	externalEditors: ExternalEditorSettings;
 };
 
 export type PiInstallStatus = {
