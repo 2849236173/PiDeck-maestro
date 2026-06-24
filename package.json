@@ -8,6 +8,12 @@
     "name": "ayuayue",
     "email": "ayuayue@users.noreply.github.com"
   },
+  "contributors": [
+    {
+      "name": "1900EasonJin",
+      "url": "https://github.com/1900EasonJin"
+    }
+  ],
   "homepage": "https://github.com/ayuayue/PiDeck#readme",
   "repository": {
     "type": "git",
