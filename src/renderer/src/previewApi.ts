@@ -533,6 +533,7 @@ export function createPreviewApi(): PiDesktopApi {
 			onNotify: noop,
 			setPreviewMode: async () => undefined,
 			onPreviewMode: noop,
+			onCaps: noop,
 			getCurrent: async () => ({ id: "builtin-otter", displayName: "Boba Otter", source: "builtin", spritesheetUrl: "" }),
 		},
 		terminal: {
