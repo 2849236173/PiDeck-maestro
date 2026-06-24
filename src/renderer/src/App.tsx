@@ -1259,15 +1259,6 @@ export function App() {
     }
   }, [commandHistory]);
 
-  useEffect(() => {
-    const timeline = timelineRef.current;
-    if (!timeline || !autoScroll) return;
-    // 历史会话加载后默认跳到最新消息,符合聊天软件的阅读习惯,避免用户手动滚动到底部。
-    requestAnimationFrame(() => {
-      timeline.scrollTop = timeline.scrollHeight;
-    });
-  }, [activeAgentId, activeMessages.length, autoScroll]);
-
   // 监听用户滚动,判断是否需要显示"移动到最新"按钮
   useEffect(() => {
     const timeline = timelineRef.current;
@@ -1292,6 +1283,29 @@ export function App() {
     timeline.addEventListener("scroll", handleScroll);
     return () => timeline.removeEventListener("scroll", handleScroll);
   }, [activeAgentId]);
+
+  // 用 ResizeObserver 监控消息列表内容的 DOM 高度变化，自动滚动到底部。
+  // 流式回答时最后一条 assistant 消息原地增长但 messages.length 不变，
+  // 依赖 length 的 effect 不会及时触发；通过 ResizeObserver 准确感知容器扩张。
+  // autoScroll 在依赖中确保开关变化时重建 observer（同时触发一次初始滚动）。
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    const messageList = timeline.querySelector(".message-list");
+    if (!messageList) return;
+
+    const scrollIfNeeded = () => {
+      if (!autoScroll) return;
+      timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
+    };
+    // 重建 observer 时先主动滚一次，处理 autoScroll 从 false→true 但列表高度未变的场景。
+    scrollIfNeeded();
+
+    const resizeObserver = new ResizeObserver(scrollIfNeeded);
+    resizeObserver.observe(messageList);
+
+    return () => resizeObserver.disconnect();
+  }, [activeAgentId, autoScroll]);
 
   // 追踪 agent 会话开始/结束时间,计算会话时长
   // 点击外部区域自动关闭会话组合下拉
@@ -2810,6 +2824,10 @@ ${text}
 
     // 发送前先保留快照,再立即清空 composer;运行中发送会走官方 steer 队列,
     // 由 pi runtime 保证在当前工具调用结束后、下一次 LLM 调用前注入。
+    // 不论之前是否滚动回看，发新消息都强制自动滚到底，确保能看到 agent 的回答。
+    setAutoScroll(true);
+    const scrollTimeline = timelineRef.current;
+    if (scrollTimeline) scrollTimeline.scrollTo({ top: scrollTimeline.scrollHeight, behavior: "instant" });
     setPrompt("");
     setAttachedImages([]);
     setSuggestionsOpen(false);
@@ -2826,6 +2844,9 @@ ${text}
       return;
     const message = prompt;
     const images = attachedImages.length > 0 ? attachedImages : undefined;
+    setAutoScroll(true);
+    const scrollTimeline = timelineRef.current;
+    if (scrollTimeline) scrollTimeline.scrollTo({ top: scrollTimeline.scrollHeight, behavior: "instant" });
     setPrompt("");
     setAttachedImages([]);
     setSuggestionsOpen(false);
