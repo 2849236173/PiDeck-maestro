@@ -4245,7 +4245,10 @@ ${goalTextRef.current}
           />
         )}
 
-        {!isLanWeb && terminalOpen && activeAgentId && (
+        {!isLanWeb && terminalOpen && activeAgentId
+          && !settingsOpen
+          && !configOpen
+          && !environmentDialog && (
           <TerminalDock
             agentId={activeAgentId}
             collapsed={terminalCollapsed}
