@@ -118,6 +118,13 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		const loop = (now: number) => {
 			if (!alive) return;
 			rafId = requestAnimationFrame(loop);
+			// 每次帧前检查 canvas CSS 尺寸：当 PetWindow.resize 直接改变窗口时，
+			// React 不会触发重渲染，但 canvas 元素尺寸已变。此处同步 buffer 尺寸，
+			// 保证放大→缩小后图像正确缩放到新窗口，不会因 buffer 停留在放大态而截断。
+			const curDw = canvas.clientWidth, curDh = canvas.clientHeight;
+			const curDpr = window.devicePixelRatio || 1;
+			const curTw = curDw * curDpr, curTh = curDh * curDpr;
+			if (canvas.width !== curTw || canvas.height !== curTh) { canvas.width = curTw; canvas.height = curTh; }
 			if (dragRef.current) { lastT = now; return; }
 			const delta = now - lastT;
 			lastT = now;

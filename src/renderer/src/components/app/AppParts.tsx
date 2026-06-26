@@ -92,7 +92,7 @@ export type SessionModifiedFile = {
 	content?: string;
 };
 
-type DiffFileHandler = (path: string, originalContent?: string) => void;
+type DiffFileHandler = (path: string, originalContent?: string, content?: string) => void;
 
 function countToolContentLines(value: unknown) {
 	if (typeof value !== "string" || !value) return 0;
@@ -2614,7 +2614,7 @@ function FilesPanel(props: {
 									e.preventDefault();
 									props.onFileContextMenu(fakeNode, e.clientX, e.clientY);
 								}}
-								onClick={() => props.onDiffFile?.(file.path)}
+								onClick={() => props.onDiffFile?.(file.path, file.originalContent, file.content)}
 							>
 								<span
 									className={`modified-file-icon${isRunning ? "" : " done"}`}
@@ -2701,7 +2701,7 @@ export function SessionFileSummary(props: {
 								className="session-file-summary-row"
 								type="button"
 								title={file.path}
-								onClick={() => props.onDiffFile?.(file.path, file.originalContent)}
+								onClick={() => props.onDiffFile?.(file.path, file.originalContent, file.content)}
 							>
 								<span className="session-file-summary-name">{fileName}</span>
 								<span
@@ -3433,13 +3433,29 @@ export function FileContextMenu(props: {
 	onDelete?: () => void;
 	onRename?: () => void;
 }) {
+	const menuRef = useRef<HTMLDivElement | null>(null);
+	const [pos, setPos] = useState({ x: props.menu.x, y: props.menu.y });
 	const isFile = props.menu.node.type === "file";
 	const isDir = props.menu.node.type === "directory";
+
+	// 测量菜单实际高度，超底部时向上翻转，避免底部文件右键菜单被视口遮挡。
+	// 翻转后至少保留 8px 上边距，使菜单始终可读。
+	useEffect(() => {
+		const el = menuRef.current;
+		if (!el) return;
+		const rect = el.getBoundingClientRect();
+		const overflowY = rect.bottom - window.innerHeight;
+		if (overflowY > 0) {
+			setPos({ x: props.menu.x, y: Math.max(8, props.menu.y - rect.height) });
+		}
+	}, [props.menu.x, props.menu.y]);
+
 	return (
 		<div className="context-backdrop" onClick={props.onClose}>
 			<div
+				ref={menuRef}
 				className="context-menu"
-				style={{ left: props.menu.x, top: props.menu.y }}
+				style={{ left: pos.x, top: pos.y }}
 				onClick={(event) => event.stopPropagation()}
 			>
 				<button disabled={!isFile} onClick={props.onAttach}>

@@ -42,11 +42,11 @@ export class PetSystem {
 		if (s.petEnabled) {
 			await this.petWindow.create(s.petScale ?? 1);
 			this.pushCaps();
-			// 延迟推送聚合态，让宠物窗先就绪：
-			// 有活跃 Agent → 出现（idle/running 等）；无活跃 Agent → hidden，保持不出现，
-			// 直到首个 Agent 开启后再出现。
+			// 延迟推送聚合态与当前 sprite，让宠物窗 React 先挂载并注册好 IPC 监听器。
+			// 无活跃 Agent → idle 待机；有活跃 Agent → running/waiting 等。
+			// hide 仅在应用退出/关闭宠物开关时发生。
 			setTimeout(() => this.bridge.pushNow(this.deps.agentManager.list()), 600);
-			await this.pushCurrentSprite();
+			setTimeout(() => void this.pushCurrentSprite(), 600);
 		}
 	}
 
@@ -124,8 +124,10 @@ export class PetSystem {
 			if (next.petEnabled) {
 				await this.petWindow.create(next.petScale ?? 1);
 				this.pushCaps();
-				this.bridge.pushNow(this.deps.agentManager.list());
-				await this.pushCurrentSprite();
+				// 延迟推送状态与 sprite，给新创建的宠物窗 React 挂载和 IPC 监听注册的时间。
+				// 立即发送会被新窗口丢弃（监听器尚未就绪），导致窗口永远 hidden+null sprite。
+				setTimeout(() => this.bridge.pushNow(this.deps.agentManager.list()), 500);
+				setTimeout(() => void this.pushCurrentSprite(), 500);
 			} else {
 				this.patrol.stop();
 				this.petWindow.destroy();

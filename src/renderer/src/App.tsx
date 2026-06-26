@@ -1924,14 +1924,16 @@ export function App() {
     setDiffViewFile(path);
   }
 
-  function diffFilePath(path: string, originalContent?: string) {
+  function diffFilePath(path: string, originalContent?: string, content?: string) {
     setDiffViewMode("diff");
     setDiffViewFile(path);
     // 会话卡片传入的是工具执行前缓存的原始内容，提交后 Git 工作区可能已清空，
     // 因此优先使用会话级快照；文件边栏不传该值时仍回退到当前会话累计修改记录。
     const modified = modifiedFiles.find((f) => f.path === path);
     setDiffViewOriginalContent(originalContent ?? modified?.originalContent ?? "");
-    setDiffViewModifiedContent(modified?.content ?? undefined);
+    // 修改后内容优先使用调用侧传入的 content（历史会话摘要数据），
+    // 其次使用当前会话的 modifiedFiles 缓存；两者皆无时 FileDiffViewer 会回退到读磁盘。
+    setDiffViewModifiedContent(content ?? modified?.content ?? undefined);
   }
 
   async function refreshSessionHistory(projectId = sessionsProjectId) {

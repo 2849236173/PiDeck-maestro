@@ -32,7 +32,9 @@ function pickFocusAgent(active: AgentTab[]): string | null {
 function aggregate(tabs: AgentTab[]): PetAggregateState {
 	const active = tabs.filter((a) => a.status !== "closed");
 	if (active.length === 0) {
-		return { mode: "hidden", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: Date.now() };
+		// 无活跃 Agent 时不隐藏宠物，保持 idle 待机，让用户知道宠物已启用。
+		// 原设计隐去宠物以减少桌面干扰，但用户期待启动后即见。
+		return { mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: Date.now() };
 	}
 	let mode: PetMode = "idle";
 	for (const status of PRIORITY) {
@@ -233,6 +235,10 @@ export class PetStateBridge {
 		this.lastChangeAt = Date.now();
 		const win = this.getPetWindow();
 		if (!win || win.isDestroyed()) return;
+		// 隐藏时期望鼠标穿透下层应用，避免透明窗口在上层拦截点击却看不见。
+		// 显示时恢复正常事件捕获（允许拖拽、逗弄等交互）。
+		const hidden = state.mode === "hidden";
+		win.setIgnoreMouseEvents(hidden, hidden ? { forward: true } : undefined);
 		win.webContents.send(ipcChannels.petState, state);
 	}
 }
