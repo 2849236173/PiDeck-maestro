@@ -8,7 +8,7 @@ import { loadSpriteSheet, type SpriteSheet } from "./PetSpriteSheet";
 import "./pet.css";
 
 function PetApp() {
-	const [state, setState] = useState<PetAggregateState>({ mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: 0 });
+	const [state, setState] = useState<PetAggregateState>({ mode: "hidden", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: 0 });
 	const [sprite, setSprite] = useState<SpriteSheet | null>(null);
 	const [ready, setReady] = useState(false);
 	const [dragging, setDragging] = useState(false);
@@ -36,9 +36,16 @@ function PetApp() {
 
 	if (!ready) return <div style={{ width: "100%", height: "100%", background: "transparent" }} />;
 
+	// 拖拽期间本地权威化显示态为 idle：不依赖主进程 IPC 回推，避免巡游奔跑精灵在拖拽中卡帧。
+	// preview 仅在非拖拽时生效（用于设置页预览动画）。
+	const displayMode: PetAggregateState["mode"] = dragging
+		? "idle"
+		: (preview ? (preview as PetAggregateState["mode"]) : state.mode);
+	const displayState: PetAggregateState = { ...state, mode: displayMode };
+
 	return (
 		<div className={`pet-root${caps && !caps.transparent ? " pet-root--rounded" : ""}`}>
-			<PetOverlay sprite={sprite} manifest={null} state={preview ? { ...state, mode: preview as PetAggregateState["mode"] } : state} dragging={dragging} notification={notif} />
+			<PetOverlay sprite={sprite} manifest={null} state={displayState} dragging={dragging} notification={notif} />
 			<PetInteraction state={state} onDragStateChange={setDragging} />
 		</div>
 	);

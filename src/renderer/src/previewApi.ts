@@ -539,6 +539,7 @@ export function createPreviewApi(): PiDesktopApi {
 			onCaps: noop,
 			testNotify: async () => undefined,
 			tease: async () => undefined,
+			setDragging: async () => undefined,
 			getCurrent: async () => ({ id: "clawd", displayName: "Clawd", source: "builtin", spritesheetUrl: "" }),
 		},
 		terminal: {

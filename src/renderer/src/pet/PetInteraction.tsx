@@ -23,6 +23,8 @@ export function PetInteraction({ state, onDragStateChange }: Props) {
 		screen.current = { x: e.screenX, y: e.screenY };
 		moved.current = 0;
 		onDragStateChange?.(true);
+		// 通知主进程暂停巡游：松手后遗留的 tick 可能命中行进反向边界，导致瞬移
+		void window.piDesktop.pet.setDragging(true);
 		(e.target as HTMLElement).setPointerCapture?.(e.pointerId);
 	};
 
@@ -35,6 +37,8 @@ export function PetInteraction({ state, onDragStateChange }: Props) {
 	const up = (e: React.PointerEvent) => {
 		offset.current = null; screen.current = null;
 		onDragStateChange?.(false);
+		// 拖拽结束：通知主进程，若当前仍为 idle 且巡游开启，则从新位置恢复巡游
+		void window.piDesktop.pet.setDragging(false);
 		(e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
 
 		if (moved.current < CLICK) {

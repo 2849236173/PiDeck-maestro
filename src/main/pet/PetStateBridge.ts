@@ -68,7 +68,7 @@ export class PetStateBridge {
 
 	constructor(
 		private readonly getPetWindow: () => BrowserWindow | null,
-		private readonly patrol: { start: () => void; stop: () => void; active: boolean } | null = null,
+		private readonly patrol: { start: () => void; stop: () => void; active: boolean; setDragging: (d: boolean) => void } | null = null,
 		private readonly isPatrolEnabled: () => boolean = () => true,
 	) {}
 
@@ -118,6 +118,8 @@ export class PetStateBridge {
 		// ── hidden 过渡：先 waving 再 hidden ──
 		if (target === "hidden") {
 			if (prev?.mode === "waving") return;
+			// 所有 Agent 关闭 → 隐藏：立即停巡游，避免挥手/隐藏期间仍在走动
+			this.patrol?.stop();
 			if (prev && prev.mode !== "hidden") {
 				this.applyState({ ...state, mode: "waving" });
 				this.setTransition(1500, () => this.applyState({ ...state, mode: "hidden" }));
@@ -190,6 +192,33 @@ export class PetStateBridge {
 	private maybeStartPatrol() {
 		if (!this.patrol || !this.isPatrolEnabled()) return;
 		if (this.lastState?.mode === "idle") this.patrol.start();
+	}
+
+	/**
+	 * 拖拽起止：开始时立刻停巡游并置 dragging 标志（阻塞后续 start）；
+	 * 结束时清标志，若仍处于 idle（巡游允许）则从新位置重新起巡。
+	 * 标志位是关键——拖拽期间 Agent 状态更新会异步触发 maybeStartPatrol，
+	 * 没有标志位拦截就会在拖拽中重新起巡游，与手动移动争抢窗口位置。
+	 *
+	 * 额外：拖拽开始时若 pet 正在巡游奔跑（running-left/right，由 PetPatrol 直推），
+	 * 立刻切回 idle 待机精灵，避免拖拽过程中仍显示「卡住的奔跑帧」。
+	 */
+	onDragState(dragging: boolean) {
+		if (!this.patrol) return;
+		// 巡游奔跑态（running-left/right）由 PetPatrol 绕过 bridge 直推渲染端，
+		// bridge.lastState 仍停留在巡游启动前的 idle，无法据此判断。
+		// 因此用 patrol.active 判定：正在 tick（奔跑中）被抓取 → 归位 idle 待机。
+		const wasWalking = this.patrol.active;
+		this.patrol.setDragging(dragging);
+		if (dragging) {
+			if (wasWalking) {
+				const real = aggregate(this.currentTabs);
+				// 巡游态下业务侧必然是 idle（否则巡游不会启动），归位为 idle
+				this.applyState({ ...real, mode: "idle" });
+			}
+			return;
+		}
+		this.maybeStartPatrol();
 	}
 
 	// ── 工具 ──

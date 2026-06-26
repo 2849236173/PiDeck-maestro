@@ -34,6 +34,9 @@ async function savePos(bounds: { x: number; y: number }) {
 
 export class PetWindow {
 	private win: BrowserWindow | null = null;
+	/** 位置持久化防抖：巡游每 50ms 移动一次，避免高频写盘拖慢主进程 */
+	private saveTimer: NodeJS.Timeout | null = null;
+	private pendingPos: { x: number; y: number } | null = null;
 
 	get window(): BrowserWindow | null { return this.win; }
 	get exists(): boolean { return !!this.win && !this.win.isDestroyed(); }
@@ -65,10 +68,17 @@ export class PetWindow {
 		});
 
 		this.win.setAlwaysOnTop(true, "floating");
+		// moved 高频触发（巡游每 50ms 一次、拖拽每次 pointermove 一次），
+		// 直接落盘会拖慢主进程、间接放大 tick 抖动。这里防抖 400ms 合并写盘。
 		this.win.on("moved", () => {
 			if (!this.exists) return;
 			const b = this.win!.getBounds();
-			void savePos({ x: b.x, y: b.y });
+			this.pendingPos = { x: b.x, y: b.y };
+			if (this.saveTimer) return;
+			this.saveTimer = setTimeout(() => {
+				this.saveTimer = null;
+				if (this.pendingPos) { const p = this.pendingPos; this.pendingPos = null; void savePos(p); }
+			}, 400);
 		});
 
 		if (!is.dev) {
@@ -85,6 +95,8 @@ export class PetWindow {
 	}
 
 	destroy() {
+		if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+		this.pendingPos = null;
 		if (this.win && !this.win.isDestroyed()) this.win.destroy();
 		this.win = null;
 	}

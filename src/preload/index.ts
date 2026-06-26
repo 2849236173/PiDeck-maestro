@@ -532,6 +532,9 @@ const api = {
 		/** 双击宠物触发逗弄：主进程注入一次 jumping 后恢复真实聚合态 */
 		tease: () =>
 			ipcRenderer.invoke(ipcChannels.petTease) as Promise<void>,
+		/** 通知主进程拖拽起止：开始时暂停巡游，结束时若处于 idle 则恢复巡游 */
+		setDragging: (dragging: boolean) =>
+			ipcRenderer.invoke(ipcChannels.petDragState, dragging) as Promise<void>,
 	},
 	terminal: {
 		list: (agentId: string) =>

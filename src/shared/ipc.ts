@@ -179,6 +179,8 @@ export const ipcChannels = {
 	petCaps: "pet:caps",
 	/** 宠物窗 → 主进程：双击宠物触发逗弄（注入一次 jumping 后恢复真实态） */
 	petTease: "pet:tease",
+	/** 宠物窗 → 主进程：拖拽起止通知（开始时暂停巡游，避免松手后 tick 命中反向边界瞬移） */
+	petDragState: "pet:drag-state",
 
 	// ── 调试工具 ──
 	/** 设置面板 → 主进程：发送测试通知（调试弹窗样式） */

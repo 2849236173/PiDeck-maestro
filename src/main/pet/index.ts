@@ -42,11 +42,10 @@ export class PetSystem {
 		if (s.petEnabled) {
 			await this.petWindow.create(s.petScale ?? 1);
 			this.pushCaps();
-			// 延迟推送，让宠物先以 idle 亮相
-			setTimeout(() => {
-				const tabs = this.deps.agentManager.list();
-				if (tabs.some(t => t.status !== "closed")) this.bridge.pushNow(tabs);
-			}, 600);
+			// 延迟推送聚合态，让宠物窗先就绪：
+			// 有活跃 Agent → 出现（idle/running 等）；无活跃 Agent → hidden，保持不出现，
+			// 直到首个 Agent 开启后再出现。
+			setTimeout(() => this.bridge.pushNow(this.deps.agentManager.list()), 600);
 			await this.pushCurrentSprite();
 		}
 	}
@@ -113,6 +112,8 @@ export class PetSystem {
 		});
 
 		ipcMain.handle(C.petTease, () => this.bridge.tease());
+		// 拖拽起止：开始时停巡游，结束时若处于 idle 则恢复，避免松手后 tick 命中反向边界瞬移
+		ipcMain.handle(C.petDragState, (_e, dragging: boolean) => this.bridge.onDragState(!!dragging));
 	}
 
 	// ── 设置响应 ──
