@@ -142,12 +142,13 @@ export function parseRichInputChips(text: string): RichInputChip[] {
 /**
  * 遍历 contentEditable root 的「纯文本模型」。
  * 按文档序依次回调每个文本段和 chip，自动跳过 chip 内部（contenteditable=false）。
- * BR 按 1 字符贡献偏移（防御性，正常使用中不应出现）。
+ * onBreak 在遇到 <br> 时回调，供调用方在纯文本中插入换行符。
  */
 function walkFlat(
 	root: HTMLElement,
 	onText: (node: Text, start: number, end: number) => void,
 	onChip: (el: HTMLElement, start: number, end: number) => void,
+	onBreak?: (start: number, end: number) => void,
 ): void {
 	let offset = 0;
 	function visit(node: Node): void {
@@ -162,6 +163,7 @@ function walkFlat(
 				onChip(el, offset, offset + rawLen);
 				offset += rawLen;
 			} else if (el.tagName === "BR") {
+				onBreak?.(offset, offset + 1);
 				offset += 1;
 			} else {
 				node.childNodes.forEach(visit);
@@ -190,12 +192,18 @@ function collectTextRuns(root: HTMLElement): TextNodeRun[] {
 }
 
 /** 从 DOM 读取纯文本（chip 用 data-raw 还原）。 */
+/**
+ * 从 DOM 读取纯文本（chip 用 data-raw 还原）。
+ * 注意：浏览器可能将 contentEditable 中的 \n 存为 \r\n 或 <br>，
+ * 这里统一将 \r\n 和 \r 归一化为 \n，确保发送的纯文本使用一致换行符。
+ */
 function collectFlatText(root: HTMLElement): string {
 	let text = "";
 	walkFlat(
 		root,
-		(node) => { text += node.nodeValue ?? ""; },
+		(node) => { text += (node.nodeValue ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n"); },
 		(el) => { text += el.getAttribute("data-raw") ?? ""; },
+		() => { text += "\n"; },
 	);
 	return text;
 }
