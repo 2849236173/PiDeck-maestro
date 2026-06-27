@@ -112,9 +112,18 @@ export class SessionScanner {
     let firstUserText = "";
     let firstAssistantText = "";
     let messageCount = 0;
+    /** 会话来源：扫描前几行检测导入标记 */
+    let source: SessionSummary["source"] = "pi";
 
     for (const line of lines) {
       const entry = JSON.parse(line) as any;
+      // 扫描前几行的非消息条目，检测导入来源标记
+      if (source === "pi") {
+        if (entry.type === "codex_import") source = "codex";
+        else if (entry.type === "claude_import") source = "claude";
+        else if (entry.type === "opencode_import") source = "opencode";
+      }
+
       name ||= entry.sessionName || entry.name || entry.data?.name || entry.header?.name || entry.session?.name;
       projectPath ||= entry.cwd || entry.projectPath || entry.header?.cwd || entry.data?.cwd || entry.session?.cwd || entry.data?.session?.cwd;
 
@@ -138,6 +147,7 @@ export class SessionScanner {
       preview: preview.slice(0, 160),
       updatedAt: info.mtimeMs,
       messageCount,
+      source,
     };
   }
 

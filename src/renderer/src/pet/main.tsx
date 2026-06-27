@@ -8,7 +8,7 @@ import { loadSpriteSheet, type SpriteSheet } from "./PetSpriteSheet";
 import "./pet.css";
 
 function PetApp() {
-	const [state, setState] = useState<PetAggregateState>({ mode: "hidden", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: 0 });
+	const [state, setState] = useState<PetAggregateState>({ mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: 0 });
 	const [sprite, setSprite] = useState<SpriteSheet | null>(null);
 	const [ready, setReady] = useState(false);
 	const [dragging, setDragging] = useState(false);
@@ -31,6 +31,8 @@ function PetApp() {
 			window.piDesktop.pet.onPreviewMode((m: string) => setPreview(m || null)),
 			window.piDesktop.pet.onCaps(setCaps),
 		];
+		// 通知主进程：所有 IPC 监听器已注册，可安全推送初始状态（避免时序竞态）
+		window.piDesktop.pet.ready();
 		return () => { cancelled = true; cleanups.forEach(fn => fn?.()); };
 	}, []);
 

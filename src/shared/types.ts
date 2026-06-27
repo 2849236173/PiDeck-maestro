@@ -115,6 +115,8 @@ export type SessionSummary = {
 	preview: string;
 	updatedAt: number;
 	messageCount: number;
+	/** 会话来源：pi 原生、Codex 导入、Claude 导入、OpenCode 导入 */
+	source?: "pi" | "codex" | "claude" | "opencode";
 };
 
 export type CodexImportStatus = "new" | "current" | "outdated";
@@ -232,12 +234,19 @@ export type AgentRuntimeState = {
 	thinkingLevel?: string;
 	isStreaming?: boolean;
 	isCompacting?: boolean;
+	/** 是否正在执行工具调用（read/write/bash 等） */
+	isExecutingTool?: boolean;
+	/** 当前正在执行的工具名称，如 read、write、bash */
+	executingToolName?: string;
 	contextTokens?: number | null;
 	contextWindow?: number | null;
 	contextPercent?: number | null;
+	inputTokens?: number;
+	outputTokens?: number;
 	cacheRead?: number;
 	cacheWrite?: number;
 	cacheTotal?: number;
+	cacheHitPercent?: number | null;
 	cost?: number;
 };
 

@@ -8,6 +8,8 @@ export type ProjectChildItem =
 			key: string;
 			agent: AgentTab;
 			sortAt: number;
+			/** 该 Agent 对应的会话来源（历史会话激活时从 SessionSummary 传递） */
+			source?: "pi" | "codex" | "claude" | "opencode";
 	  }
 	| {
 			type: "session";
@@ -98,6 +100,8 @@ export function getProjectAgentSessionDisplay({
 				key: `session-agent:${sessionKey}`,
 				agent,
 				sortAt: getAgentSortAt(agent, sessionByKey),
+				// 历史会话激活为 Agent 后仍携带来源标记，供侧边栏区分导入会话
+				source: sessionByKey.get(sessionKey)?.source,
 			}),
 		),
 		...[...sessionByKey.entries()]

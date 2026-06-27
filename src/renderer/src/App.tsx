@@ -1,5 +1,7 @@
 import {
   Fragment,
+  lazy,
+  Suspense,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -29,6 +31,7 @@ import {
   Globe,
   Pin,
   Square,
+  Filter,
   X,
 } from "lucide-react";
 import { createPreviewApi } from "./previewApi";
@@ -56,9 +59,6 @@ import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
   AgentContextMenu,
   BranchSelector,
-  CodexImportModal,
-  ClaudeImportModal,
-  OpenCodeImportModal,
   ComposerToolbar,
   ConversationOutline,
   DrawerContent,
@@ -72,12 +72,9 @@ import {
   ProjectAvatar,
   ProjectContextMenu,
   PromptSuggestions,
-  RpcLogModal,
   SessionContextMenu,
-  SessionHistoryModal,
   SessionStatus,
   SessionFileSummary,
-  SettingsModal,
   ThinkingPicker,
   TurnRow,
   UserBubble,
@@ -103,7 +100,16 @@ import {
 	RichInput,
 	type RichInputChip,
 } from "./components/app/RichInput";
-import { FileDiffViewer } from "./components/app/FileDiffViewer";
+// 懒加载：Monaco Editor（~17.6MB Web Worker）仅在用户打开 diff 时才加载
+const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })));
+// 懒加载模态框，减少首屏 JS 体积
+const SettingsModal = lazy(() => import("./components/app/SettingsModal").then((m) => ({ default: m.SettingsModal })));
+
+const CodexImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.CodexImportModal })));
+const ClaudeImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.ClaudeImportModal })));
+const OpenCodeImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.OpenCodeImportModal })));
+const UpdateErrorModalLazy = lazy(() => import("./components/app/UpdateModals").then((m) => ({ default: m.UpdateErrorModal })));
+const UpToDateModalLazy = lazy(() => import("./components/app/UpdateModals").then((m) => ({ default: m.UpToDateModal })));
 import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
   AgentRuntimeState,
@@ -440,6 +446,16 @@ export function App() {
     y: number;
     project: Project;
   } | null>(null);
+  /** 历史会话来源过滤（按项目）：undefined=显示全部，Record 含项目ID对应 Set */
+  const [sessionSourceFilter, setSessionSourceFilter] = useState<
+  	Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null>
+  >({});
+  /** 来源过滤弹窗（关联项目ID和位置） */
+  const [sessionFilterOpen, setSessionFilterOpen] = useState<{
+  	x: number;
+  	y: number;
+  	projectId: string;
+  } | null>(null);
   const [diffViewFile, setDiffViewFile] = useState<string | null>(null);
   const [diffViewMode, setDiffViewMode] = useState<"view" | "diff">("view");
   const [diffViewOriginalContent, setDiffViewOriginalContent] = useState<string>("");
@@ -504,7 +520,7 @@ export function App() {
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [_debugOpen, _setDebugOpen] = useState(false);
   /** RPC 日志弹窗目标 agent */
-  const [rpcLogAgentId, setRpcLogAgentId] = useState<string | null>(null);
+  const [agentRpcLogging, setAgentRpcLogging] = useState<Map<string, boolean>>(new Map());
   /** 是否自动滚动到最新消息 */
   const [autoScroll, setAutoScroll] = useState(true);
   /** 是否显示"移动到最新"按钮 */
@@ -1022,6 +1038,16 @@ export function App() {
       setAttachedImagesByAgent((current) =>
         migrateAgentRecord(current, pendingReplacementById, draftIds),
       );
+      // 裁剪已关闭 agent 的消息缓存，释放 renderer 内存
+      setMessagesByAgent((current) => {
+        const liveIds = new Set(nextAgents.map((a) => a.id));
+        const keys = Object.keys(current);
+        const hasStale = keys.some((k) => !liveIds.has(k));
+        if (!hasStale) return current;
+        return Object.fromEntries(
+          Object.entries(current).filter(([k]) => liveIds.has(k)),
+        );
+      });
     });
     // 优化:历史会话加载时消息更新频繁,只在消息真正变化时更新 state,避免不必要的重渲染导致输入卡顿
     const offMessages = api.agents.onMessages((payload) =>
@@ -1050,9 +1076,10 @@ export function App() {
         return [...current.slice(-199), newLog];
       }),
     );
-    const offSettings = api.settings.onApplyWindow(() =>
-      setSettingsNotice(t("settings.restartNotice")),
-    );
+    const offSettings = api.settings.onApplyWindow((next) => {
+      setSettings(next);
+      setSettingsNotice(t("settings.restartNotice"));
+    });
     const offUpdateProgress = api.app.onUpdateProgress((progress) => {
       setUpdateProgress(progress);
       if (progress.state === "completed") {
@@ -1078,26 +1105,6 @@ export function App() {
         [payload.agentId]: payload.thinking,
       })),
     );
-    // 监听 RPC 日志,保留最近 2000 条用于调试;message_update 高频事件很多,
-    // 200 条很容易在一次长响应中被刷掉,但仍设置上限避免 renderer 内存无限增长。
-    const offRpcLog = api.agents.onRpcLog((payload) =>
-      setRpcLogs((current) => {
-        // 优化:避免频繁创建新数组,只在超过上限时才slice
-        const newLog = {
-          id: crypto.randomUUID(),
-          agentId: payload.agentId,
-          direction: payload.direction,
-          summary: payload.summary,
-          data: payload.data,
-          time: Date.now(),
-        };
-        if (current.length < 2000) {
-          return [...current, newLog];
-        }
-        return [...current.slice(-1999), newLog];
-      }),
-    );
-
     return () => {
       offProjects();
       offState();
@@ -1107,7 +1114,6 @@ export function App() {
       offUpdateProgress();
       offRuntimeState();
       offThinking();
-      offRpcLog();
     };
   }, []);
 
@@ -1952,26 +1958,9 @@ export function App() {
     setActiveProjectId(project.id);
     setSessionsProjectId(project.id);
     setSessions([]);
-    setDrawer((current) => (current === "sessions" ? null : current));
+    setDrawer("sessions");
+    setDrawerCollapsed(false);
     await refreshSessionHistory(project.id);
-  }
-
-  async function openHistorySession(session: SessionSummary) {
-    const projectId = sessionsProjectId;
-    if (!projectId) return;
-    setSessionsProjectId(undefined);
-    setSessions([]);
-    await createAgent(
-      projectId,
-      session.filePath,
-      session.name || t("common.untitled"),
-    );
-  }
-
-  async function renameHistorySession(filePath: string, newName: string) {
-    await api.sessions.rename(filePath, newName);
-    if (sessionsProjectId) await refreshSessions(sessionsProjectId);
-    if (sessionsProjectId) await refreshProjectSessions(sessionsProjectId);
   }
 
   async function copySession(
@@ -2619,6 +2608,31 @@ export function App() {
       setRuntimeStateByAgent((current) => ({ ...current, [agentId]: state }));
   }
 
+  function getProjectFilter(projectId: string) {
+  	return sessionSourceFilter[projectId] ?? null;
+  }
+
+  function toggleSessionSourceFilter(projectId: string, source: "pi" | "codex" | "claude" | "opencode") {
+  	setSessionSourceFilter((current) => {
+  		const prev = current[projectId] ?? null;
+  		if (prev === null) {
+  			return { ...current, [projectId]: new Set([source]) };
+  		}
+  		const next = new Set(prev);
+  		if (next.has(source)) {
+  			next.delete(source);
+  			if (next.size === 0) {
+  				const copy = { ...current };
+  				copy[projectId] = null;
+  				return copy;
+  			}
+  		} else {
+  			next.add(source);
+  		}
+  		return { ...current, [projectId]: next };
+  	});
+  }
+
   async function cycleModel() {
     if (!activeAgentId || isPendingAgentId(activeAgentId)) return;
     const state = await api.agents.cycleModel(activeAgentId);
@@ -2626,6 +2640,16 @@ export function App() {
       ...current,
       [activeAgentId]: state,
     }));
+  }
+
+  /** 调整菜单位置避免溢出视口 */
+  function adjustMenuPos(x: number, y: number, width = 200, height = 260) {
+  	const vw = window.innerWidth;
+  	const vh = window.innerHeight;
+  	return {
+  		x: x + width > vw ? Math.max(4, vw - width - 8) : x,
+  		y: y + height > vh ? Math.max(4, vh - height - 8) : y,
+  	};
   }
 
   async function openModelPicker() {
@@ -2695,6 +2719,9 @@ export function App() {
         ...current,
         [activeAgentId]: state,
       }));
+      showToast(t("app.compactDone"));
+    } catch (e) {
+      showToast(t("app.compactFailed"));
     } finally {
       setCompacting(false);
     }
@@ -3650,14 +3677,19 @@ ${goalTextRef.current}
               (agent) => agent.projectId === project.id,
             );
             const projectSearch = search.trim();
-            const projectSessions = projectSearch
+            const projectSessions = ((projectSearch
               ? (sessionsByProject[project.id] ?? []).filter((session) =>
                   matches(
                     `${session.name ?? ""}${session.preview}${session.filePath}`,
                     projectSearch,
                   ),
                 )
-              : (sessionsByProject[project.id] ?? []);
+              : (sessionsByProject[project.id] ?? [])).filter((session) => {
+              	const filter = sessionSourceFilter[project.id] ?? null;
+              	return filter === null
+              		? true
+              		: filter.has(session.source ?? "pi");
+              }));
             const visibleChildCount =
               visibleProjectChildCountByProject[project.id] ??
               SIDEBAR_PROJECT_CHILD_PAGE_SIZE;
@@ -3706,8 +3738,7 @@ ${goalTextRef.current}
                     event.preventDefault();
                     if (projectIsChat) return;
                     setProjectMenu({
-                      x: event.clientX,
-                      y: event.clientY,
+                      ...adjustMenuPos(event.clientX, event.clientY, 200, 320),
                       project,
                     });
                   }}
@@ -3757,6 +3788,19 @@ ${goalTextRef.current}
                       <strong title={project.path}>
                         {projectDirectoryName}
                       </strong>
+                      {(sessionSourceFilter[project.id] ?? null) !== null && (
+                        <Filter
+                          size={12}
+                          className="filter-indicator"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSessionFilterOpen({
+                              ...adjustMenuPos(e.clientX, e.clientY, 180, 250),
+                              projectId: project.id,
+                            });
+                          }}
+                        />
+                      )}
                     </div>
                     {projectIsChat && (
                       <p className="chat-project-guide">
@@ -3805,11 +3849,17 @@ ${goalTextRef.current}
                               ? "conversation agent-row active"
                               : "conversation agent-row"
                           }
-                          onContextMenu={(event) => {
+                          onContextMenu={async (event) => {
                             event.preventDefault();
+                            // 菜单打开时查询 RPC 日志记录状态
+                            const logging = await window.piDesktop.rpcLogs.getLogging(agent.id);
+                            setAgentRpcLogging((prev) => {
+                              const next = new Map(prev);
+                              next.set(agent.id, logging);
+                              return next;
+                            });
                             setAgentMenu({
-                              x: event.clientX,
-                              y: event.clientY,
+                              ...adjustMenuPos(event.clientX, event.clientY, 200, 260),
                               agent,
                             });
                           }}
@@ -3822,6 +3872,11 @@ ${goalTextRef.current}
                           <div className="conversation-body">
                             <div className="conversation-title">
                               <strong>{agent.title}</strong>
+                              {child.source && child.source !== "pi" && (
+                                <span className={`session-source-badge ${child.source}`}>
+                                  {t(`sessionSource.${child.source}` as any)}
+                                </span>
+                              )}
                               {agent.status && (
                                 <span className={`agent-status-indicator status-${agent.status}`}>
                                   {agent.status === 'running' && '●'}
@@ -3846,8 +3901,7 @@ ${goalTextRef.current}
                         onContextMenu={(event) => {
                           event.preventDefault();
                           setSessionMenu({
-                            x: event.clientX,
-                            y: event.clientY,
+                            ...adjustMenuPos(event.clientX, event.clientY, 200, 280),
                             projectId: project.id,
                             session,
                           });
@@ -3865,6 +3919,11 @@ ${goalTextRef.current}
                             <strong>
                               {session.name || t("common.untitled")}
                             </strong>
+                            {session.source && session.source !== "pi" && (
+                              <span className={`session-source-badge ${session.source}`}>
+                                {t(`sessionSource.${session.source}` as any)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </button>
@@ -3967,8 +4026,9 @@ ${goalTextRef.current}
                   "PiDeck"}
               </strong>
               {activeAgent && (
-                <span className="chat-path" title={activeProject?.path ?? activeAgent.cwd}>
+                <span className="chat-path" title={`${activeProject?.path ?? activeAgent.cwd}  Agent ID: ${activeAgent.id}`}>
                   {t("app.path")}: {displayPath(activeProject?.path ?? activeAgent.cwd)}
+                  <span className="chat-agent-id">AgentId: {activeAgent.id.slice(0, 8)}</span>
                 </span>
               )}
             </div>
@@ -4249,10 +4309,19 @@ ${goalTextRef.current}
                 ),
               )}
               {isAwaitingAssistant && (
-                <ThinkingIndicator
-                  thinking={activeThinking}
-                  showThinking={settings.showThinking}
-                />
+                <>
+                  <ThinkingIndicator
+                    thinking={activeThinking}
+                    showThinking={settings.showThinking}
+                    isExecutingTool={activeRuntimeState?.isExecutingTool}
+                    executingToolName={activeRuntimeState?.executingToolName}
+                  />
+                  {settings.showThinking && activeThinking && (
+                    <section className="thinking-card streaming">
+                      <div className="thinking-card-content">{activeThinking}</div>
+                    </section>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -4556,7 +4625,10 @@ ${goalTextRef.current}
               panel={drawer}
               project={drawer === "sessions" ? sessionsProject : undefined}
               files={files}
-              sessions={sessions}
+              sessions={(sessionsProjectId && sessionSourceFilter[sessionsProjectId]) ? sessions.filter(
+                (s) => (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
+              ) : sessions}
+              sessionsLoading={sessionHistoryLoading}
               gitChangedFiles={gitChangedFiles}
               expandedDirs={expandedDirs}
               onToggleDirectory={toggleDirectory}
@@ -4659,6 +4731,50 @@ ${goalTextRef.current}
           }}
         />
       )}
+      {sessionFilterOpen && (() => {
+        const currentFilter = sessionSourceFilter[sessionFilterOpen.projectId] ?? null;
+        return (
+          <div className="context-backdrop" onClick={() => setSessionFilterOpen(null)}>
+            <div
+              className="context-menu filter-menu"
+              style={{
+                left: sessionFilterOpen.x,
+                top: sessionFilterOpen.y,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="filter-menu-header">{t("menu.filterSessions")}</div>
+              <label className="filter-menu-item">
+                <input
+                  type="checkbox"
+                  checked={currentFilter === null}
+                  onChange={() =>
+                    setSessionSourceFilter((prev) => ({
+                      ...prev,
+                      [sessionFilterOpen.projectId]: null,
+                    }))
+                  }
+                />
+                {t("menu.filterSourceAll")}
+              </label>
+              {["pi", "codex", "claude", "opencode"].map((source) => (
+                <label key={source} className="filter-menu-item">
+                  <input
+                    type="checkbox"
+                    checked={currentFilter !== null && currentFilter.has(source as any)}
+                    onChange={() =>
+                      toggleSessionSourceFilter(sessionFilterOpen.projectId, source as any)
+                    }
+                  />
+                  <span className={`session-source-badge ${source}`}>
+                    {t(`sessionSource.${source}` as any)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {projectMenu && (
         <ProjectContextMenu
           menu={projectMenu}
@@ -4670,6 +4786,13 @@ ${goalTextRef.current}
           onImportCodexSessions={() => openCodexImport(projectMenu.project)}
           onImportClaudeSessions={() => openClaudeImport(projectMenu.project)}
           onImportOpenCodeSessions={() => openOpenCodeImport(projectMenu.project)}
+          onFilterSessions={() => {
+            setSessionFilterOpen({
+              ...adjustMenuPos(projectMenu.x, projectMenu.y + 20, 180, 250),
+              projectId: projectMenu.project.id,
+            });
+            setProjectMenu(null);
+          }}
           onRemoveProject={async () => {
             const project = projectMenu.project;
             setProjectMenu(null);
@@ -4693,8 +4816,21 @@ ${goalTextRef.current}
           onCopySession={() => {
             void cloneAgentSession(agentMenu.agent.id);
           }}
-          onShowLogs={() => {
-            setRpcLogAgentId(agentMenu.agent.id);
+          onToggleRpcLogging={() => {
+            const id = agentMenu.agent.id;
+            const current = agentRpcLogging.get(id) ?? false;
+            void window.piDesktop.rpcLogs.setLogging(id, !current).then((enabled) => {
+              setAgentRpcLogging((prev) => {
+                const next = new Map(prev);
+                next.set(id, enabled);
+                return next;
+              });
+            });
+            setAgentMenu(null);
+          }}
+          isRpcLogging={agentRpcLogging.get(agentMenu.agent.id) ?? false}
+          onOpenLogFile={() => {
+            void window.piDesktop.rpcLogs.openFile(agentMenu.agent.id);
             setAgentMenu(null);
           }}
           onCloseAgent={() => {
@@ -4722,14 +4858,7 @@ ${goalTextRef.current}
           onCopySession={() => {
             void copySidebarSession(sessionMenu.projectId, sessionMenu.session);
           }}
-          onShowLogs={() => {
-            void openSidebarSession(
-              sessionMenu.projectId,
-              sessionMenu.session,
-            ).then((tab) => {
-              if (tab) setRpcLogAgentId(tab.id);
-            });
-          }}
+          // 历史会话的 RPC 日志在 agent 启动后再通过右键菜单开启记录
           onDeleteSession={() => {
             const session = sessionMenu.session;
             setSessionMenu(null);
@@ -4794,13 +4923,7 @@ ${goalTextRef.current}
           </form>
         </div>
       )}
-      {/* RPC 日志弹窗 */}
-      {rpcLogAgentId && (
-        <RpcLogModal
-          logs={rpcLogs.filter((l) => l.agentId === rpcLogAgentId)}
-          onClose={() => setRpcLogAgentId(null)}
-        />
-      )}
+
       {toast && <div className="toast">{toast}</div>}
       {environmentDialog && (
         <EnvironmentDialog
@@ -4851,6 +4974,7 @@ ${goalTextRef.current}
         />
       )}
       {settingsOpen && (
+        <Suspense fallback={null}>
         <SettingsModal
           settings={settings}
           notice={settingsNotice}
@@ -4896,6 +5020,7 @@ ${goalTextRef.current}
           }}
           onChange={updateSettings}
         />
+      </Suspense>
       )}
       {feedbackOpen && (
         <FeedbackModal
@@ -4926,22 +5051,27 @@ ${goalTextRef.current}
         />
       )}
       {updateError && (
-        <UpdateErrorModal
+        <Suspense fallback={null}>
+        <UpdateErrorModalLazy
           message={updateError}
           releasesUrl={appInfo.releasesUrl}
           onClose={() => setUpdateError(null)}
           onOpenRelease={() => api.app.openExternal(appInfo.releasesUrl)}
         />
+      </Suspense>
       )}
       {upToDateVersion && (
-        <UpToDateModal
+        <Suspense fallback={null}>
+        <UpToDateModalLazy
           version={upToDateVersion}
           releasesUrl={appInfo.releasesUrl}
           onClose={() => setUpToDateVersion(null)}
           onOpenRelease={() => api.app.openExternal(appInfo.releasesUrl)}
         />
+      </Suspense>
       )}
       {diffViewFile && (
+        <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
         <FileDiffViewer
           filePath={diffViewFile}
           mode={diffViewMode}
@@ -4954,6 +5084,7 @@ ${goalTextRef.current}
           theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
           maxFileSizeMB={settings.maxEditorFileSizeMB}
         />
+      </Suspense>
       )}
       {previewImage && (
         <ImagePreviewModal
@@ -4962,6 +5093,7 @@ ${goalTextRef.current}
         />
       )}
       {codexImportProject && (
+        <Suspense fallback={null}>
         <CodexImportModal
           project={codexImportProject}
           sessions={codexImportSessions}
@@ -4978,8 +5110,10 @@ ${goalTextRef.current}
           onToggleAll={toggleAllCodexSessions}
           onImport={importCodexSessions}
         />
+      </Suspense>
       )}
       {claudeImportProject && (
+        <Suspense fallback={null}>
         <ClaudeImportModal
           project={claudeImportProject}
           sessions={claudeImportSessions}
@@ -4996,8 +5130,10 @@ ${goalTextRef.current}
           onToggleAll={toggleAllClaudeSessions}
           onImport={importClaudeSessions}
         />
+      </Suspense>
       )}
       {openCodeImportProject && (
+        <Suspense fallback={null}>
         <OpenCodeImportModal
           project={openCodeImportProject}
           sessions={openCodeImportSessions}
@@ -5014,25 +5150,7 @@ ${goalTextRef.current}
           onToggleAll={toggleAllOpenCodeSessions}
           onImport={importOpenCodeSessions}
         />
-      )}
-      {sessionsProject && (
-        <SessionHistoryModal
-          project={sessionsProject}
-          sessions={sessions}
-          loading={sessionHistoryLoading}
-          onClose={() => {
-            setSessionsProjectId(undefined);
-            setSessions([]);
-          }}
-          onRefresh={() => refreshSessionHistory(sessionsProject.id)}
-          onOpen={openHistorySession}
-          onRename={renameHistorySession}
-          onCopy={(session) =>
-            copySession(session.filePath, sessionsProject.id)
-          }
-          onExport={exportHistorySession}
-          onDelete={deleteHistorySession}
-        />
+      </Suspense>
       )}
       <ConfigModal
         open={configOpen}
@@ -5406,72 +5524,6 @@ function UpdateModal(props: {
               {props.downloading ? t("update.downloading") : t("update.downloadInApp")}
             </button>
           )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function UpdateErrorModal(props: {
-  message: string;
-  releasesUrl: string;
-  onClose: () => void;
-  onOpenRelease: () => void;
-}) {
-  return (
-    <div className="modal-backdrop update-backdrop">
-      <section className="update-modal update-error-modal">
-        <div className="modal-header">
-          <strong>{t("update.checkFailedTitle")}</strong>
-          <CloseIconButton label={t("common.close")} onClick={props.onClose} />
-        </div>
-        <div className="update-body">
-          <p className="update-version-line">
-            {t("update.checkFailedDescription")}
-          </p>
-          <div className="update-error-detail">
-            {t("update.errorInfo", { message: props.message })}
-          </div>
-          <p className="update-asset-line">
-            {t("update.manualReleaseHint")}
-            <br />
-            <span>{props.releasesUrl}</span>
-          </p>
-        </div>
-        <div className="update-actions">
-          <button onClick={props.onClose}>{t("common.close")}</button>
-          <button className="primary" onClick={props.onOpenRelease}>
-            {t("update.openReleasePage")}
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function UpToDateModal(props: {
-  version: string;
-  releasesUrl: string;
-  onClose: () => void;
-  onOpenRelease: () => void;
-}) {
-  return (
-    <div className="modal-backdrop update-backdrop">
-      <section className="update-modal update-uptodate-modal">
-        <div className="modal-header">
-          <strong>{t("update.upToDateTitle")}</strong>
-          <CloseIconButton label={t("common.close")} onClick={props.onClose} />
-        </div>
-        <div className="update-body">
-          <p className="update-version-line">
-            {t("update.upToDateMessage", { version: props.version })}
-          </p>
-        </div>
-        <div className="update-actions">
-          <button onClick={props.onClose}>{t("common.close")}</button>
-          <button onClick={props.onOpenRelease}>
-            {t("update.openReleasePage")}
-          </button>
         </div>
       </section>
     </div>

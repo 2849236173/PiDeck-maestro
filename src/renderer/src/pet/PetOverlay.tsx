@@ -34,14 +34,22 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		const ctx = canvas.getContext("2d", { alpha: true });
 		if (!ctx) return;
 
-		const dpr = window.devicePixelRatio || 1;
-		const dw = canvas.clientWidth, dh = canvas.clientHeight;
-		const tw = dw * dpr, th = dh * dpr;
-		// 仅在尺寸变化时重置 Canvas（重置会清空内容，造成模式切换闪烁）
-		if (canvas.width !== tw || canvas.height !== th) {
-			canvas.width = tw;
-			canvas.height = th;
-		}
+		const syncCanvasSize = () => {
+			const dpr = window.devicePixelRatio || 1;
+			const cssWidth = Math.max(1, canvas.clientWidth);
+			const cssHeight = Math.max(1, canvas.clientHeight);
+			const pixelWidth = Math.round(cssWidth * dpr);
+			const pixelHeight = Math.round(cssHeight * dpr);
+			// Canvas 的 width/height 是整数像素；这里统一取整，避免高 DPI 下 float 对比
+			// 每帧都判定“尺寸变化”并重置 buffer，拖拽/点击时看起来会不断变大。
+			if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+				canvas.width = pixelWidth;
+				canvas.height = pixelHeight;
+			}
+			return { dpr, cssWidth, cssHeight };
+		};
+
+		syncCanvasSize();
 
 		const row = MODE_ROW[mode] ?? 0;
 		const totalFrames = MODE_FRAMES[mode] ?? 8;
@@ -74,6 +82,7 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 
 			const isErr = n.type === "error";
 			const textColor = isErr ? "#dc2626" : "#22c55e";
+			const { dpr, cssWidth: dw, cssHeight: dh } = syncCanvasSize();
 			const ps = dw / 160; // petScale
 			const fontSize = Math.round(14 * dpr * ps);
 			ctx.save();
@@ -118,14 +127,10 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		const loop = (now: number) => {
 			if (!alive) return;
 			rafId = requestAnimationFrame(loop);
-			// 每次帧前检查 canvas CSS 尺寸：当 PetWindow.resize 直接改变窗口时，
-			// React 不会触发重渲染，但 canvas 元素尺寸已变。此处同步 buffer 尺寸，
-			// 保证放大→缩小后图像正确缩放到新窗口，不会因 buffer 停留在放大态而截断。
-			const curDw = canvas.clientWidth, curDh = canvas.clientHeight;
-			const curDpr = window.devicePixelRatio || 1;
-			const curTw = curDw * curDpr, curTh = curDh * curDpr;
-			if (canvas.width !== curTw || canvas.height !== curTh) { canvas.width = curTw; canvas.height = curTh; }
-			if (dragRef.current) { lastT = now; return; }
+			// 每帧都先同步真实 CSS 尺寸；拖拽只冻结动画时间推进，不冻结 canvas 尺寸。
+			// 否则点击/拖拽期间窗口或 DPI 尺寸变化会让 buffer 留在旧比例，出现越拖越大的错觉。
+			syncCanvasSize();
+			if (dragRef.current) { lastT = now; tick(); return; }
 			const delta = now - lastT;
 			lastT = now;
 

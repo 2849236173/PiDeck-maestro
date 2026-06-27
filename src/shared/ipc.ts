@@ -60,6 +60,18 @@ export const ipcChannels = {
 	logsList: "logs:list",
 	logsClear: "logs:clear",
 	logsOpenFolder: "logs:open-folder",
+	/** 获取 app 日志文件总大小 */
+	logsSize: "logs:get-size",
+	/** 获取 RPC 日志文件总大小 */
+	rpcLogsGetSize: "rpc-logs:get-size",
+	/** 从文件读取 RPC 日志 */
+	rpcLogsGet: "rpc-logs:get",
+	/** 清空 RPC 日志 */
+	rpcLogsClear: "rpc-logs:clear",
+	rpcLoggingSet: "rpc-logs:logging-set",
+	rpcLoggingGet: "rpc-logs:logging-get",
+	rpcLogsOpenFile: "rpc-logs:open-file",
+
 	appWindowMinimize: "app:window-minimize",
 	appWindowToggleMaximize: "app:window-toggle-maximize",
 	appWindowToggleAlwaysOnTop: "app:window-toggle-always-on-top",
@@ -163,6 +175,8 @@ export const ipcChannels = {
 	petSetId: "pet:set-id",
 	/** 宠物窗 → 主进程：拖拽移动窗口位置 */
 	petMoveWindow: "pet:move-window",
+	/** 宠物窗 → 主进程：拖拽相对位移（连续 screenX 差值，避免 DPI 坐标单位混用） */
+	petMoveBy: "pet:move-by",
 	/** 宠物窗 → 主进程：点击宠物跳转活跃 Agent */
 	petFocusAgent: "pet:focus-agent",
 	/** 主进程 → 主窗口：点击宠物后通知主窗切换到活跃 Agent tab */
@@ -181,6 +195,10 @@ export const ipcChannels = {
 	petTease: "pet:tease",
 	/** 宠物窗 → 主进程：拖拽起止通知（开始时暂停巡游，避免松手后 tick 命中反向边界瞬移） */
 	petDragState: "pet:drag-state",
+	/** 宠物窗 → 主进程：React 已挂载且 IPC 监听器已注册，主进程可安全推送初始状态 */
+	petReady: "pet:ready",
+	/** 宠物窗 → 主进程：请求显示右键上下文菜单 */
+	petContextMenu: "pet:context-menu",
 
 	// ── 调试工具 ──
 	/** 设置面板 → 主进程：发送测试通知（调试弹窗样式） */

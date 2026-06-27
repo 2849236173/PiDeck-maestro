@@ -34,7 +34,10 @@ async function savePos(bounds: { x: number; y: number }) {
 
 export class PetWindow {
 	private win: BrowserWindow | null = null;
+	/** 宠物窗口的业务目标尺寸；移动时不能信任当前 bounds，避免透明窗拖动后尺寸漂移被继续保留。 */
+	private targetSize = { width: BASE_W, height: BASE_H };
 	/** 位置持久化防抖：巡游每 50ms 移动一次，避免高频写盘拖慢主进程 */
+	private sizeGuardTimer: NodeJS.Timeout | null = null;
 	private saveTimer: NodeJS.Timeout | null = null;
 	private pendingPos: { x: number; y: number } | null = null;
 
@@ -45,14 +48,21 @@ export class PetWindow {
 		if (this.exists) return this.win!;
 
 		const w = Math.round(BASE_W * scale), h = Math.round(BASE_H * scale);
+		this.targetSize = { width: Math.max(w, 1), height: Math.max(h, 1) };
 		const caps = detectPetWindowCaps();
 		const isMac = process.platform === "darwin";
 
 		const persisted = await loadPos();
+		// 若保存位置匹配某个显示器，以该显示器计算落点；否则（多屏热插拔/位置越界）用主显示器
 		const display = screen.getDisplayMatching(persisted ? { x: persisted.x, y: persisted.y, width: w, height: h } : { x: 0, y: 0, width: w, height: h });
 		const wa = display.workArea;
-		const x = persisted?.x ?? wa.x + wa.width - w - 24;
-		const y = persisted?.y ?? wa.y + wa.height - h - 24;
+		// 有保存位置时，钳制到 workArea 内确保窗口完全可见，避免多屏热插拔后宠物落在屏幕外
+		const maxX = wa.x + wa.width - w - 8;
+		const maxY = wa.y + wa.height - h - 8;
+		const rawX = persisted?.x ?? wa.x + wa.width - w - 24;
+		const rawY = persisted?.y ?? wa.y + wa.height - h - 24;
+		const x = Math.round(Math.min(maxX, Math.max(wa.x, rawX)));
+		const y = Math.round(Math.min(maxY, Math.max(wa.y, rawY)));
 
 		this.win = new BrowserWindow({
 			width: w, height: h, x, y,
@@ -90,21 +100,68 @@ export class PetWindow {
 		const url = is.dev && process.env.ELECTRON_RENDERER_URL ? `${process.env.ELECTRON_RENDERER_URL}/pet.html` : join(__dirname, "../renderer/pet.html");
 		await (is.dev && process.env.ELECTRON_RENDERER_URL ? this.win.loadURL(url) : this.win.loadFile(url));
 
+		// 启动尺寸校正守护（每 5 秒检查），解决透明窗口在部分平台拖拽后尺寸漂移
+		this.startSizeGuard();
+
 		if (isMac) this.win.showInactive();
 		return this.win;
 	}
 
 	destroy() {
+		this.stopSizeGuard();
 		if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
-		this.pendingPos = null;
+		// 销毁前先保存挂起的位置，否则设置页开关后重开可能回到默认位置
+		if (this.pendingPos) {
+			void savePos(this.pendingPos);
+			this.pendingPos = null;
+		}
 		if (this.win && !this.win.isDestroyed()) this.win.destroy();
 		this.win = null;
 	}
 
 	moveTo(x: number, y: number) {
 		if (!this.exists) return;
-		this.win!.setPosition(Math.round(x), Math.round(y));
+		// 透明/无边框窗口在高频移动时，当前 bounds 可能已经被系统拖拽/合成器误放大。
+		// 因此移动时永远使用业务目标尺寸，而不是 this.win.getSize() 读到的漂移尺寸。
+		this.win!.setBounds({
+			x: Math.round(x),
+			y: Math.round(y),
+			width: this.targetSize.width,
+			height: this.targetSize.height,
+		});
 		void savePos({ x, y });
+	}
+
+	/** 将当前窗口拉回业务目标尺寸，用于拖拽结束后纠正系统合成器造成的尺寸漂移。 */
+	ensureTargetSize() {
+		if (!this.exists) return;
+		const [x, y] = this.win!.getPosition();
+		this.win!.setBounds({
+			x,
+			y,
+			width: this.targetSize.width,
+			height: this.targetSize.height,
+		});
+	}
+
+	/** 启动定时校正：每 5 秒检查一次窗口尺寸，偏离目标尺寸时强制纠正，
+	 *  解决某些平台透明窗口拖拽后尺寸漂移问题。 */
+	startSizeGuard() {
+		this.stopSizeGuard();
+		this.sizeGuardTimer = setInterval(() => {
+			if (!this.exists) { this.stopSizeGuard(); return; }
+			const [w, h] = this.win!.getSize();
+			if (w !== this.targetSize.width || h !== this.targetSize.height) {
+				this.ensureTargetSize();
+			}
+		}, 5000);
+	}
+
+	stopSizeGuard() {
+		if (this.sizeGuardTimer) {
+			clearInterval(this.sizeGuardTimer);
+			this.sizeGuardTimer = null;
+		}
 	}
 
 	setAlwaysOnTop(v: boolean) { if (this.exists) this.win!.setAlwaysOnTop(v, "floating"); }
@@ -112,10 +169,15 @@ export class PetWindow {
 	resize(scale: number) {
 		if (!this.exists) return;
 		const w = Math.round(BASE_W * scale), h = Math.round(BASE_H * scale);
-		this.win!.setSize(w, h);
-		const [x, y] = this.win!.getPosition();
-		const wa = screen.getDisplayMatching({ x, y, width: w, height: h }).workArea;
-		this.win!.setPosition(Math.min(x, wa.x + wa.width - w - 8), Math.min(y, wa.y + wa.height - h - 8));
+		this.targetSize = { width: Math.max(w, 1), height: Math.max(h, 1) };
+		const [cx, cy] = this.win!.getPosition();
+		const wa = screen.getDisplayMatching({ x: cx, y: cy, width: w, height: h }).workArea;
+		// 使用 setBounds（含当前位置）替代 setSize，避免缩小尺寸时在 resizable:false 窗口上失效
+		this.win!.setBounds({ x: cx, y: cy, width: this.targetSize.width, height: this.targetSize.height });
+		// 缩小后需要调整位置，确保窗口不超出屏幕边界
+		const nx = Math.min(cx, wa.x + wa.width - w - 8);
+		const ny = Math.min(cy, wa.y + wa.height - h - 8);
+		if (nx !== cx || ny !== cy) this.moveTo(nx, ny);
 	}
 
 	show() { if (this.exists) process.platform === "darwin" ? this.win!.showInactive() : this.win!.show(); }

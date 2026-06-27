@@ -221,6 +221,22 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.logsList, query ?? {}) as Promise<AppLogEntry[]>,
 		clear: () => ipcRenderer.invoke(ipcChannels.logsClear) as Promise<void>,
 		openFolder: () => ipcRenderer.invoke(ipcChannels.logsOpenFolder) as Promise<void>,
+		getSize: () =>
+			ipcRenderer.invoke(ipcChannels.logsSize) as Promise<number>,
+	},
+	rpcLogs: {
+		getSize: (agentId?: string) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsGetSize, agentId) as Promise<number>,
+		get: (options?: { agentId?: string; days?: number; limit?: number }) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsGet, options) as Promise<Array<{ id: string; agentId: string; direction: string; summary: string; time: number; data?: unknown }>>,
+		clear: (agentId?: string) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsClear, agentId) as Promise<void>,
+		setLogging: (agentId: string, enabled: boolean) =>
+			ipcRenderer.invoke(ipcChannels.rpcLoggingSet, agentId, enabled) as Promise<boolean>,
+		getLogging: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.rpcLoggingGet, agentId) as Promise<boolean>,
+		openFile: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsOpenFile, agentId) as Promise<void>,
 	},
 	app: {
 		info: () => ipcRenderer.invoke(ipcChannels.appInfo) as Promise<AppInfo>,
@@ -535,6 +551,13 @@ const api = {
 		/** 通知主进程拖拽起止：开始时暂停巡游，结束时若处于 idle 则恢复巡游 */
 		setDragging: (dragging: boolean) =>
 			ipcRenderer.invoke(ipcChannels.petDragState, dragging) as Promise<void>,
+		/** 拖拽相对位移（连续 screenX 差值），主进程读取当前窗口位置 + 增量 */
+		moveBy: (delta: { dx: number; dy: number }) =>
+			ipcRenderer.invoke(ipcChannels.petMoveBy, delta) as Promise<void>,
+		/** 通知主进程：宠物窗 React 已挂载，IPC 监听器已注册，可以安全推送初始状态 */
+		ready: () => ipcRenderer.send(ipcChannels.petReady),
+		/** 右键上下文菜单 */
+		contextMenu: () => ipcRenderer.invoke(ipcChannels.petContextMenu) as Promise<void>,
 	},
 	terminal: {
 		list: (agentId: string) =>

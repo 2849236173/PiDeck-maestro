@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow } from "electron";
+import { ipcMain, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import type { AgentManager } from "../pi/AgentManager";
 import type { SettingsStore } from "../settings/SettingsStore";
 import type { AgentTab, AppSettings, PetManifest } from "../../shared/types";
@@ -26,6 +26,7 @@ export class PetSystem {
 		this.patrol = new PetPatrol(
 			() => this.petWindow.window,
 			() => this.deps.settingsStore.get().petPatrolPauseMin ?? 5,
+			(x, y) => this.petWindow.moveTo(x, y),
 		);
 		this.bridge = new PetStateBridge(
 			() => this.petWindow.window,
@@ -41,12 +42,14 @@ export class PetSystem {
 		const s = this.deps.settingsStore.get();
 		if (s.petEnabled) {
 			await this.petWindow.create(s.petScale ?? 1);
-			this.pushCaps();
-			// 延迟推送聚合态与当前 sprite，让宠物窗 React 先挂载并注册好 IPC 监听器。
-			// 无活跃 Agent → idle 待机；有活跃 Agent → running/waiting 等。
-			// hide 仅在应用退出/关闭宠物开关时发生。
-			setTimeout(() => this.bridge.pushNow(this.deps.agentManager.list()), 600);
-			setTimeout(() => void this.pushCurrentSprite(), 600);
+			// 延迟 600ms 兜底推送初始数据，等待宠物窗 React 挂载并注册 IPC 监听器。
+			// 立即发送会被新窗口丢弃（监听器尚未就绪）。React 初始态为 idle + null sprite，
+			// 即使首次推送丢失也显示降级绘制。主动 petReady 信号到后会再推一次以覆盖兜底。
+			setTimeout(() => {
+				this.pushCaps();
+				this.bridge.pushNow(this.deps.agentManager.list());
+				void this.pushCurrentSprite();
+			}, 600);
 		}
 	}
 
@@ -76,6 +79,12 @@ export class PetSystem {
 			await this.reactToSettings(prev, await settingsStore.update({ petId: id }));
 		});
 		ipcMain.handle(C.petMoveWindow, async (_e, pos: { x: number; y: number }) => this.petWindow.moveTo(pos.x, pos.y));
+		ipcMain.handle(C.petMoveBy, async (_e, delta: { dx: number; dy: number }) => {
+			if (!this.petWindow.exists) return;
+			const [x, y] = this.petWindow.window!.getPosition();
+			// ipcMain.handle 对同一通道是串行执行的，setPosition 是同步的，不会产生增量竞争
+			this.petWindow.moveTo(x + delta.dx, y + delta.dy);
+		});
 		ipcMain.handle(C.petPreviewMode, async (_e, mode: string) => {
 			const win = this.petWindow.window;
 			if (win && !win.isDestroyed()) win.webContents.send(C.petPreviewMode, mode);
@@ -112,8 +121,64 @@ export class PetSystem {
 		});
 
 		ipcMain.handle(C.petTease, () => this.bridge.tease());
-		// 拖拽起止：开始时停巡游，结束时若处于 idle 则恢复，避免松手后 tick 命中反向边界瞬移
-		ipcMain.handle(C.petDragState, (_e, dragging: boolean) => this.bridge.onDragState(!!dragging));
+		// 拖拽起止：开始时停巡游；结束时先纠正透明窗可能产生的尺寸漂移，再按 idle 状态恢复巡游。
+		ipcMain.handle(C.petDragState, (_e, dragging: boolean) => {
+			const isDragging = !!dragging;
+			this.bridge.onDragState(isDragging);
+			if (!isDragging) this.petWindow.ensureTargetSize();
+		});
+
+		// 宠物窗就绪信号：React 已挂载且 IPC 监听器已注册，安全推送初始数据
+		ipcMain.on(C.petReady, () => {
+			const win = this.petWindow.window;
+			if (!win || win.isDestroyed()) return;
+			this.pushCaps();
+			this.bridge.pushNow(this.deps.agentManager.list());
+			void this.pushCurrentSprite();
+		});
+
+		// 右键上下文菜单：关闭宠物 / 切换宠物
+		ipcMain.handle(C.petContextMenu, async () => {
+			const pets = await this.packageManager.list();
+			const currentId = settingsStore.get().petId;
+			const template: MenuItemConstructorOptions[] = [];
+
+			// 切换宠物子菜单
+			if (pets.length > 0) {
+				template.push({
+					label: "切换宠物",
+					submenu: pets.map((p) => ({
+						label: p.displayName ?? p.id,
+						type: "radio" as const,
+						checked: p.id === currentId,
+						click: async () => {
+							const prev = settingsStore.get();
+							const next = await settingsStore.update({ petId: p.id });
+							await this.reactToSettings(prev, next);
+						},
+					})),
+				});
+				template.push({ type: "separator" });
+			}
+
+			// 关闭宠物
+			template.push({
+				label: "关闭宠物",
+				click: async () => {
+					const prev = settingsStore.get();
+					const next = await settingsStore.update({ petEnabled: false });
+					await this.reactToSettings(prev, next);
+					// 通知主窗口刷新设置状态（如设置页已打开，同步显示 toggle 关闭）
+					const main = this.deps.getMainWindow();
+					if (main && !main.isDestroyed()) {
+						main.webContents.send(C.settingsApplyWindow, next);
+					}
+				},
+			});
+
+			const menu = Menu.buildFromTemplate(template);
+			menu.popup({});
+		});
 	}
 
 	// ── 设置响应 ──
@@ -123,11 +188,12 @@ export class PetSystem {
 		if (next.petEnabled !== prev.petEnabled) {
 			if (next.petEnabled) {
 				await this.petWindow.create(next.petScale ?? 1);
-				this.pushCaps();
-				// 延迟推送状态与 sprite，给新创建的宠物窗 React 挂载和 IPC 监听注册的时间。
-				// 立即发送会被新窗口丢弃（监听器尚未就绪），导致窗口永远 hidden+null sprite。
-				setTimeout(() => this.bridge.pushNow(this.deps.agentManager.list()), 500);
-				setTimeout(() => void this.pushCurrentSprite(), 500);
+				// 延迟 600ms 兜底推送，petReady 信号到后会再推一次覆盖兜底值
+				setTimeout(() => {
+					this.pushCaps();
+					this.bridge.pushNow(this.deps.agentManager.list());
+					void this.pushCurrentSprite();
+				}, 600);
 			} else {
 				this.patrol.stop();
 				this.petWindow.destroy();

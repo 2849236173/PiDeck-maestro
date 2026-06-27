@@ -257,6 +257,15 @@ export function createPreviewApi(): PiDesktopApi {
 			list: async () => [],
 			clear: async () => undefined,
 			openFolder: async () => undefined,
+			getSize: async () => 0,
+		},
+		rpcLogs: {
+			getSize: async () => 0,
+			get: async () => [],
+			clear: async () => undefined,
+			setLogging: async () => false,
+			getLogging: async () => false,
+			openFile: async () => undefined,
 		},
 		pi: {
 			check: async () => ({ 
@@ -531,6 +540,9 @@ export function createPreviewApi(): PiDesktopApi {
 			setEnabled: async () => undefined,
 			setId: async () => undefined,
 			moveWindow: async () => undefined,
+			moveBy: async () => undefined,
+			ready: () => undefined,
+			contextMenu: async () => undefined,
 			focusAgent: async () => undefined,
 			onSprite: noop,
 			onNotify: noop,

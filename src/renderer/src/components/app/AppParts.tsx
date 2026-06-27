@@ -2937,6 +2937,11 @@ function SessionsPanel(props: {
 							>
 								<div className="session-card-title">
 									<strong>{session.name || t("common.untitled")}</strong>
+									{session.source && session.source !== "pi" && (
+										<span className={`session-source-badge ${session.source}`}>
+											{t(`sessionSource.${session.source}` as any)}
+										</span>
+									)}
 									<small>
 										{new Date(session.updatedAt).toLocaleString()} ·{" "}
 										{t("drawer.sessionMessages", {
@@ -3486,6 +3491,7 @@ export function ProjectContextMenu(props: {
 	onImportCodexSessions: () => void;
 	onImportClaudeSessions: () => void;
 	onImportOpenCodeSessions: () => void;
+	onFilterSessions: () => void;
 	onRemoveProject: () => void;
 }) {
 	return (
@@ -3505,6 +3511,9 @@ export function ProjectContextMenu(props: {
 				<button onClick={props.onImportOpenCodeSessions}>
 					{t("menu.importOpenCode")}
 				</button>
+				<hr className="context-separator" />
+				<button onClick={props.onFilterSessions}>{t("menu.filterSessions")}</button>
+				<hr className="context-separator" />
 				<button onClick={props.onRemoveProject}>{t("menu.removeProject")}</button>
 			</div>
 		</div>

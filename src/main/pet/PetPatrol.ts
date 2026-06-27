@@ -33,6 +33,7 @@ export class PetPatrol {
 	constructor(
 		private readonly getPetWindow: () => BrowserWindow | null,
 		private readonly getPauseMin: () => number = () => 5,
+		private readonly movePetWindow?: (x: number, y: number) => void,
 	) {}
 
 	get active(): boolean { return this.tickTimer !== null || this.pauseTimer !== null; }
@@ -139,12 +140,12 @@ export class PetPatrol {
 		if (this.direction === "right") {
 			const rightEdge = wa.x + wa.width - win.getSize()[0] - this.edgeMargin;
 			const nx = this.clampX(x + step, wa);
-			win.setPosition(nx, y);
+			this.movePetWindow?.(nx, y) ?? win.setPosition(nx, y);
 			if (x + step >= rightEdge) { this.endWalk(); return; }
 		} else {
 			const leftEdge = wa.x + this.edgeMargin;
 			const nx = this.clampX(x - step, wa);
-			win.setPosition(nx, y);
+			this.movePetWindow?.(nx, y) ?? win.setPosition(nx, y);
 			if (x - step <= leftEdge) { this.endWalk(); return; }
 		}
 	}

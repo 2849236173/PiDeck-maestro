@@ -1,5 +1,5 @@
 import { app, shell } from "electron";
-import { appendFile, mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AppLogEntry, AppLogLevel, AppLogQuery } from "../../shared/types";
 
@@ -29,7 +29,7 @@ export class AppLogger {
 	private readonly dir = join(app.getPath("userData"), "logs");
 	private writeQueue: Promise<void> = Promise.resolve();
 
-	async log(level: AppLogLevel, scope: string, message: string, detail?: unknown) {
+	log(level: AppLogLevel, scope: string, message: string, detail?: unknown) {
 		const entry: AppLogEntry = {
 			id: crypto.randomUUID(),
 			time: Date.now(),
@@ -38,13 +38,13 @@ export class AppLogger {
 			message,
 			detail: normalizeDetail(detail),
 		};
+		// 串行写入队列，fire-and-forget，绝不 await 阻塞调用方
 		this.writeQueue = this.writeQueue
 			.then(() => this.writeEntry(entry))
 			.catch((error) => {
-				// 日志系统不能反向影响主流程,写入失败只输出到控制台。
 				console.warn("Failed to write app log:", error);
 			});
-		await this.writeQueue;
+		return this.writeQueue;
 	}
 
 	debug(scope: string, message: string, detail?: unknown) {
@@ -108,6 +108,18 @@ export class AppLogger {
 				.map((file) => unlink(join(this.dir, file)).catch(() => undefined)),
 		);
 		await this.info("logs", "Logs cleared");
+	}
+
+	/** 计算所有应用日志文件的总字节数 */
+	async getSize(): Promise<number> {
+		await mkdir(this.dir, { recursive: true });
+		const files = (await readdir(this.dir))
+			.filter((file) => /^app-\d{4}-\d{2}-\d{2}\.log$/.test(file));
+		let total = 0;
+		for (const file of files) {
+			try { total += (await stat(join(this.dir, file))).size; } catch { /* 单个文件统计失败不影响整体 */ }
+		}
+		return total;
 	}
 
 	async openFolder() {

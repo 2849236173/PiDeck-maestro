@@ -627,13 +627,19 @@ function ConfigModalContent(props: ConfigModalProps) {
 		});
 	};
 
-	const handleAddAuth = () => {
-		if (!newAuthName.trim()) return;
+	/**
+	 * 添加认证条目。
+	 * name 和 key 从 AuthTab 供应商选择弹窗直接传入，
+	 * 避免 React 闭包中状态尚未刷新的问题，且支持弹窗内直接填写 API Key。
+	 */
+	const handleAddAuth = (name?: string, key?: string) => {
+		const finalName = name ?? newAuthName.trim();
+		if (!finalName) return;
 		setAuthData({
 			...authData,
-			[newAuthName.trim()]: { type: "api_key", key: "" },
+			[finalName]: { type: "api_key", key: key ?? "" },
 		});
-		setExpandedAuth(newAuthName.trim());
+		setExpandedAuth(finalName);
 		setAddingAuth(false);
 		setNewAuthName("");
 	};
@@ -1067,7 +1073,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							}}
 							onCancelAddAuth={() => setAddingAuth(false)}
 							onChangeNewAuthName={setNewAuthName}
-							onConfirmAddAuth={handleAddAuth}
+							onConfirmAddAuth={(name, key) => handleAddAuth(name, key)}
 							onDuplicateAuth={handleDuplicateAuth}
 						onDeleteAuths={handleDeleteAuths}
 						onDeleteAuth={handleDeleteAuth}

@@ -136,15 +136,15 @@
 
 :root[data-theme="light"][data-light-background="white"] {
 	--color-bg-app: #ffffff;
-	--color-bg-sidebar: #ffffff;
+	--color-bg-sidebar: #fcfcfc;
 	--color-bg-panel: #ffffff;
-	--color-bg-muted: #ffffff;
-	--color-bg-hover: #fafafa;
-	--color-bg-active: #f3fbf5;
-	--color-border-subtle: #eeeeee;
-	--color-border-strong: #e2e2e2;
-	--shadow-composer: 0 8px 28px rgba(20, 24, 31, 0.04);
-	--shadow-drawer: -8px 0 24px rgba(20, 24, 31, 0.03);
+	--color-bg-muted: #f5f5f5;
+	--color-bg-hover: #eaeaea;
+	--color-bg-active: #d4edda;
+	--color-border-subtle: #e2e2e2;
+	--color-border-strong: #d0d0d0;
+	--shadow-composer: 0 8px 28px rgba(20, 24, 31, 0.06);
+	--shadow-drawer: -8px 0 24px rgba(20, 24, 31, 0.06);
 }
 
 :root[data-theme="light"][data-light-background="warm"] {
@@ -1231,6 +1231,16 @@ body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-li
 	color: color-mix(in srgb, var(--color-accent) 58%, var(--color-text-secondary));
 	font-size: var(--font-size-micro);
 }
+.filter-indicator {
+	margin-left: 6px;
+	color: var(--color-accent);
+	flex-shrink: 0;
+	cursor: pointer;
+}
+.filter-indicator:hover {
+	color: var(--color-accent-hover, var(--color-accent));
+	opacity: 0.85;
+}
 .project-fold {
 	display: none;
 }
@@ -1372,6 +1382,28 @@ body:not(.is-list-resizing) .list-collapsed:not(.list-hover-suppressed) .chat-li
 .session-node-marker {
 	display: none;
 }
+.session-source-badge {
+	margin-left: 6px;
+	padding: 0 5px;
+	border-radius: var(--radius-sm);
+	font-size: var(--font-size-micro);
+	line-height: var(--line-height-micro);
+	font-family: var(--font-family-business);
+	font-weight: 500;
+	white-space: nowrap;
+}
+.session-source-badge.codex {
+	color: #fff;
+	background: #6366f1;
+}
+.session-source-badge.claude {
+	color: #fff;
+	background: #d97706;
+}
+.session-source-badge.opencode {
+	color: #fff;
+	background: #059669;
+}
 .session-row.active .conversation-title strong {
 	color: var(--color-text-primary);
 	font-weight: 600;
@@ -1485,6 +1517,17 @@ body.is-terminal-resizing {
 	white-space: nowrap;
 	min-width: 0;
 	flex: 1;
+}
+.chat-title-row .chat-path .chat-agent-id {
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-caption);
+	line-height: var(--line-height-caption);
+	font-weight: 400;
+	flex-shrink: 0;
+	margin-left: var(--space-3);
+	font-family: var(--font-family-business);
+	cursor: default;
+	opacity: 0.75;
 }
 .chat-header strong {
 	display: block;
@@ -2973,6 +3016,28 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	max-height: 360px;
 	overflow: auto;
 }
+/* 流式思考卡片：实时展示推理过程 */
+.thinking-card.streaming {
+	border-top: 1px solid var(--color-accent);
+	margin-top: 0;
+	border-color: var(--color-accent);
+}
+.thinking-card.streaming .thinking-card-content {
+	max-height: 240px;
+	background: var(--color-bg-hover);
+	border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+/* 闪烁光标：表示推理仍在进行中 */
+.thinking-card.streaming .thinking-card-content::after {
+	content: "█";
+	animation: thinking-cursor-blink 1s step-end infinite;
+	color: var(--color-accent);
+	margin-left: 2px;
+}
+@keyframes thinking-cursor-blink {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0; }
+}
 
 /* ---------- 流式等待：ThinkingIndicator ---------- */
 .thinking-indicator {
@@ -3017,6 +3082,13 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 .thinking-indicator-label {
 	font-family: var(--font-family-base);
+}
+/* 工具执行中变体：琥珀色区分于思考/响应的强调色 */
+.thinking-indicator[data-kind="executing"] {
+	border-color: var(--color-warning, #d97706);
+}
+.thinking-indicator[data-kind="executing"] .thinking-indicator-dots span {
+	background: var(--color-warning, #d97706);
 }
 
 /* ---------- 用户消息：UserBubble（右对齐窄气泡） ---------- */
@@ -3215,13 +3287,14 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 .markdown-body p {
 	margin: 0 0 8px;
+	white-space: pre-wrap;
 }
 .markdown-body ul,
 .markdown-body ol {
 	box-sizing: border-box;
 	margin: 6px 0 10px;
 	padding-left: 1.45em;
-	list-style-position: inside;
+	list-style-position: outside;
 }
 .markdown-body li {
 	padding-left: 0.2em;
@@ -4051,9 +4124,14 @@ body.is-composer-resizing .composer-resize-handle::after {
 	cursor: pointer;
 }
 .session-card-title {
-	display: grid;
-	gap: 2px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
 	min-width: 0;
+}
+.session-card-title > small {
+	width: 100%;
 }
 .session-card-actions {
 	display: flex;
@@ -4562,8 +4640,42 @@ body.is-composer-resizing .composer-resize-handle::after {
 }
 .context-menu button:disabled {
 	color: var(--color-text-tertiary);
-	cursor: wait;
+	cursor: not-allowed;
 	opacity: 0.68;
+}
+.context-separator {
+	margin: 3px 8px;
+	border: none;
+	border-top: 1px solid var(--color-border-subtle);
+}
+.filter-menu {
+	padding: 6px 0;
+	min-width: 160px;
+}
+.filter-menu-header {
+	padding: 4px 12px 8px;
+	font-size: var(--font-size-caption);
+	color: var(--color-text-tertiary);
+	font-weight: 500;
+	border-bottom: 1px solid var(--color-border-subtle);
+	margin-bottom: 4px;
+}
+.filter-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 12px;
+	cursor: pointer;
+	font-size: var(--font-size-control);
+	color: var(--color-text-secondary);
+	transition: background 0.1s;
+}
+.filter-menu-item:hover {
+	background: var(--color-bg-hover);
+}
+.filter-menu-item input[type="checkbox"] {
+	margin: 0;
+	accent-color: var(--color-accent);
 }
 .codex-import-modal {
 	width: min(920px, calc(100vw - 56px));
@@ -5036,12 +5148,12 @@ body.is-composer-resizing .composer-resize-handle::after {
 .session-status {
 	display: flex;
 	gap: var(--space-1);
-	flex-wrap: nowrap;
+	flex-wrap: wrap;
 	margin-top: 0;
 	margin-bottom: 0;
 	color: var(--color-text-tertiary);
 	font-size: var(--font-size-micro);
-	overflow: hidden;
+	overflow: visible;
 }
 .session-status span {
 	min-width: 0;
@@ -5071,6 +5183,8 @@ body.is-composer-resizing .composer-resize-handle::after {
 	background: color-mix(in srgb, var(--color-success) 8%, var(--color-bg-panel));
 }
 .session-status .cache-chip {
+	max-width: none;
+	flex: 0 0 auto;
 	color: var(--color-purple);
 	background: color-mix(in srgb, var(--color-purple) 8%, var(--color-bg-panel));
 }
@@ -5173,9 +5287,14 @@ body.is-composer-resizing .composer-resize-handle::after {
 	color: var(--color-warning);
 	background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-panel));
 	cursor: wait;
+	animation: compact-pulse 1.2s ease-in-out infinite;
 }
 .composer-toolbar button:disabled.compacting {
 	opacity: 0.7;
+}
+@keyframes compact-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.65; }
 }
 
 /* ---- 输入框命令模式指示 ---- */
@@ -7322,6 +7441,23 @@ a.config-btn {
 	padding-top: 12px;
 	border-top: 1px solid var(--color-border-subtle);
 }
+.config-auth-selector-key {
+	margin-top: 10px;
+	padding: 12px;
+	border-radius: var(--radius-sm);
+	background: var(--color-bg-hover);
+	border: 1px solid var(--color-border-subtle);
+}
+.config-auth-selector-key label {
+	display: block;
+	font-size: var(--font-size-caption);
+	font-weight: 500;
+	color: var(--color-text-secondary);
+	margin-bottom: 6px;
+}
+.config-auth-selector-key .config-secret-input {
+	width: 100%;
+}
 .config-auth-selector-actions {
 	display: flex;
 	align-items: center;
@@ -8059,6 +8195,23 @@ a.config-btn {
 	gap: 6px;
 	flex-shrink: 0;
 }
+.rpc-log-autoscroll {
+	font-size: var(--font-size-xs);
+	white-space: nowrap;
+	color: var(--color-text-hint);
+	cursor: pointer;
+	border: 1px solid var(--rpc-log-border);
+	background: var(--rpc-log-input-bg);
+	color: var(--rpc-log-text);
+	border-radius: var(--radius-md);
+	padding: 4px 8px;
+	font-size: var(--font-size-caption);
+}
+.rpc-log-autoscroll.active {
+	border-color: var(--color-info);
+	color: var(--color-info);
+}
+
 .rpc-log-toolbar input {
 	flex: 1;
 	min-width: 0;
@@ -8131,10 +8284,24 @@ a.config-btn {
 	white-space: pre-wrap;
 	word-break: break-all;
 }
+.rpc-log-loading {
+	padding: 40px;
+	text-align: center;
+	color: var(--rpc-log-muted);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
 .rpc-log-empty {
 	padding: 40px;
 	text-align: center;
 	color: var(--rpc-log-muted);
+}
+.setting-inline-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
 }
 
 /* 调试按钮 */

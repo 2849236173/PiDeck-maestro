@@ -18,6 +18,8 @@ import { PiProcess } from "./PiProcess";
 import { formatBashToolMessage } from "./bashResult";
 import type { SettingsStore } from "../settings/SettingsStore";
 import type { ConfigManager } from "../config/ConfigManager";
+import type { RpcLogger } from "../logging/RpcLogger";
+import type { AppLogger } from "../logging/AppLogger";
 
 export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
@@ -33,16 +35,22 @@ export class AgentManager {
 	private readonly retryStatusMessageIds = new Map<string, string>();
 	/** 同一历史会话正在创建 Agent 时共享同一个 Promise，避免快速重复点击/IPC 竞态创建多个进程。 */
 	private readonly creatingSessionAgents = new Map<string, Promise<AgentTab>>();
+	/** 记录每个 agent 当前执行的工具名称，无工具时为 null */
+	private readonly toolExecutingByAgent = new Map<string, string | null>();
 	/** 本地事件监听器（用于 FeishuBridge 等主进程内部订阅） */
 	private readonly localEventListeners = new Set<(agentId: string, event: unknown) => void>();
 	/** 状态变更监听器（用于 PetStateBridge 等主进程内部模块订阅 AgentTab[] 聚合状态） */
 	private readonly stateListeners = new Set<(tabs: AgentTab[]) => void>();
+	/** 开启了 RPC 日志记录的 agent id 集合 */
+	private readonly rpcLoggingAgents = new Set<string>();
 
 	constructor(
 		private readonly getProject: (id: string) => Project | undefined,
 		private readonly getWindow: () => BrowserWindow | null,
 		private readonly settingsStore: SettingsStore,
 		private readonly configManager: ConfigManager,
+		private readonly rpcLogger?: RpcLogger,
+		private readonly appLogger?: AppLogger,
 	) {}
 
 	list() {
@@ -64,10 +72,9 @@ export class AgentManager {
 		const response = await runtime.process.client.request({
 			type: "get_messages",
 		});
-		const messages = this.convertAgentMessages(
-			agentId,
-			(response.data as { messages?: unknown[] } | undefined)?.messages ?? [],
-		);
+		const rawMessages = (response.data as { messages?: unknown[] } | undefined)?.messages ?? [];
+		const trimmed = this.trimHistoryMessages(rawMessages);
+		const messages = this.convertAgentMessages(agentId, trimmed);
 		this.messages.set(agentId, messages);
 		this.refreshAutoTitle(agentId);
 		this.emit(ipcChannels.agentsMessage, { agentId, messages });
@@ -192,12 +199,16 @@ export class AgentManager {
 		process.on("stderr", (text) =>
 			this.emit(ipcChannels.agentsLog, { agentId: id, text }),
 		);
-		process.on("protocol-error", (line) =>
+		process.on("protocol-error", (line) => {
 			this.emit(ipcChannels.agentsLog, {
 				agentId: id,
 				text: `Protocol error: ${line}`,
-			}),
-		);
+			});
+			this.appLogger?.error("agent", `Protocol error: ${(line as string)?.slice(0, 200)}`, {
+				agentId: id,
+				project: project.path,
+			});
+		});
 		// 转发 RPC 日志到前端，用于调试面板展示请求/响应/事件
 		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
 			const data = entry.data as Record<string, any>;
@@ -224,12 +235,19 @@ export class AgentManager {
 					summary = `← message_update.${evt}`;
 				} else summary = `← ${type}`;
 			}
-			this.emit(ipcChannels.agentsRpcLog, {
+			const logEntry = {
+				id: randomUUID(),
 				agentId: id,
 				direction: entry.direction,
 				summary,
 				data,
-			});
+				time: Date.now(),
+			};
+			this.emit(ipcChannels.agentsRpcLog, logEntry);
+			// 只有用户手动开启 RPC 日志记录的 agent 才落盘
+			if (this.rpcLoggingAgents.has(id)) {
+				this.rpcLogger?.push(logEntry);
+			}
 		});
 		process.on("exit", () => {
 			tab.status = "closed";
@@ -238,6 +256,10 @@ export class AgentManager {
 		process.on("error", (error) => {
 			tab.status = "error";
 			this.addMessage(id, "error", error.message);
+			this.appLogger?.error("agent", "Pi process error", {
+				agentId: id,
+				error: error instanceof Error ? error.message : String(error),
+			});
 			this.emitState();
 		});
 
@@ -262,11 +284,53 @@ export class AgentManager {
 				.catch(() => undefined);
 		} catch (error) {
 			tab.status = "error";
-			this.addMessage(
-				id,
-				"error",
-				error instanceof Error ? error.message : String(error),
-			);
+			const rawMessage = error instanceof Error ? error.message : String(error);
+			// 构建丰富的错误诊断信息
+			const diag = process.getDiagnostics();
+			let enriched = rawMessage;
+			if (diag) {
+				const lines: string[] = [];
+				// 退出码
+				if (diag.exitCode !== null) {
+					lines.push(`退出码: ${diag.exitCode}${diag.exitSignal ? ` (signal: ${diag.exitSignal})` : ""}`);
+				}
+				// stderr 输出（截取末尾最有用的部分）
+				const stderrText = diag.stderr.join("").trim();
+				if (stderrText) {
+					// 只保留末尾 600 字符，避免刷屏
+					const snippet = stderrText.length > 600 ? "…" + stderrText.slice(-600) : stderrText;
+					lines.push(`进程错误输出:\n${snippet}`);
+				}
+				// pi 路径与版本检测
+				lines.push(`pi 路径: ${diag.command}`);
+				if (diag.customPiPath) {
+					lines.push(`自定义路径: ${diag.customPiPath}`);
+				}
+				lines.push(`工作目录: ${diag.cwd}`);
+				lines.push(`版本检测: ${diag.versionCheck ? "✓ 通过" : "✗ 失败"}`);
+
+				// 诊断与指引
+				lines.push("");
+				lines.push("━━━ 排查步骤 ━━━");
+				if (!diag.versionCheck) {
+					lines.push("1. 在终端执行 pi --version，确认 pi 是否已安装且路径正确");
+					lines.push("2. 如未安装，执行 npm install -g @earendil-works/pi-coding-agent");
+					lines.push("3. 安装后再次在终端执行 pi --version 验证");
+				} else if (diag.exitCode !== 0) {
+					lines.push("1. 在终端执行 pi --mode rpc 看是否能正常启动");
+					lines.push("2. 注意终端中的错误信息，根据异常信息修复");
+				} else if (!stderrText && diag.exitCode === null) {
+					lines.push("1. pi 进程可能尚未完成初始化，可在设置页增加 RPC 超时时间");
+				} else {
+					lines.push("1. 在终端执行 pi --mode rpc 确认 pi 能否正常启动");
+					lines.push("2. 检查设置中的 pi 路径是否正确");
+				}
+				lines.push("");
+				lines.push("如问题持续，可在 GitHub 提交 Issue 并附上以上信息。");
+
+				enriched = `⚠️ Pi RPC 启动失败\n\n${rawMessage}\n\n${lines.join("\n")}`;
+			}
+			this.addMessage(id, "error", enriched);
 		}
 
 		this.emitState();
@@ -554,6 +618,47 @@ export class AgentManager {
 		const stats = statsResponse.data as any;
 		const model = state?.model;
 		const tokens = stats?.tokens;
+		const inputTokens = this.pickNumber(
+			tokens?.input,
+			tokens?.inputTokens,
+			tokens?.prompt,
+			tokens?.promptTokens,
+			stats?.inputTokens,
+			stats?.usage?.input,
+		);
+		const outputTokens = this.pickNumber(
+			tokens?.output,
+			tokens?.outputTokens,
+			tokens?.completion,
+			tokens?.completionTokens,
+			stats?.outputTokens,
+			stats?.usage?.output,
+		);
+		const cacheRead = this.pickNumber(
+			tokens?.cacheRead,
+			tokens?.cache?.read,
+			stats?.cacheRead,
+			stats?.usage?.cacheRead,
+		);
+		const cacheWrite = this.pickNumber(
+			tokens?.cacheWrite,
+			tokens?.cache?.write,
+			stats?.cacheWrite,
+			stats?.usage?.cacheWrite,
+		);
+		const directCacheHitPercent = this.pickNumber(
+			tokens?.cacheHitPercent,
+			tokens?.cacheHitRate != null ? tokens.cacheHitRate * 100 : undefined,
+			stats?.cacheHitPercent,
+			stats?.cacheHitRate != null ? stats.cacheHitRate * 100 : undefined,
+		);
+		const computedCacheHitPercent =
+			inputTokens != null && cacheRead != null && inputTokens > 0
+				? (cacheRead / inputTokens) * 100
+				: undefined;
+		const cacheHitPercent = this.clampPercent(
+			directCacheHitPercent ?? computedCacheHitPercent,
+		);
 		return {
 			modelName: model?.name ?? model?.id,
 			provider: model?.provider,
@@ -561,14 +666,55 @@ export class AgentManager {
 			thinkingLevel: state?.thinkingLevel,
 			isStreaming: state?.isStreaming,
 			isCompacting: state?.isCompacting,
+			/** 工具执行状态从本地追踪，无需 Pi 进程查询 */
+			isExecutingTool: !!(this.toolExecutingByAgent.get(agentId)),
+			executingToolName: this.toolExecutingByAgent.get(agentId) ?? undefined,
 			contextTokens: stats?.contextUsage?.tokens,
 			contextWindow: stats?.contextUsage?.contextWindow ?? model?.contextWindow,
 			contextPercent: stats?.contextUsage?.percent,
-			cacheRead: tokens?.cacheRead,
-			cacheWrite: tokens?.cacheWrite,
-			cacheTotal: (tokens?.cacheRead ?? 0) + (tokens?.cacheWrite ?? 0),
+			inputTokens,
+			outputTokens,
+			cacheRead,
+			cacheWrite,
+			cacheTotal:
+				cacheRead != null || cacheWrite != null
+					? (cacheRead ?? 0) + (cacheWrite ?? 0)
+					: undefined,
+			cacheHitPercent,
 			cost: stats?.cost,
 		};
+	}
+
+	private pickNumber(...values: unknown[]) {
+		for (const value of values) {
+			if (typeof value === "number" && Number.isFinite(value)) return value;
+			if (typeof value === "string" && value.trim()) {
+				const parsed = Number(value);
+				if (Number.isFinite(parsed)) return parsed;
+			}
+		}
+		return undefined;
+	}
+
+	private clampPercent(value: number | undefined) {
+		if (value == null || !Number.isFinite(value)) return undefined;
+		return Math.max(0, Math.min(100, value));
+	}
+
+	private trimHistoryMessages(rawMessages: unknown[], maxMessages = 200) {
+		if (rawMessages.length <= maxMessages) return rawMessages;
+		const cutoff = rawMessages.length - maxMessages;
+		let start = cutoff;
+		for (let index = cutoff; index >= 0; index -= 1) {
+			const message = rawMessages[index] as { role?: unknown } | undefined;
+			if (message?.role === "user") {
+				start = index;
+				break;
+			}
+		}
+		// 历史恢复不能直接从固定条数截断：一轮会话里工具消息很多时，
+		// slice(-N) 会丢掉本轮用户提问，导致右侧定位缺失且列表从 AI 消息开始。
+		return rawMessages.slice(start);
 	}
 
 	async cycleModel(agentId: string) {
@@ -767,12 +913,28 @@ export class AgentManager {
 		);
 	}
 
+	/** 设置某 agent 的 RPC 日志记录开关 */
+	setRpcLogging(agentId: string, enabled: boolean) {
+		if (enabled) {
+			this.rpcLoggingAgents.add(agentId);
+		} else {
+			this.rpcLoggingAgents.delete(agentId);
+		}
+	}
+
+	/** 查询某 agent 是否开启了 RPC 日志记录 */
+	isRpcLogging(agentId: string): boolean {
+		return this.rpcLoggingAgents.has(agentId);
+	}
+
 	async stop(agentId: string) {
 		const runtime = this.agents.get(agentId);
 		if (!runtime) return;
 		const process = runtime.process;
 		this.agents.delete(agentId);
 		this.messages.delete(agentId);
+		// agent 关闭时自动关闭 RPC 日志记录
+		this.rpcLoggingAgents.delete(agentId);
 		process.stop();
 		this.emitState();
 	}
@@ -949,11 +1111,19 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_start") {
 			this.upsertToolMessage(agentId, typed, "running");
-			// 工具调用开始时确保 agent 状态为 running，保持 thinking bubble 显示
+			// 记录当前正在执行的工具名，用于前端准确展示“执行中”而非泛泛的“响应中”
+			this.toolExecutingByAgent.set(agentId, typed.toolName ?? "tool");
+			// 工具调用开始时确保 agent 状态为 running
 			if (runtime) {
 				runtime.tab.status = "running";
 				this.emitState();
 			}
+			// 推送运行时状态更新，使前端能立即知道工具正在执行
+			void this.getRuntimeState(agentId)
+				.then((state) =>
+					this.emit(ipcChannels.agentsRuntimeState, { agentId, state }),
+				)
+				.catch(() => undefined);
 		}
 
 		if (typed.type === "tool_execution_end") {
@@ -962,12 +1132,20 @@ export class AgentManager {
 				typed,
 				typed.isError ? "error" : "done",
 			);
+			// 清除工具执行状态
+			this.toolExecutingByAgent.set(agentId, null);
 			// 工具调用完成后保持 agent 状态为 running，等待后续的 agent_end 事件
 			// 这样在工具完成到 agent 生成回复之间，thinking bubble 仍然会显示
 			if (runtime) {
 				runtime.tab.status = "running";
 				this.emitState();
 			}
+			// 推送运行时状态更新
+			void this.getRuntimeState(agentId)
+				.then((state) =>
+					this.emit(ipcChannels.agentsRuntimeState, { agentId, state }),
+				)
+				.catch(() => undefined);
 		}
 
 		if (typed.type === "tool_execution_update") {

@@ -47,7 +47,7 @@ export function AuthTab(props: {
 	onStartAddAuth: () => void;
 	onCancelAddAuth: () => void;
 	onChangeNewAuthName: (name: string) => void;
-	onConfirmAddAuth: () => void;
+	onConfirmAddAuth: (name?: string, key?: string) => void;
 	onDuplicateAuth: (provider: string) => void;
 	onDeleteAuth: (provider: string) => void;
 	onDeleteAuths: (providers: string[]) => void;
@@ -59,6 +59,7 @@ export function AuthTab(props: {
 	const [selectingProvider, setSelectingProvider] = useState(false);
 	const [selectedProvider, setSelectedProvider] = useState("");
 	const [customProviderName, setCustomProviderName] = useState("");
+	const [newAuthKey, setNewAuthKey] = useState("");
 	const [showGuide, setShowGuide] = useState(false);
 	const [batchMode, setBatchMode] = useState(false);
 	const [selectedAuths, setSelectedAuths] = useState(new Set());
@@ -79,6 +80,7 @@ export function AuthTab(props: {
 							setSelectingProvider(true);
 							setSelectedProvider("");
 							setCustomProviderName("");
+							setNewAuthKey("");
 						}}
 						disabled={saving}
 					>
@@ -194,6 +196,15 @@ export function AuthTab(props: {
 							/>
 						</p>
 					</div>
+					{(selectedProvider || customProviderName.trim()) && (
+						<div className="config-auth-selector-key">
+							<label>{t("config.field.apiKey")}</label>
+							<SecretInput
+								value={newAuthKey}
+								onChange={setNewAuthKey}
+							/>
+						</div>
+					)}
 					<div className="config-auth-selector-actions">
 						{selectedProvider && presetProvider && (
 							<div className="config-auth-selector-info">
@@ -210,9 +221,8 @@ export function AuthTab(props: {
 							onClick={() => {
 								const finalName = customProviderName.trim() || selectedProvider;
 								if (!finalName) return;
-								// 调用原来的添加流程
-								props.onChangeNewAuthName(finalName);
-								props.onConfirmAddAuth();
+								// 直接传入 finalName 和 newAuthKey，添加后自动展开，用户只需点顶栏保存
+								props.onConfirmAddAuth(finalName, newAuthKey);
 								setSelectingProvider(false);
 							}}
 							disabled={!selectedProvider && !customProviderName.trim()}
