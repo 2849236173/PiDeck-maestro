@@ -471,7 +471,7 @@ export type CreateProjectSkillInput = {
 	description: string;
 };
 
-export type PiExtensionSummary = {
+	export type PiExtensionSummary = {
 	id: string;
 	source: string;
 	path?: string;
@@ -479,6 +479,8 @@ export type PiExtensionSummary = {
 	scope: "user" | "project" | "unknown";
 	/** PiDeck 内置扩展，不可卸载 */
 	builtIn?: boolean;
+	/** 是否启用（未在 disabledExtensions 列表中） */
+	enabled?: boolean;
 	currentVersion?: string;
 	latestVersion?: string;
 	hasUpdate?: boolean;

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
@@ -36,6 +36,11 @@ export class ExtensionManager {
 			}
 		}
 
+				// 读取 disabledExtensions 列表，标记扩展启用/禁用状态
+		const disabledExts = await this.getDisabledExtensions();
+		for (const ext of merged) {
+			ext.enabled = !disabledExts.has(ext.source);
+		}
 		return { extensions: merged, raw };
 	}
 
@@ -209,6 +214,33 @@ export class ExtensionManager {
 			if (diff !== 0) return diff;
 		}
 		return 0;
+	}
+
+	async setEnabled(source: string, enabled: boolean): Promise<void> {
+		const settingsPath = join(homedir(), ".pi", "agent", "settings.json");
+		let raw = "{}";
+		try { raw = await readFile(settingsPath, "utf8"); } catch {}
+		const settings = JSON.parse(raw);
+		const disabled: string[] = settings.disabledExtensions ?? [];
+		if (enabled) {
+			settings.disabledExtensions = disabled.filter((s) => s !== source);
+		} else {
+			if (!disabled.includes(source)) {
+				settings.disabledExtensions = [...disabled, source];
+			}
+		}
+		await writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+	}
+
+	private async getDisabledExtensions(): Promise<Set<string>> {
+		const settingsPath = join(homedir(), ".pi", "agent", "settings.json");
+		try {
+			const raw = await readFile(settingsPath, "utf8");
+			const settings = JSON.parse(raw);
+			return new Set<string>(settings.disabledExtensions ?? []);
+		} catch {
+			return new Set<string>();
+		}
 	}
 
 	private async runPi(args: string[], timeout: number, options: { offline?: boolean } = {}) {

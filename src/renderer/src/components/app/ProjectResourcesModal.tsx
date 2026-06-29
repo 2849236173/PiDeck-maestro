@@ -151,6 +151,21 @@ export function ProjectResourcesModal(props: {
 		}
 	};
 
+	const toggleExtension = async (extension: PiExtensionSummary) => {
+		const nextEnabled = extension.enabled !== false ? false : true;
+		try {
+			await api.toggleExtension(props.project.id, extension.path!, nextEnabled);
+			setData((prev) => ({
+				...prev,
+				extensions: prev.extensions.map((e) =>
+					e.id === extension.id ? { ...e, enabled: nextEnabled } : e
+				),
+			}));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
 	return (
 		<div className="modal-backdrop project-resources-backdrop" onClick={props.onClose}>
 			<section
@@ -275,11 +290,17 @@ export function ProjectResourcesModal(props: {
 								<div className="project-resource-info">
 									<div className="project-resource-title">
 										<strong>{extension.source}</strong>
+										<span className={`skill-state ${extension.enabled === false ? "disabled" : "enabled"}`}>
+											{extension.enabled !== false ? t("common.enabled") : t("common.disabled")}
+										</span>
 										<span className="skill-state enabled">{t("projectResources.projectScope")}</span>
 									</div>
 									<small>{extension.path}</small>
 								</div>
 								<div className="skill-card-actions project-resource-actions">
+									<button className="session-rename-button" onClick={() => void toggleExtension(extension)}>
+										{extension.enabled !== false ? t("common.disable") : t("common.enabled")}
+									</button>
 									<button className="session-rename-button danger" onClick={() => setDeleteTarget({ kind: "extension", item: extension })} disabled={!extension.path}>
 										{t("common.delete")}
 									</button>

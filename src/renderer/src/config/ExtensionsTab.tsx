@@ -6,6 +6,7 @@ type ExtensionsApi = {
 	list: () => Promise<PiExtensionListResult>;
 	uninstall: (source: string, scope?: "user" | "project" | "unknown") => Promise<void>;
 	install: (source: string) => Promise<string>;
+	toggle: (source: string, enabled: boolean) => Promise<void>;
 	update: () => Promise<PiCliUpdateResult>;
 };
 
@@ -72,6 +73,21 @@ export function ExtensionsTab(props: {
 	onUninstall: (extension: PiExtensionSummary) => void;
 }) {
 	const [installingSources, setInstallingSources] = useState<Set<string>>(() => new Set());
+	const [togglingSource, setTogglingSource] = useState<string | null>(null);
+
+	const handleToggle = async (extension: PiExtensionSummary) => {
+		if (togglingSource) return;
+		setTogglingSource(extension.source);
+		try {
+			const nextEnabled = extension.enabled !== false ? false : true;
+			await api.toggle(extension.source, nextEnabled);
+			props.onRefresh();
+		} catch (e) {
+			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+		} finally {
+			setTogglingSource(null);
+		}
+	};
 	const [updating, setUpdating] = useState<string | null>(null);
 	const [updateResult, setUpdateResult] = useState<PiCliUpdateResult | null>(null);
 	const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -232,6 +248,8 @@ export function ExtensionsTab(props: {
 								extension={extension}
 								uninstalling={props.uninstallingSource === extension.source}
 								onUninstall={props.onUninstall}
+								onToggle={handleToggle}
+								toggling={togglingSource === extension.source}
 							/>
 						))
 					)}
@@ -244,7 +262,9 @@ export function ExtensionsTab(props: {
 function ExtensionCard(props: {
 	extension: PiExtensionSummary;
 	uninstalling: boolean;
+	toggling?: boolean;
 	onUninstall: (extension: PiExtensionSummary) => void;
+	onToggle: (extension: PiExtensionSummary) => void;
 }) {
 	const { extension } = props;
 	const name = extension.source.replace(/^(?:npm|file|github|git):/i, "");
@@ -258,6 +278,9 @@ function ExtensionCard(props: {
 							{extension.builtIn && (
 								<span className="skill-state enabled">{t("common.builtIn")}</span>
 							)}
+							<span className={`skill-state ${extension.enabled === false ? "disabled" : "enabled"}`}>
+								{extension.enabled !== false ? t("common.enabled") : t("common.disabled")}
+							</span>
 							<span className="skill-state enabled">
 								{extension.scope === "project"
 									? t("common.project")
@@ -280,6 +303,13 @@ function ExtensionCard(props: {
 				</div>
 				{!extension.builtIn && (
 					<div className="session-card-actions skill-card-actions">
+						<button
+							className="session-rename-button"
+							disabled={props.toggling}
+							onClick={() => props.onToggle(extension)}
+						>
+							{props.toggling ? t("common.saving") : (extension.enabled !== false ? t("common.disable") : t("common.enabled"))}
+						</button>
 						<button
 							className="session-rename-button danger"
 							disabled={props.uninstalling}

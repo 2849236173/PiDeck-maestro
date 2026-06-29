@@ -88,6 +88,27 @@ export class ProjectResourceManager {
 		return this.readSkill(skill.path, this.skillLocations(project).find((l) => l.id === skill.sourceId) ?? this.skillLocations(project)[0], skill.type);
 	}
 
+	async toggleExtension(projectId: string, extensionPath: string, enabled: boolean): Promise<void> {
+		const project = this.requireProject(projectId);
+		this.assertInsideProject(project, extensionPath);
+		// 项目级扩展的禁用通过项目的 .pi/settings.json 中的 disabledExtensions 控制
+		const settingsFile = join(project.path, ".pi", "settings.json");
+		let raw = "{}";
+		try { raw = await readFile(settingsFile, "utf8"); } catch {}
+		const settings = JSON.parse(raw);
+		const disabled: string[] = settings.disabledExtensions ?? [];
+		// 使用扩展文件名/目录名作为标识（与 pi list 输出对齐）
+		const extName = extensionPath.split(/[\\/]/).pop() ?? extensionPath;
+		if (enabled) {
+			settings.disabledExtensions = disabled.filter((s) => s !== extName);
+		} else {
+			if (!disabled.includes(extName)) {
+				settings.disabledExtensions = [...disabled, extName];
+			}
+		}
+		await writeFile(settingsFile, JSON.stringify(settings, null, 2), "utf8");
+	}
+
 	async deleteExtension(projectId: string, extensionPath: string): Promise<void> {
 		const project = this.requireProject(projectId);
 		const extension = (await this.listExtensions(project)).find((item) => item.path === extensionPath);
@@ -158,15 +179,26 @@ export class ProjectResourceManager {
 		const extensionsDir = join(project.path, ".pi", "extensions");
 		const entries = await readdir(extensionsDir, { withFileTypes: true }).catch(() => []);
 		const result: PiExtensionSummary[] = [];
+		// 读取项目级 disabledExtensions
+		let disabledExts = new Set<string>();
+		try {
+			const raw = await readFile(join(project.path, ".pi", "settings.json"), "utf8");
+			const settings = JSON.parse(raw);
+			disabledExts = new Set(settings.disabledExtensions ?? []);
+		} catch {}
 		for (const entry of entries) {
 			if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name.endsWith(".d.ts")) continue;
 			const fullPath = join(extensionsDir, entry.name);
 			if (entry.isFile() && entry.name.endsWith(".ts")) {
-				result.push(this.toExtensionSummary(entry.name.slice(0, -3), fullPath));
+				const ext = this.toExtensionSummary(entry.name.slice(0, -3), fullPath);
+				ext.enabled = !disabledExts.has(ext.source);
+				result.push(ext);
 				continue;
 			}
 			if (entry.isDirectory() && existsSync(join(fullPath, "index.ts"))) {
-				result.push(this.toExtensionSummary(entry.name, fullPath));
+				const ext = this.toExtensionSummary(entry.name, fullPath);
+				ext.enabled = !disabledExts.has(ext.source);
+				result.push(ext);
 			}
 		}
 		return result.sort((a, b) => a.source.localeCompare(b.source));

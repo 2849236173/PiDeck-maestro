@@ -101,6 +101,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.projectResourcesDeleteSkill, projectId, skillPath) as Promise<void>,
 		deleteExtension: (projectId: string, extensionPath: string) =>
 			ipcRenderer.invoke(ipcChannels.projectResourcesDeleteExtension, projectId, extensionPath) as Promise<void>,
+		toggleExtension: (projectId: string, extensionPath: string, enabled: boolean) =>
+			ipcRenderer.invoke(ipcChannels.projectResourcesToggleExtension, projectId, extensionPath, enabled) as Promise<void>,
 		toggleSkill: (projectId: string, skillPath: string, enabled: boolean) =>
 			ipcRenderer.invoke(ipcChannels.projectResourcesToggleSkill, projectId, skillPath, enabled) as Promise<PiSkillSummary>,
 	},
@@ -308,6 +310,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.extensionsUninstall, source, scope) as Promise<void>,
 		install: (source: string) =>
 			ipcRenderer.invoke(ipcChannels.extensionsInstall, source) as Promise<string>,
+		toggle: (source: string, enabled: boolean) =>
+			ipcRenderer.invoke(ipcChannels.extensionsToggle, source, enabled) as Promise<void>,
 		update: () =>
 			ipcRenderer.invoke(ipcChannels.extensionsUpdate) as Promise<PiCliUpdateResult>,
 	},

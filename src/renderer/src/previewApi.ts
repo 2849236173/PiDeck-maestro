@@ -226,7 +226,8 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			deleteSkill: async () => undefined,
 			deleteExtension: async () => undefined,
-			toggleSkill: async (_projectId, _skillPath, enabled) => ({
+			toggleExtension: async () => undefined,
+		toggleSkill: async (_projectId, _skillPath, enabled) => ({
 				id: "project-pi:preview-toggle",
 				name: "preview-skill",
 				description: "",
@@ -420,6 +421,7 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			uninstall: async () => undefined,
 			install: async (_source: string) => "",
+			toggle: async () => undefined,
 			update: async () => ({
 				command: "pi update --extensions --no-approve",
 				output: "Preview mode: extensions update output",

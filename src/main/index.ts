@@ -1027,6 +1027,10 @@ function registerIpc() {
 		void appLogger.info("project-resource", "Project skill toggled", { projectId, skillPath, enabled });
 		return result;
 	});
+	ipcMain.handle(ipcChannels.projectResourcesToggleExtension, async (_event, projectId: string, extensionPath: string, enabled: boolean) => {
+		await projectResourceManager.toggleExtension(projectId, extensionPath, enabled);
+		void appLogger.info("project-resource", "Project extension toggled", { projectId, extensionPath, enabled });
+	});
 
 	ipcMain.handle(ipcChannels.filesList, async (_event, projectId: string) => {
 		const project = projectStore.get(projectId);
@@ -1404,6 +1408,10 @@ function registerIpc() {
 		const result = await extensionManager.install(source);
 		void appLogger.info("extension", "Extension installed", { source });
 		return result;
+	});
+	ipcMain.handle(ipcChannels.extensionsToggle, async (_event, source: string, enabled: boolean) => {
+		await extensionManager.setEnabled(source, enabled);
+		void appLogger.info("extension", "Extension toggled", { source, enabled });
 	});
 	ipcMain.handle(ipcChannels.extensionsUpdate, async () => {
 		const result = await extensionManager.updateExtensions();
