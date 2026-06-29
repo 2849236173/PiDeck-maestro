@@ -55,6 +55,7 @@ import type {
 	FeishuTestResult,
 	SendPromptInput,
 	CreatePiSkillInput,
+	CreateProjectSkillInput,
 } from "../shared/types";
 import { ProjectStore } from "./projects/ProjectStore";
 import { FileSystemService } from "./fs/FileSystemService";
@@ -73,6 +74,7 @@ import { TerminalSessionManager } from "./terminal/TerminalSessionManager";
 import { TelemetryService } from "./telemetry/TelemetryService";
 import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
+import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { AppLogger } from "./logging/AppLogger";
 import { RpcLogger } from "./logging/RpcLogger";
@@ -114,6 +116,7 @@ let agentManager: AgentManager;
 let configManager: ConfigManager;
 let skillManager: SkillManager;
 let extensionManager: ExtensionManager;
+let projectResourceManager: ProjectResourceManager;
 let webServiceManager: WebServiceManager;
 let terminalManager: TerminalSessionManager;
 let petSystem: PetSystem | null = null;
@@ -1001,6 +1004,29 @@ function registerIpc() {
 			return result;
 		},
 	);
+	ipcMain.handle(ipcChannels.projectResourcesList, async (_event, projectId: string) => {
+		return projectResourceManager.list(projectId);
+	});
+	ipcMain.handle(ipcChannels.projectResourcesCreateSkill, async (_event, input: CreateProjectSkillInput) => {
+		const result = await projectResourceManager.createSkill(input);
+		void appLogger.info("project-resource", "Project skill created", { projectId: input.projectId, name: result.name });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.projectResourcesDeleteSkill, async (_event, projectId: string, skillPath: string) => {
+		// 项目资源删除由 ProjectResourceManager 再次校验路径归属，避免 renderer 传入任意文件路径。
+		await projectResourceManager.deleteSkill(projectId, skillPath);
+		void appLogger.info("project-resource", "Project skill deleted", { projectId, skillPath });
+	});
+	ipcMain.handle(ipcChannels.projectResourcesDeleteExtension, async (_event, projectId: string, extensionPath: string) => {
+		// 项目级 extension 是自动发现的本地文件/目录，删除时仅移除项目 .pi/extensions 下对应资源。
+		await projectResourceManager.deleteExtension(projectId, extensionPath);
+		void appLogger.info("project-resource", "Project extension deleted", { projectId, extensionPath });
+	});
+	ipcMain.handle(ipcChannels.projectResourcesToggleSkill, async (_event, projectId: string, skillPath: string, enabled: boolean) => {
+		const result = await projectResourceManager.toggleSkill(projectId, skillPath, enabled);
+		void appLogger.info("project-resource", "Project skill toggled", { projectId, skillPath, enabled });
+		return result;
+	});
 
 	ipcMain.handle(ipcChannels.filesList, async (_event, projectId: string) => {
 		const project = projectStore.get(projectId);
@@ -1706,6 +1732,7 @@ app.whenReady().then(async () => {
 	configManager = new ConfigManager();
 	skillManager = new SkillManager();
 	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get());
+	projectResourceManager = new ProjectResourceManager((projectId) => projectStore.get(projectId));
 	agentManager = new AgentManager(
 		(id) => projectStore.get(id),
 		() => mainWindow,

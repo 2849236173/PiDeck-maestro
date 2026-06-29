@@ -22,7 +22,7 @@ export function SkillsTab(props: {
 	onCreate: () => void;
 	onToggle: (skill: PiSkillSummary, enabled: boolean) => void;
 	onDelete: (skill: PiSkillSummary) => void;
-	onOpenFolder: (skill: PiSkillSummary) => void;
+	onEdit: (skill: PiSkillSummary) => void;
 }) {
 	const { data } = props;
 	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -58,7 +58,7 @@ export function SkillsTab(props: {
 						<span>{t("config.name")}</span>
 						<input
 							value={props.newName}
-							placeholder="my-skill"
+							placeholder={t("config.skillNamePlaceholder")}
 							onChange={(event) => props.onChangeNewName(event.target.value)}
 						/>
 					</label>
@@ -109,7 +109,7 @@ export function SkillsTab(props: {
 					<span>{t("config.description")}</span>
 					<textarea
 						value={props.newDescription}
-						placeholder="Use when..."
+						placeholder={t("config.skillUseWhenPlaceholder")}
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
 					/>
 				</label>
@@ -132,7 +132,7 @@ export function SkillsTab(props: {
 							skill={skill}
 							onToggle={props.onToggle}
 							onDelete={props.onDelete}
-							onOpenFolder={props.onOpenFolder}
+							onEdit={props.onEdit}
 						/>
 					))
 				)}
@@ -145,7 +145,7 @@ function SkillCard(props: {
 	skill: PiSkillSummary;
 	onToggle: (skill: PiSkillSummary, enabled: boolean) => void;
 	onDelete: (skill: PiSkillSummary) => void;
-	onOpenFolder: (skill: PiSkillSummary) => void;
+	onEdit: (skill: PiSkillSummary) => void;
 }) {
 	const { skill } = props;
 	return (
@@ -173,9 +173,9 @@ function SkillCard(props: {
 				</div>
 				<div className="session-card-actions skill-card-actions">
 					<button className="session-rename-button" onClick={() => props.onToggle(skill, !skill.enabled)}>
-						{skill.enabled ? t("common.disabled") : t("common.enabled")}
+						{skill.enabled ? t("common.disable") : t("common.enabled")}
 					</button>
-					<button className="session-rename-button" onClick={() => props.onOpenFolder(skill)}>{t("common.open")}</button>
+					<button className="session-rename-button" onClick={() => props.onEdit(skill)}>{t("common.edit")}</button>
 					<button className="session-rename-button danger" onClick={() => props.onDelete(skill)}>{t("common.delete")}</button>
 				</div>
 			</div>

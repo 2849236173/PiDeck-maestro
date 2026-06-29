@@ -495,10 +495,10 @@ export function ModelPicker(props: {
 	current?: { provider?: string; modelId?: string; modelName?: string };
 	onClose: () => void;
 	onPick: (model: AvailableModel) => void;
-	/** 收藏的模型 ID 列表，收藏的模型单独放在最上方的「★ 收藏」分区 */
+	/** 收藏的模型 ID 列表（格式：provider/modelId），收藏的模型独立置顶显示但仍保留在原供应商分组 */
 	favoriteModels: string[];
 	/** 切换收藏状态 */
-	onToggleFavorite: (modelId: string) => void;
+	onToggleFavorite: (provider: string, modelId: string) => void;
 }) {
 	const [modelPickerSearch, setModelPickerSearch] = useState("");
 	const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -524,25 +524,19 @@ export function ModelPicker(props: {
 			)
 		: props.models;
 
-	// 分离收藏模型和其余模型：收藏的单独放到最上方「★ 收藏」分区
-	const favorites: AvailableModel[] = [];
-	const nonFavorites: AvailableModel[] = [];
-	for (const model of filteredModels) {
-		if (favoritesSet.has(model.id)) {
-			favorites.push(model);
-		} else {
-			nonFavorites.push(model);
-		}
-	}
-	// 收藏列表按 供应商/名称 排序
+	// 收藏列表（从全部模型中提取，不移除原供应商分组下的显示）
+	const favorites: AvailableModel[] = filteredModels.filter((model) =>
+		favoritesSet.has(`${model.provider}/${model.id}`),
+	);
 	favorites.sort((a, b) => {
 		const ap = a.provider ?? '';
 		const bp = b.provider ?? '';
 		if (ap !== bp) return ap.localeCompare(bp);
 		return (a.name ?? a.id).localeCompare(b.name ?? b.id);
 	});
-	// 其余模型按供应商分组
-	const groupedModels = nonFavorites.reduce<Record<string, AvailableModel[]>>((groups, model) => {
+
+	// 全量模型按供应商分组（收藏模型也保留在原分组）
+	const groupedModels = filteredModels.reduce<Record<string, AvailableModel[]>>((groups, model) => {
 		const provider = model.provider || 'other';
 		if (!groups[provider]) {
 			groups[provider] = [];
@@ -571,7 +565,7 @@ export function ModelPicker(props: {
 	const renderModelRow = (model: AvailableModel) => {
 		const modelKey = `${model.provider}/${model.id}`;
 		const selected = modelKey === currentModelKey;
-		const favorited = favoritesSet.has(model.id);
+		const favorited = favoritesSet.has(modelKey);
 		return (
 			<button
 				key={modelKey}
@@ -584,7 +578,7 @@ export function ModelPicker(props: {
 					title={favorited ? t("app.modelUnfavorite") : t("app.modelFavorite")}
 					onClick={(e) => {
 						e.stopPropagation();
-						props.onToggleFavorite(model.id);
+						props.onToggleFavorite(model.provider, model.id);
 					}}
 				>
 					<Star size={14} strokeWidth={1.8} fill={favorited ? 'currentColor' : 'none'} />
@@ -3588,6 +3582,7 @@ export function ProjectContextMenu(props: {
 	onImportCodexSessions: () => void;
 	onImportClaudeSessions: () => void;
 	onImportOpenCodeSessions: () => void;
+	onManageProjectResources: () => void;
 	onFilterSessions: () => void;
 	onRemoveProject: () => void;
 }) {
@@ -3608,6 +3603,8 @@ export function ProjectContextMenu(props: {
 				<button onClick={props.onImportOpenCodeSessions}>
 					{t("menu.importOpenCode")}
 				</button>
+				<hr className="context-separator" />
+				<button onClick={props.onManageProjectResources}>{t("menu.projectResources")}</button>
 				<hr className="context-separator" />
 				<button onClick={props.onFilterSessions}>{t("menu.filterSessions")}</button>
 				<hr className="context-separator" />

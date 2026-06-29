@@ -48,7 +48,7 @@ export function SecretInput(props: {
 				type={visible ? "text" : "password"}
 				value={props.value}
 				onChange={(e) => props.onChange(e.target.value)}
-				placeholder={props.placeholder ?? "sk-..."}
+				placeholder={props.placeholder ?? t("config.apiKeyPlaceholder")}
 			/>
 			<button
 				className="config-eye-btn"

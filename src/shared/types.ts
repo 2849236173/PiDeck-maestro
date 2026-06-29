@@ -429,7 +429,7 @@ export type ConfigFileReadResult<T> = {
 };
 
 export type PiSkillLocation = {
-	id: "pi-global" | "agents-global";
+	id: "pi-global" | "agents-global" | "project-pi" | "project-agents";
 	label: string;
 	path: string;
 	rootMarkdownEnabled: boolean;
@@ -458,6 +458,17 @@ export type CreatePiSkillInput = {
 	name: string;
 	description: string;
 	locationId: PiSkillLocation["id"];
+};
+
+export type ProjectResourceListResult = {
+	skills: PiSkillSummary[];
+	extensions: PiExtensionSummary[];
+};
+
+export type CreateProjectSkillInput = {
+	projectId: string;
+	name: string;
+	description: string;
 };
 
 export type PiExtensionSummary = {

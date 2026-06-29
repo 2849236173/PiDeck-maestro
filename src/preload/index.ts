@@ -21,6 +21,8 @@ import type {
 	ConfigFileDiagnostic,
 	CreateAgentInput,
 	CreatePiSkillInput,
+	CreateProjectSkillInput,
+	ProjectResourceListResult,
 	PetAggregateState,
 	PetManifest,
 	PetNotification,
@@ -89,6 +91,18 @@ const api = {
 			) as Promise<Project[]>,
 		onChanged: (callback: (projects: Project[]) => void) =>
 			subscribe(ipcChannels.projectsChanged, callback),
+	},
+	projectResources: {
+		list: (projectId: string) =>
+			ipcRenderer.invoke(ipcChannels.projectResourcesList, projectId) as Promise<ProjectResourceListResult>,
+		createSkill: (input: CreateProjectSkillInput) =>
+			ipcRenderer.invoke(ipcChannels.projectResourcesCreateSkill, input) as Promise<PiSkillSummary>,
+		deleteSkill: (projectId: string, skillPath: string) =>
+			ipcRenderer.invoke(ipcChannels.projectResourcesDeleteSkill, projectId, skillPath) as Promise<void>,
+		deleteExtension: (projectId: string, extensionPath: string) =>
+			ipcRenderer.invoke(ipcChannels.projectResourcesDeleteExtension, projectId, extensionPath) as Promise<void>,
+		toggleSkill: (projectId: string, skillPath: string, enabled: boolean) =>
+			ipcRenderer.invoke(ipcChannels.projectResourcesToggleSkill, projectId, skillPath, enabled) as Promise<PiSkillSummary>,
 	},
 	files: {
 		list: (projectId: string) =>

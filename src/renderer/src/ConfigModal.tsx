@@ -206,6 +206,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const [newSkillDescription, setNewSkillDescription] = useState("");
 	const [newSkillLocationId, setNewSkillLocationId] = useState<PiSkillLocation["id"]>("pi-global");
 	const [deleteSkillConfirm, setDeleteSkillConfirm] = useState<PiSkillSummary | null>(null);
+	const [editingGlobalSkill, setEditingGlobalSkill] = useState<PiSkillSummary | null>(null);
+	const [editGlobalContent, setEditGlobalContent] = useState("");
+	const [editGlobalLoading, setEditGlobalLoading] = useState(false);
+	const [editGlobalSaving, setEditGlobalSaving] = useState(false);
 	const [uninstallExtensionConfirm, setUninstallExtensionConfirm] = useState<PiExtensionSummary | null>(null);
 	const [rawContent, setRawContent] = useState("");
 	const [rawFileName, setRawFileName] = useState("models.json");
@@ -903,6 +907,38 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	};
 
+	const handleEditGlobalSkill = async (skill: PiSkillSummary) => {
+		setEditingGlobalSkill(skill);
+		setEditGlobalContent("");
+		setEditGlobalLoading(true);
+		setError(null);
+		try {
+			const content = await window.piDesktop.files.readContent(skill.path);
+			setEditGlobalContent(content);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+			setEditingGlobalSkill(null);
+		} finally {
+			setEditGlobalLoading(false);
+		}
+	};
+
+	const saveGlobalSkillEditor = async () => {
+		if (!editingGlobalSkill || editGlobalSaving) return;
+		setEditGlobalSaving(true);
+		setError(null);
+		try {
+			await window.piDesktop.files.writeContent(editingGlobalSkill.path, editGlobalContent);
+			showToast(t("projectResources.editorSaved"));
+			setEditingGlobalSkill(null);
+			await refreshSkills();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setEditGlobalSaving(false);
+		}
+	};
+
 	const refreshExtensions = async () => {
 		setExtensionsLoading(true);
 		setError(null);
@@ -1173,7 +1209,30 @@ function ConfigModalContent(props: ConfigModalProps) {
 					)}
 
 					{section === "skills" && !loading && (
-						<SkillsTab
+						editingGlobalSkill ? (
+							<div className="config-skills-editor">
+								<div className="config-skills-editor-header">
+									<strong>{editingGlobalSkill.name} · SKILL.md</strong>
+									<button className="config-icon-btn" onClick={() => setEditingGlobalSkill(null)}>×</button>
+								</div>
+								{editGlobalLoading ? (
+									<div className="config-empty">{t("common.loading")}</div>
+								) : (
+									<textarea
+										value={editGlobalContent}
+										onChange={(e) => setEditGlobalContent(e.target.value)}
+										spellCheck={false}
+									/>
+								)}
+								<div className="config-skills-editor-footer">
+									<button className="config-btn" onClick={() => setEditingGlobalSkill(null)}>{t("common.cancel")}</button>
+									<button className="config-btn primary" onClick={() => void saveGlobalSkillEditor()} disabled={editGlobalSaving}>
+										{editGlobalSaving ? t("common.saving") : t("common.save")}
+									</button>
+								</div>
+							</div>
+						) : (
+							<SkillsTab
 							data={skillsData}
 							loading={loading}
 							creating={creatingSkill}
@@ -1188,8 +1247,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onCreate={handleCreateSkill}
 							onToggle={(skill, enabled) => handleToggleSkill(skill.path, enabled)}
 							onDelete={setDeleteSkillConfirm}
-							onOpenFolder={(skill) => api.skills.openFolder(skill.path)}
+							onEdit={handleEditGlobalSkill}
 						/>
+						)
 					)}
 
 					{section === "extensions" && (

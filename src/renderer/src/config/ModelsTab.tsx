@@ -380,11 +380,11 @@ export function ModelsTab(props: {
 						<p className="config-auth-guide-note">
 							{t("config.providerGuideNote")}{" "}
 							<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer">
-								models docs <ExternalLink size={12} />
+								{t("config.modelsDocs")} <ExternalLink size={12} />
 							</a>
 							{" · "}
 							<a href="https://pi.dev/docs/latest/providers" target="_blank" rel="noreferrer">
-								providers docs <ExternalLink size={12} />
+								{t("config.providersDocs")} <ExternalLink size={12} />
 							</a>
 						</p>
 					</div>

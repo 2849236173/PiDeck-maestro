@@ -109,6 +109,7 @@ const SettingsModal = lazy(() => import("./components/app/SettingsModal").then((
 const CodexImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.CodexImportModal })));
 const ClaudeImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.ClaudeImportModal })));
 const OpenCodeImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.OpenCodeImportModal })));
+const ProjectResourcesModal = lazy(() => import("./components/app/ProjectResourcesModal").then((m) => ({ default: m.ProjectResourcesModal })));
 const UpdateErrorModalLazy = lazy(() => import("./components/app/UpdateModals").then((m) => ({ default: m.UpdateErrorModal })));
 const UpToDateModalLazy = lazy(() => import("./components/app/UpdateModals").then((m) => ({ default: m.UpToDateModal })));
 import { createDefaultExternalEditorSettings } from "../../shared/types";
@@ -519,6 +520,7 @@ export function App() {
   const [openCodeImportProject, setOpenCodeImportProject] = useState<Project | null>(
     null,
   );
+  const [projectResourcesProject, setProjectResourcesProject] = useState<Project | null>(null);
   const [openCodeImportSessions, setOpenCodeImportSessions] = useState<
     OpenCodeSessionSummary[]
   >([]);
@@ -2746,11 +2748,12 @@ export function App() {
   }
 
   /** 切换模型的收藏状态，收藏的模型在选模型列表中置顶显示 */
-  function toggleFavoriteModel(modelId: string) {
+  function toggleFavoriteModel(provider: string, modelId: string) {
+    const key = `${provider}/${modelId}`;
     const current = settings.favoriteModels ?? [];
-    const next = current.includes(modelId)
-      ? current.filter((id) => id !== modelId)
-      : [...current, modelId];
+    const next = current.includes(key)
+      ? current.filter((id) => id !== key)
+      : [...current, key];
     void updateSettings({ favoriteModels: next });
   }
 
@@ -4871,6 +4874,10 @@ ${goalTextRef.current}
           onImportCodexSessions={() => openCodexImport(projectMenu.project)}
           onImportClaudeSessions={() => openClaudeImport(projectMenu.project)}
           onImportOpenCodeSessions={() => openOpenCodeImport(projectMenu.project)}
+          onManageProjectResources={() => {
+            setProjectResourcesProject(projectMenu.project);
+            setProjectMenu(null);
+          }}
           onFilterSessions={() => {
             setSessionFilterOpen({
               ...adjustMenuPos(projectMenu.x, projectMenu.y + 20, 180, 250),
@@ -4950,6 +4957,14 @@ ${goalTextRef.current}
             void deleteHistorySession(session);
           }}
         />
+      )}
+      {projectResourcesProject && (
+        <Suspense fallback={null}>
+          <ProjectResourcesModal
+            project={projectResourcesProject}
+            onClose={() => setProjectResourcesProject(null)}
+          />
+        </Suspense>
       )}
       {(agentRenameTarget || sessionRenameTarget) && (
         <div

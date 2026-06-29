@@ -7617,9 +7617,9 @@ a.config-btn {
 	display: flex;
 	align-items: center;
 	gap: 14px;
-	padding: 12px 16px;
+	padding: 8px 16px;
 	border: 1px solid var(--color-border-subtle);
-	border-radius: var(--radius-lg);
+	border-radius: var(--radius-sm);
 	transition: border-color 0.15s;
 }
 
@@ -11219,4 +11219,407 @@ a.config-btn {
 	height: 100%;
 	display: block;
 	image-rendering: pixelated;
+}
+
+/* ── 项目资源管理弹框 ─────────────────────────── */
+.project-resources-dialog {
+	display: grid;
+	grid-template-rows: auto auto 1fr;
+	width: min(1300px, calc(100vw - 48px));
+	height: min(850px, calc(100vh - 48px));
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-lg);
+	background: var(--color-bg-panel);
+	box-shadow: var(--shadow-xl);
+	overflow: hidden;
+}
+.project-resources-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	padding: 16px 20px 12px;
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+.project-resources-header > div {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+.project-resources-header > div strong {
+	font-size: var(--font-size-body);
+	color: var(--color-text-primary);
+}
+.project-resources-header > div small {
+	font-size: var(--font-size-caption);
+	color: var(--color-text-tertiary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.project-resources-header > button {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+}
+.project-resources-header > button:hover {
+	background: var(--color-bg-active);
+	color: var(--color-text-primary);
+}
+.project-resources-tabs {
+	display: flex;
+	align-items: center;
+	gap: 0;
+	padding: 0 20px;
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+.project-resources-tabs button {
+	padding: 8px 14px;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: transparent;
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-control);
+	cursor: pointer;
+}
+.project-resources-tabs button.active {
+	color: var(--color-accent);
+	border-bottom-color: var(--color-accent);
+}
+.project-resources-tabs button:hover:not(.active) {
+	color: var(--color-text-primary);
+}
+.project-resources-refresh {
+	margin-left: auto;
+	font-size: var(--font-size-micro) !important;
+}
+.project-resources-error {
+	margin: 8px 16px 0;
+	padding: 8px 12px;
+	border-radius: var(--radius-sm);
+	background: var(--color-danger-soft);
+	color: var(--color-danger);
+	font-size: var(--font-size-caption);
+	word-break: break-word;
+}
+.project-resources-body {
+	overflow-y: auto;
+	padding: 16px 20px;
+	display: grid;
+	gap: 10px;
+	align-content: start;
+}
+.project-resources-body .skill-create-card {
+	margin-bottom: 6px;
+}
+.project-resources-hint {
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-caption);
+	line-height: var(--line-height-caption);
+	margin: 0;
+}
+.project-resource-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-muted);
+}
+.project-resource-card > .project-resource-info {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+	flex: 1;
+}
+.project-resource-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.project-resource-title strong {
+	font-size: var(--font-size-control);
+	color: var(--color-text-primary);
+}
+.project-resource-title > span {
+	padding: 1px 6px;
+	border-radius: var(--radius-pill);
+	background: var(--color-warning-soft);
+	color: var(--color-warning);
+	font-family: var(--font-family-business);
+	font-size: var(--font-size-micro);
+}
+.project-resource-card small {
+	font-size: var(--font-size-micro);
+	color: var(--color-text-tertiary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.project-skill-create p {
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-caption);
+	line-height: var(--line-height-caption);
+}
+.project-resources-name-field {
+	display: grid;
+	gap: 6px;
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-control);
+}
+.project-resources-name-field input {
+	width: min(320px, 100%);
+	padding: 8px 10px;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-sm);
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-control);
+}
+.project-resources-name-field input:focus {
+	outline: none;
+	border-color: var(--color-accent);
+	box-shadow: var(--focus-ring);
+}
+.project-resources-desc-field {
+	display: grid;
+	gap: 6px;
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-control);
+}
+.project-resources-desc-field textarea {
+	min-height: 80px;
+	padding: 8px 10px;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-sm);
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-control);
+	resize: vertical;
+}
+.project-resources-desc-field textarea:focus {
+	outline: none;
+	border-color: var(--color-accent);
+	box-shadow: var(--focus-ring);
+}
+.project-resource-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+/* 项目资源内嵌确认弹框 */
+.project-resources-confirm-dialog {
+	display: grid;
+	gap: 14px;
+	max-width: 420px;
+	padding: 20px;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-lg);
+	background: var(--color-bg-panel);
+	box-shadow: var(--shadow-popover);
+}
+.project-resources-confirm-dialog strong {
+	font-size: var(--font-size-body);
+	color: var(--color-text-primary);
+}
+.project-resources-confirm-dialog p {
+	margin: 0;
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-control);
+	line-height: var(--line-height-body);
+}
+.project-resources-confirm-dialog .rename-dialog-actions button.danger {
+	background: var(--color-danger);
+	color: var(--color-bg-panel);
+}
+.project-resources-confirm-dialog .rename-dialog-actions button.danger:hover:not(:disabled) {
+	background: var(--color-danger-hover);
+}
+
+/* 项目资源内嵌编辑器 */
+.project-resources-editor-overlay {
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+	gap: 0;
+	overflow: hidden;
+}
+.project-resources-editor-overlay .project-resources-editor-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 20px;
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+.project-resources-editor-overlay .project-resources-editor-header strong {
+	font-size: var(--font-size-control);
+	color: var(--color-text-primary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.project-resources-editor-overlay .project-resources-editor-header button {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+}
+.project-resources-editor-overlay .project-resources-editor-header button:hover {
+	background: var(--color-bg-active);
+	color: var(--color-text-primary);
+}
+.project-resources-editor-overlay textarea {
+	flex: 1;
+	width: 100%;
+	padding: 16px 20px;
+	border: 0;
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-caption);
+	line-height: var(--line-height-body);
+	resize: none;
+	outline: none;
+}
+.project-resources-editor-footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 20px;
+	border-top: 1px solid var(--color-border-subtle);
+}
+.project-resources-editor-footer .project-resources-editor-saved {
+	margin-left: auto;
+	color: var(--color-success);
+	font-size: var(--font-size-micro);
+}
+
+/* 设置页 Skills 内嵌编辑器 */
+.config-skills-editor {
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+	height: 100%;
+	overflow: hidden;
+}
+.config-skills-editor-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+.config-skills-editor-header strong {
+	font-size: var(--font-size-control);
+	color: var(--color-text-primary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.config-skills-editor-header .config-icon-btn {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+	font-size: 16px;
+}
+.config-skills-editor-header .config-icon-btn:hover {
+	background: var(--color-bg-active);
+	color: var(--color-text-primary);
+}
+.config-skills-editor textarea {
+	flex: 1;
+	width: 100%;
+	padding: 14px 16px;
+	border: 0;
+	background: var(--color-bg-panel);
+	color: var(--color-text-primary);
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-caption);
+	line-height: var(--line-height-body);
+	resize: none;
+	outline: none;
+}
+.config-skills-editor-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 10px 16px;
+	border-top: 1px solid var(--color-border-subtle);
+}
+
+/* ── 重试配置 ── */
+.config-retry-group {
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-lg);
+	overflow: hidden;
+}
+.config-retry-group .config-settings-row {
+	border: none;
+	border-radius: 0;
+}
+.config-retry-group .config-settings-row:hover {
+	border-color: transparent;
+}
+.config-retry-group .config-retry-subsection-header {
+	border-top: 1px solid var(--color-border-subtle);
+}
+.config-retry-header-row {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	padding: 10px 16px 4px;
+	border: none;
+	border-radius: 0;
+	cursor: default;
+}
+.config-retry-header-row:hover {
+	border-color: transparent;
+}
+.config-settings-section-title {
+	font-size: var(--font-size-control);
+	font-weight: 600;
+	color: var(--color-text-primary);
+}
+.config-settings-section-hint {
+	font-size: var(--font-size-micro);
+	color: var(--color-text-tertiary);
+	line-height: var(--line-height-caption);
+}
+.config-retry-subsection-header {
+	border: none;
+	border-radius: 0;
+	padding: 4px 16px 4px;
+	cursor: default;
+}
+.config-retry-subsection-header:hover {
+	border-color: transparent;
+}
+.config-retry-subsection-header .config-settings-key {
+	font-size: var(--font-size-caption);
+	font-weight: 500;
+	color: var(--color-text-secondary);
 }
