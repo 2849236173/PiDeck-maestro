@@ -162,9 +162,10 @@ function markdownToPost(text: string, language: "zh" | "en") {
 			continue;
 		}
 
-		// 表格行 → 用特殊分隔符保留表格结构
+		// 表格行 → post 不支持真正的表格标签，这里转成干净的等宽文本行。
 		if (/^\s*\|.+\|\s*$/.test(raw)) {
-			content.push([{ tag: "text", text: formatTableLine(raw) }]);
+			const tableLine = formatTableLine(raw);
+			if (tableLine) content.push([{ tag: "text", text: tableLine }]);
 			continue;
 		}
 
@@ -197,11 +198,76 @@ function createMarkdownCard(title: string, content: string) {
 			template: "blue",
 		},
 		body: {
-			elements: [
-				{ tag: "markdown", content },
-			],
+			elements: markdownToCardElements(content),
 		},
 	};
+}
+
+export function markdownToCardElements(content: string): Array<Record<string, unknown>> {
+	const lines = content.replace(/\r\n/g, "\n").split("\n");
+	const elements: Array<Record<string, unknown>> = [];
+	const markdownBuffer: string[] = [];
+	const flushMarkdown = () => {
+		const markdown = markdownBuffer.join("\n").trim();
+		if (markdown) elements.push({ tag: "markdown", content: markdown });
+		markdownBuffer.length = 0;
+	};
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (isPipeTableRow(line) && isTableSeparatorLine(lines[i + 1] ?? "")) {
+			flushMarkdown();
+			const header = parseTableCells(line);
+			const rows: string[][] = [];
+			i += 2;
+			while (i < lines.length && isPipeTableRow(lines[i])) {
+				rows.push(parseTableCells(lines[i]));
+				i++;
+			}
+			i--;
+			if (header.length && rows.length) {
+				elements.push(createTableElement(header, rows));
+			}
+			continue;
+		}
+		markdownBuffer.push(line);
+	}
+	flushMarkdown();
+	return elements.length ? elements : [{ tag: "markdown", content }];
+}
+
+function createTableElement(header: string[], rows: string[][]) {
+	return {
+		tag: "table",
+		columns: header.map((name, index) => ({
+			name: `col_${index}`,
+			display_name: cleanInlineMarkdown(name),
+			data_type: "text",
+			width: "auto",
+			vertical_align: "top",
+			horizontal_align: "left",
+		})),
+		rows: rows.map((row) => Object.fromEntries(
+			header.map((_, index) => [`col_${index}`, cleanInlineMarkdown(row[index] ?? "")]),
+		)),
+	};
+}
+
+function isPipeTableRow(line: string) {
+	return /^\s*\|.+\|\s*$/.test(line) && !isTableSeparatorLine(line);
+}
+
+function isTableSeparatorLine(line: string) {
+	return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function parseTableCells(line: string) {
+	return line
+		.trim()
+		.replace(/^\|/, "")
+		.replace(/\|$/, "")
+		.split("|")
+		.map((cell) => cell.trim());
 }
 
 function splitMarkdownToFit(markdown: string, title: string) {
@@ -338,9 +404,9 @@ function formatTableLine(line: string) {
 		.replace(/\|$/, "")
 		.split("|")
 		.map((cell) => cell.trim());
-	// 分隔行（---等）替换为虚线
-	if (cells.every((cell) => /^:?-{3,}:?$/.test(cell))) return "----------------";
-	return cells.join("  |  ");
+	// 分隔行（---等）只用于 Markdown 解析，飞书 post 中直接省略。
+	if (cells.every((cell) => /^:?-{3,}:?$/.test(cell))) return "";
+	return cells.map(cleanInlineMarkdown).join("  |  ");
 }
 
 function splitText(text: string, max: number) {

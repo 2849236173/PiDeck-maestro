@@ -9,6 +9,7 @@
  */
 
 import type { Block, RunState, ToolEntry, TrailEntry } from "./CardRunState";
+import { markdownToCardElements } from "./rich-text";
 
 const OUTPUT_MAX = 15_000;
 const THINKING_MAX = 2_000;
@@ -42,7 +43,7 @@ export function renderRunCard(state: RunState, opts: RenderOptions = {}): object
 
 	// ── 4. 输出正文 ──
 	if (state.outputText.trim()) {
-		elements.push(renderOutput(state.outputText, isRunning));
+		elements.push(...renderOutput(state.outputText, isRunning));
 	}
 
 	// ── 5. 已完成的工具 ──
@@ -117,11 +118,11 @@ function renderRunningTool(tool: ToolEntry): object {
 }
 
 /** 输出正文 */
-function renderOutput(text: string, streaming: boolean): object {
+function renderOutput(text: string, streaming: boolean): object[] {
 	const display = text.length > OUTPUT_MAX
 		? text.slice(0, OUTPUT_MAX) + "\n\n…（已截断）"
 		: text;
-	return { tag: "markdown", content: display };
+	return markdownToCardElements(display);
 }
 
 /** 已完成的工具列表 */
