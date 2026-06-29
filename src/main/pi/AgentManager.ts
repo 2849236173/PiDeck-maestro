@@ -1324,6 +1324,14 @@ export class AgentManager {
 		const existing = list.find((message) => message.id === messageId);
 		const isError = status === "error" || event.isError === true;
 		const args = event.args ?? existing?.meta?.args;
+		const startedAt =
+			typeof existing?.meta?.startedAt === "number"
+				? existing.meta.startedAt
+				: Date.now();
+		// 工具耗时只能由 start/end 两个事件推导；start 时先保存 startedAt，end 时再写入 durationMs，
+		// 避免使用消息 timestamp（会在 update/end 时刷新）导致历史恢复后耗时不可还原。
+		const durationMs =
+			status === "running" ? undefined : Math.max(0, Date.now() - startedAt);
 
 		// 工具首次开始执行时尝试异步读取原始文件内容（pi-deck-file-capture 扩展未安装时的回退方案）。
 		// 当扩展已安装时，后续 tool_execution_end 会从 result.details._piDeckOriginalContent
@@ -1399,6 +1407,8 @@ export class AgentManager {
 			status,
 			toolName,
 			toolCallId,
+			startedAt,
+			...(durationMs !== undefined ? { durationMs } : {}),
 			args: this.truncateForDetail(this.safeJson(args)),
 			result: this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result)),
 			isError,
@@ -1586,6 +1596,14 @@ export class AgentManager {
 					const historicalCall = historicalToolCalls.get(toolCallId);
 					const toolName = String(typed.toolName ?? historicalCall?.name ?? "tool");
 					const isError = Boolean(typed.isError);
+					const startedAt =
+						typeof typed.startedAt === "number" ? typed.startedAt : historicalCall?.timestamp;
+					const durationMs =
+						typeof typed.durationMs === "number"
+							? typed.durationMs
+							: typeof startedAt === "number" && typeof typed.timestamp === "number"
+								? Math.max(0, typed.timestamp - startedAt)
+								: undefined;
 					const result = {
 						content: typed.content,
 						details: typed.details,
@@ -1619,6 +1637,8 @@ export class AgentManager {
 								status: isError ? "error" : "done",
 								toolName,
 								toolCallId,
+								...(startedAt !== undefined ? { startedAt } : {}),
+								...(durationMs !== undefined ? { durationMs } : {}),
 								args: this.truncateForDetail(this.safeJson(historicalCall?.args)),
 								result: this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result)),
 								isError,
@@ -1636,7 +1656,7 @@ export class AgentManager {
 	}
 
 	private collectHistoricalToolCalls(rawMessages: unknown[]) {
-		const calls = new Map<string, { name: string; args: unknown }>();
+		const calls = new Map<string, { name: string; args: unknown; timestamp?: number }>();
 		for (const message of rawMessages) {
 			if (!message || typeof message !== "object") continue;
 			const typed = message as any;
@@ -1650,6 +1670,9 @@ export class AgentManager {
 				calls.set(String(toolCall.id), {
 					name: String(toolCall.name ?? "tool"),
 					args: toolCall.arguments,
+					// 旧会话没有 durationMs，只能用发起 toolCall 的 assistant 时间戳作为兜底起点；
+					// 同一条 assistant 内并发多个工具时精度有限，但比完全不显示耗时更接近历史行为。
+					timestamp: typeof typed.timestamp === "number" ? typed.timestamp : undefined,
 				});
 			}
 		}

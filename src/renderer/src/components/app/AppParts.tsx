@@ -1275,6 +1275,11 @@ export const ToolCard = memo(function ToolCard(props: {
 	const tone = getToolTone(props.message);
 	const subtitle = getToolSubtitle(props.message);
 	const kindLabel = getToolKindLabel(toolName);
+	const durationMs =
+		typeof props.message.meta?.durationMs === "number"
+			? props.message.meta.durationMs
+			: undefined;
+	const showDuration = status !== "running" && durationMs !== undefined && durationMs > 100;
 	// 模型用 read 工具读取 SKILL.md 来加载 skill：识别后以 skill 徽标样式渲染，
 	// 让用户看到模型主动调用了哪个 skill（区别于普通文件读取）
 	const skillName = getReadSkillName(props.message);
@@ -1321,6 +1326,11 @@ export const ToolCard = memo(function ToolCard(props: {
 					{status === "running" && <span className="tool-card-spinner" aria-hidden="true" />}
 					{statusLabel}
 				</span>
+				{showDuration && (
+					<span className="tool-card-duration" title={t("tool.durationTitle")}>
+						{formatDuration(durationMs)}
+					</span>
+				)}
 				<ChevronDown
 					size={14}
 					className={`tool-card-chevron${expanded ? " open" : ""}`}

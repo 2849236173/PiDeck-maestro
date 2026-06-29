@@ -125,6 +125,7 @@ export class CodexSessionImporter {
 		).toISOString();
 		const titleState = { title: "", preview: "" };
 		const toolNames = new Map<string, string>();
+		const toolStartedAt = new Map<string, number>();
 		const lines: string[] = [];
 		let parentId: string | null = null;
 		let sequence = 0;
@@ -239,6 +240,8 @@ export class CodexSessionImporter {
 				const callId = String(payload.call_id ?? payload.id ?? this.makeId(sessionId, sequence));
 				const toolName = String(payload.name ?? "tool");
 				toolNames.set(callId, toolName);
+				const callStartedAt = this.parseTimestamp(entry.timestamp);
+				if (callStartedAt !== undefined) toolStartedAt.set(callId, callStartedAt);
 				const args = this.parseArguments(payload.arguments);
 				const content = [
 					...(pendingThinking
@@ -264,6 +267,8 @@ export class CodexSessionImporter {
 			if (payload.type === "function_call_output") {
 				const callId = String(payload.call_id ?? payload.id ?? this.makeId(sessionId, sequence));
 				const output = this.extractToolOutput(payload);
+				const completedAt = this.parseTimestamp(entry.timestamp);
+				const startedAt = toolStartedAt.get(callId);
 				pushMessage(
 					"toolResult",
 					[{ type: "text", text: output }],
@@ -271,6 +276,12 @@ export class CodexSessionImporter {
 						toolCallId: callId,
 						toolName: toolNames.get(callId) ?? "tool",
 						isError: Boolean(payload.is_error),
+						// Codex 历史只有 function_call / output 时间戳，导入时保存派生耗时，
+						// 让桌面端工具卡片与原生 pi 会话保持一致。
+						...(startedAt !== undefined ? { startedAt } : {}),
+						...(startedAt !== undefined && completedAt !== undefined
+							? { durationMs: Math.max(0, completedAt - startedAt) }
+							: {}),
 					},
 					entry.timestamp,
 				);

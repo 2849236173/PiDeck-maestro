@@ -2745,6 +2745,13 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .tool-card.tone-error .tool-card-status {
 	color: var(--color-danger);
 }
+.tool-card-duration {
+	flex: 0 0 auto;
+	color: var(--color-text-tertiary);
+	font-family: var(--font-family-business);
+	font-size: var(--font-size-micro);
+	font-variant-numeric: tabular-nums;
+}
 .tool-card-spinner {
 	width: 10px;
 	height: 10px;
