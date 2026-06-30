@@ -1553,6 +1553,70 @@ body.is-terminal-resizing {
 	margin-top: 4px;
 	min-width: 0;
 }
+.chat-session-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	font-size: var(--font-size-caption);
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+	text-decoration: none;
+	transition: color 0.12s ease;
+	vertical-align: middle;
+	margin-left: var(--space-2);
+}
+
+.chat-session-link:hover {
+	color: var(--color-accent);
+	text-decoration: underline;
+}
+
+.compaction-card {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	padding: var(--space-1) var(--space-3);
+	margin: var(--space-px) 0;
+	border-radius: var(--radius-sm);
+	background: color-mix(in srgb, var(--color-accent) 4%, var(--color-bg-panel));
+	border: 1px solid color-mix(in srgb, var(--color-accent) 8%, transparent);
+	user-select: none;
+}
+
+.compaction-card-icon {
+	font-size: 14px;
+	line-height: 1.5;
+	flex-shrink: 0;
+}
+
+.compaction-card-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.compaction-card-summary {
+	font-size: var(--font-size-caption);
+	color: var(--color-text-secondary);
+	line-height: 1.4;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.compaction-card-tokens {
+	font-size: 11px;
+	color: var(--color-text-tertiary);
+	font-family: var(--font-family-monospace);
+}
+
+.compaction-card-time {
+	font-size: 11px;
+	color: var(--color-text-tertiary);
+	opacity: 0.7;
+}
+
 .chat-title-row .chat-path,
 .chat-subtitle-row .chat-path {
 	display: flex;

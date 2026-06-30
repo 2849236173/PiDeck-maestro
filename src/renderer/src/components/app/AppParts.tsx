@@ -1460,6 +1460,32 @@ function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success
 	return "info";
 }
 
+/** 压缩事件卡片：在时间线上标记会话被压缩过，展示摘要和节约的 token 数。 */
+export const CompactionCard = memo(function CompactionCard(props: {
+	message: ChatMessage;
+}) {
+	const summary = props.message.text;
+	const tokensBefore = (props.message.meta as any)?.tokensBefore;
+	const time = formatTime(props.message.timestamp);
+	return (
+		<article
+			className="compaction-card"
+			data-message-id={props.message.id}
+		>
+			<span className="compaction-card-icon" aria-hidden="true">🔁</span>
+			<div className="compaction-card-body">
+				<span className="compaction-card-summary">{stripAnsi(summary)}</span>
+				{typeof tokensBefore === "number" && (
+					<span className="compaction-card-tokens">
+						~{Math.round(tokensBefore / 1000)}k tokens before
+					</span>
+				)}
+				<time className="compaction-card-time">{time}</time>
+			</div>
+		</article>
+	);
+});
+
 /** 错误/RPC/系统诊断消息使用独立卡片，避免和普通 AI 正文混在一起难以扫读。 */
 export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: {
 	message: ChatMessage;

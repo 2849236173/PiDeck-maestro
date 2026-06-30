@@ -60,6 +60,7 @@ import {
   AgentContextMenu,
   BranchSelector,
   ComposerToolbar,
+  CompactionCard,
   ConversationOutline,
   DiagnosticMessageCard,
   DrawerContent,
@@ -4303,6 +4304,23 @@ ${goalTextRef.current}
                     : undefined
                 }
               />
+              {activeAgent?.sessionPath && (
+                <span
+                  className="chat-session-link"
+                  title={activeAgent.sessionPath}
+                  onClick={() => api.files.open(activeAgent.sessionPath!)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      api.files.open(activeAgent.sessionPath!);
+                    }
+                  }}
+                >
+                  📄&nbsp;{t("app.sessionFile")}
+                </span>
+              )}
           </div>
           </div>
           <div
@@ -4585,7 +4603,11 @@ ${goalTextRef.current}
                     validCommandNames={validCommandNames}
                   validFilePaths={validFilePaths}
                   />
-                ) : item.message.role === "error" || item.message.role === "system" ? (
+                ) : item.message.role === "error" ? (
+                  <DiagnosticMessageCard key={item.message.id} message={item.message} />
+                ) : item.message.role === "system" && (item.message.meta as any)?.type === "compaction" ? (
+                  <CompactionCard key={item.message.id} message={item.message} />
+                ) : item.message.role === "system" ? (
                   <DiagnosticMessageCard key={item.message.id} message={item.message} />
                 ) : (
                   <Fragment key={item.message.id}>

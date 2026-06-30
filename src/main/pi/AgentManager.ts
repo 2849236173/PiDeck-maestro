@@ -1767,8 +1767,10 @@ export class AgentManager {
 			rawMessages,
 			historicalToolCalls,
 		);
-		// 用于生成 _piDeckMsgSeq：仅对有文本的消息递增，与 .filter(m => m.text.trim()) 一致
+		// 用于生成 _piDeckMsgSeq：仅对有文本的用户/助手/工具消息递增
 		let msgSeq = 0;
+		// 用于生成元消息 id（compaction/branchSummary）的计数器，避免与正文消息的 seq 冲突
+		let metaSeq = 0;
 		return rawMessages
 			.flatMap<ChatMessage>((message, index) => {
 				if (!message || typeof message !== "object") return [];
@@ -1860,6 +1862,24 @@ export class AgentManager {
 							...(originalContent && /write|edit|create|patch/i.test(toolName)
 								? { originalContent }
 								: {}),
+						},
+					}];
+				}
+				// 压缩/分支摘要等元消息：显示在时间线上，不参与 _piDeckMsgSeq 计数
+				if (typed.role === "compactionSummary" || typed.role === "branchSummary") {
+					const isCompaction = typed.role === "compactionSummary";
+					metaSeq++;
+					return [{
+						id: `${agentId}-meta-${metaSeq}`,
+						agentId,
+						role: "system" as const,
+						text: typed.summary ?? (isCompaction ? "Session compacted" : "Branch summarized"),
+						timestamp: typeof typed.timestamp === "number"
+							? typed.timestamp
+							: Date.now(),
+						meta: {
+							type: isCompaction ? "compaction" : "branchSummary",
+							tokensBefore: typed.tokensBefore,
 						},
 					}];
 				}
