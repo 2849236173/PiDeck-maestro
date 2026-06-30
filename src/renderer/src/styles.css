@@ -1495,7 +1495,8 @@ body.is-terminal-resizing {
 	max-width: var(--content-max-width);
 	margin-inline: auto;
 }
-.chat-pane[style*="--content-max-width"] .composer-box {
+.chat-pane[style*="--content-max-width"] .composer-box,
+.chat-pane[style*="--content-max-width"] .image-preview-area {
 	width: min(100%, var(--content-max-width));
 	max-width: var(--content-max-width);
 	margin-inline: auto;
@@ -3444,7 +3445,6 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 
 .composer {
 	background: var(--color-bg-muted);
-	border-top: 1px solid var(--color-border-subtle);
 	padding: var(--space-1) var(--space-2) var(--space-1);
 	min-width: 0;
 	/* 飞书 Bot 弹框从 toolbar 向上展开，外层不能裁剪浮层。 */

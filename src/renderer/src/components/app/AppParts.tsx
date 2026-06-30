@@ -2428,6 +2428,7 @@ export function ConversationOutline(props: {
 			style={{ top }}
 		>
 			<div className="outline-zone">
+				{props.items.length > 0 && (
 				<button
 					className="outline-trigger"
 					title={t("outline.trigger", { count: props.items.length })}
@@ -2435,6 +2436,7 @@ export function ConversationOutline(props: {
 				>
 					☰
 				</button>
+				)}
 				<nav className="conversation-outline">
 				<div className="outline-title">
 					<span

@@ -4426,7 +4426,7 @@ ${goalTextRef.current}
             </button>
           )}
 
-        {outlineItems.length > 1 && (
+        {activeAgent && (
           <ConversationOutline
             items={outlineItems}
             onJump={handleOutlineJump}
