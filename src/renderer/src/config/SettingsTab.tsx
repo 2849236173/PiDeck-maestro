@@ -59,23 +59,21 @@ export function SettingsTab(props: {
 	// enabledModels 已配置时合并到 entries 前端展示，未配置时通过「添加」按钮单独显示
 	const hasEnabledModels = "enabledModels" in data;
 
-	/** 重试配置：从已有设置读取，缺失字段用默认值 */
+	/**
+	 * 设置页只暴露外层重试次数和基础延迟。
+	 * provider 级 timeout/maxRetries 的单位和 SDK 语义容易误解，写入后可能导致立即超时或长时间重试卡住。
+	 */
 	const retryConfig = {
-		enabled: (data as any).retry?.enabled ?? true,
 		maxRetries: (data as any).retry?.maxRetries ?? 10,
 		baseDelayMs: (data as any).retry?.baseDelayMs ?? 5000,
-		provider: {
-			timeoutMs: (data as any).retry?.provider?.timeoutMs ?? 0,
-			maxRetries: (data as any).retry?.provider?.maxRetries ?? 0,
-			maxRetryDelayMs: (data as any).retry?.provider?.maxRetryDelayMs ?? 60000,
-		},
 	};
 
-	// 如果 data 中还没有 retry 字段，初始化一次（确保保存时写入 settings.json）
+	// 首次进入设置页时清理旧版 UI 写入的 provider/enable 等字段，保证后续保存只留下安全的两个参数。
 	const retryInitializedRef = useRef(false);
 	useEffect(() => {
 		if (retryInitializedRef.current) return;
-		if (!(data as any).retry) {
+		const existingRetry = (data as any).retry;
+		if (!existingRetry || Object.keys(existingRetry).some((key) => !(key in retryConfig))) {
 			props.onChange({ ...data, retry: retryConfig });
 		}
 		retryInitializedRef.current = true;
@@ -85,16 +83,6 @@ export function SettingsTab(props: {
 		props.onChange({
 			...data,
 			retry: { ...retryConfig, ...patch },
-		});
-	};
-
-	const updateRetryProvider = (patch: Record<string, unknown>) => {
-		props.onChange({
-			...data,
-			retry: {
-				...retryConfig,
-				provider: { ...retryConfig.provider, ...patch },
-			},
 		});
 	};
 
@@ -164,34 +152,12 @@ export function SettingsTab(props: {
 					<span className="config-settings-section-hint">{t("config.retry.hint")}</span>
 				</div>
 				<div className="config-settings-row">
-					<span className="config-settings-key">{t("config.retry.enabled")}</span>
-					<label className="config-checkbox-label">
-						<input type="checkbox" checked={retryConfig.enabled} onChange={(e) => updateRetry({ enabled: e.target.checked })} />
-						<span>{retryConfig.enabled ? t("common.true") : t("common.false")}</span>
-					</label>
-				</div>
-				<div className="config-settings-row">
 					<span className="config-settings-key">{t("config.retry.maxRetries")}</span>
 					<input className="config-settings-input" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
 				</div>
 				<div className="config-settings-row">
 					<span className="config-settings-key">{t("config.retry.baseDelayMs")}</span>
 					<input className="config-settings-input" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
-				</div>
-				<div className="config-settings-row config-retry-subsection-header">
-					<span className="config-settings-key">{t("config.retry.providerTitle")}</span>
-				</div>
-				<div className="config-settings-row">
-					<span className="config-settings-key">{t("config.retry.timeoutMs")}</span>
-					<input className="config-settings-input" type="number" min={0} step={1000} value={retryConfig.provider.timeoutMs} onChange={(e) => updateRetryProvider({ timeoutMs: Number(e.target.value) })} />
-				</div>
-				<div className="config-settings-row">
-					<span className="config-settings-key">{t("config.retry.providerMaxRetries")}</span>
-					<input className="config-settings-input" type="number" min={0} max={10} value={retryConfig.provider.maxRetries} onChange={(e) => updateRetryProvider({ maxRetries: Number(e.target.value) })} />
-				</div>
-				<div className="config-settings-row">
-					<span className="config-settings-key">{t("config.retry.maxRetryDelayMs")}</span>
-					<input className="config-settings-input" type="number" min={1000} step={1000} value={retryConfig.provider.maxRetryDelayMs} onChange={(e) => updateRetryProvider({ maxRetryDelayMs: Number(e.target.value) })} />
 				</div>
 				</div>
 
