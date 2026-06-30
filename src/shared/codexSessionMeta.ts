@@ -14,9 +14,11 @@ function stringValue(value: unknown) {
 export function getCodexSessionThreadInfo(meta: Record<string, unknown>): CodexSessionThreadInfo {
 	const source = meta.source as any;
 	const spawn = source?.subagent?.thread_spawn;
+	// 子代理判断：thread_source 明确标记、或旧格式缺字段时靠 parent_thread_id 回退检测。
+	// 显式为 "user" 时即使有 parent_thread_id 也不判定为子代理，避免误判。
 	const isSubagent =
 		meta.thread_source === "subagent" ||
-		Boolean(meta.parent_thread_id) ||
+		(meta.thread_source !== "user" && Boolean(meta.parent_thread_id)) ||
 		Boolean(source?.subagent);
 
 	if (!isSubagent) {

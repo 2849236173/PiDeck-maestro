@@ -8,8 +8,10 @@ const configSource = () => readFileSync("src/main/feishu/FeishuConfig.ts", "utf8
 
 test("FeishuBridge.start propagates startup failure to IPC callers", () => {
 	const source = bridgeSource();
-	const catchBlock = source.match(/async start\(\): Promise<void> \{[\s\S]*?\n\t\t\} catch \(error\) \{([\s\S]*?)\n\t\t\}\n\t\}/)?.[1] ?? "";
-	assert.match(catchBlock, /throw error;/);
+	const startIdx = source.indexOf("async start(): Promise<void>");
+	const afterStart = source.indexOf("\n\tasync ", startIdx + 5);
+	const startBlock = source.slice(startIdx, afterStart > 0 ? afterStart : undefined);
+	assert.match(startBlock, /throw error;/);
 });
 
 test("updating a saved bot only hot-updates the active bridge for that bot", () => {

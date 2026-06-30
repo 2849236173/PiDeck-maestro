@@ -238,7 +238,7 @@ function formatCodexSubagentName(session: SessionSummary) {
   const label = [session.codexAgentNickname, session.codexAgentRole]
     .filter(Boolean)
     .join(" · ");
-  return label || session.name || "Codex subagent";
+  return label || session.name || t("app.codexSubagent");
 }
 
 function isAbsoluteFilePath(path: string) {
