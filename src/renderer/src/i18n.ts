@@ -104,7 +104,7 @@ const zhCN = {
   "app.piPathValidateFailed": "pi 路径校验失败：{error}",
   "app.preloadMissing": "桌面端预加载 API 未注入，请重新启动 PiDeck。",
   "app.projectChatGuide": "内置对话区，不需要选择项目目录",
-  "app.sessionFile": "会话文件",
+  "app.openSessionFile": "点击用系统编辑器打开此会话文件",
   "app.compactionEvent": "会话已压缩",
   "app.projectChatInfo":
     "Chat 是固定置顶的内置对话区；会话写入应用用户目录，不需要先添加项目。",
@@ -1242,7 +1242,7 @@ const enUS: Record<TranslationKey, string> = {
   "app.piPathValidateFailed": "pi path validation failed: {error}",
   "app.preloadMissing": "Desktop preload API is not available. Restart PiDeck.",
   "app.projectChatGuide": "Built-in chat area. No project folder required.",
-  "app.sessionFile": "Session file",
+  "app.openSessionFile": "Click to open this session file in system editor",
   "app.compactionEvent": "Session compacted",
   "app.projectChatInfo":
     "Chat is a pinned built-in conversation area. Sessions are written to the app user data directory.",

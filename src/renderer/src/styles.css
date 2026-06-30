@@ -1553,24 +1553,6 @@ body.is-terminal-resizing {
 	margin-top: 4px;
 	min-width: 0;
 }
-.chat-session-link {
-	display: inline-flex;
-	align-items: center;
-	gap: 2px;
-	font-size: var(--font-size-caption);
-	color: var(--color-text-tertiary);
-	cursor: pointer;
-	text-decoration: none;
-	transition: color 0.12s ease;
-	vertical-align: middle;
-	margin-left: var(--space-2);
-}
-
-.chat-session-link:hover {
-	color: var(--color-accent);
-	text-decoration: underline;
-}
-
 .compaction-card {
 	display: flex;
 	align-items: flex-start;
@@ -3970,6 +3952,13 @@ body.is-composer-resizing .composer-resize-handle::after {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.composer-footer span[role="button"] {
+	cursor: pointer;
+}
+.composer-footer span[role="button"]:hover {
+	color: var(--color-accent);
+	text-decoration: underline;
 }
 .composer-footer .composer-mode-status {
 	display: inline-flex;
