@@ -148,7 +148,7 @@ const isLanWeb =
 const api =
   window.piDesktop ?? (isLanWeb ? createBrowserApi() : createPreviewApi());
 // 输入框默认高度增加,提供更好的输入体验,适合多行输入和代码片段
-const COMPOSER_MIN_HEIGHT = 240;
+const COMPOSER_MIN_HEIGHT = 215;
 const COMPOSER_DEFAULT_TERMINAL_HEIGHT = 220;
 const COMPOSER_MIN_TIMELINE_HEIGHT = 160;
 const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
@@ -3111,6 +3111,10 @@ ${text}
     setAttachedImages([]);
     setSuggestionsOpen(false);
     setSendBehaviorMenuOpen(false);
+    // 发送后强制重置自动高度：避免粘贴多行内容后 scrollHeight 残留导致 composer 无法恢复默认高度。
+    // 下一帧 DOM 同步后再跑一次 syncComposerAutoHeight，让最终高度以清空后的 scrollHeight 为准。
+    setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
+    requestAnimationFrame(() => syncComposerAutoHeight());
     await submitPromptSnapshot(activeAgentId, message, images);
   }
 
@@ -3130,6 +3134,8 @@ ${text}
     setAttachedImages([]);
     setSuggestionsOpen(false);
     setSendBehaviorMenuOpen(false);
+    setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
+    requestAnimationFrame(() => syncComposerAutoHeight());
     await submitPromptSnapshot(activeAgentId, message, images, "followUp");
   }
 
