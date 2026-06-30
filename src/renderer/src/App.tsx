@@ -4309,23 +4309,6 @@ ${goalTextRef.current}
                     : undefined
                 }
               />
-              {activeAgent?.sessionPath && (
-                <span
-                  className="chat-session-link"
-                  title={activeAgent.sessionPath}
-                  onClick={() => api.files.open(activeAgent.sessionPath!)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      api.files.open(activeAgent.sessionPath!);
-                    }
-                  }}
-                >
-                  📄&nbsp;{t("app.sessionFile")}
-                </span>
-              )}
           </div>
           </div>
           <div
@@ -4866,7 +4849,21 @@ ${goalTextRef.current}
               />
             )}
             <div className="composer-footer">
-              <span className={composerMode ? "composer-mode-status" : ""}>
+              <span
+                className={composerMode ? "composer-mode-status" : ""}
+                onClick={
+                  !composerMode && !drawer && activeAgent?.sessionPath
+                    ? () => api.files.open(activeAgent.sessionPath!)
+                    : undefined
+                }
+                role={!composerMode && !drawer && activeAgent?.sessionPath ? "button" : undefined}
+                tabIndex={!composerMode && !drawer && activeAgent?.sessionPath ? 0 : undefined}
+                title={
+                  !composerMode && !drawer && activeAgent?.sessionPath
+                    ? t("app.openSessionFile")
+                    : undefined
+                }
+              >
                 {composerStatusText}
               </span>
               {activeAgent?.status === "running" && (
