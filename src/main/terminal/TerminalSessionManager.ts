@@ -139,9 +139,10 @@ export class TerminalSessionManager {
 	}
 
 	resize(tabId: string, cols: number, rows: number) {
-		const runtime = this.requireTab(tabId);
-		if (runtime.tab.exited) return;
-		runtime.pty.resize(Math.max(2, cols), Math.max(1, rows));
+		// 终端已关闭时静默忽略 resize，避免已销毁的 tab 触发未处理异常
+		const found = this.findRuntime(tabId);
+		if (!found || found.runtime.tab.exited) return;
+		found.runtime.pty.resize(Math.max(2, cols), Math.max(1, rows));
 	}
 
 	close(tabId: string) {

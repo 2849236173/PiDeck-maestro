@@ -5015,7 +5015,7 @@ ${goalTextRef.current}
         </footer>
         )}
 
-        {!isLanWeb && activeAgentId && !settingsOpen && !configOpen && !environmentDialog && (
+        {!isLanWeb && activeAgentId && !isPendingAgentId(activeAgentId) && !settingsOpen && !configOpen && !environmentDialog && (
           <TerminalDock
             agentId={activeAgentId}
             open={terminalOpen}
