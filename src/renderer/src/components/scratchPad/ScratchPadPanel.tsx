@@ -1,12 +1,13 @@
-import { memo, useCallback, type ReactNode } from "react";
+import { memo, useCallback, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { Eye, Pencil } from "lucide-react";
+import { Download, Eye, FilePlus, PanelRightOpen, Pencil, Trash2 } from "lucide-react";
 import type { Plugin } from "unified";
 import type { Root, Element, Text } from "hast";
+import type { DraftMeta } from "../../../../shared/types";
 import { t } from "../../i18n";
 import { IconButton } from "../ui/IconButton";
 
@@ -28,6 +29,8 @@ function ToolButton({ icon, label, text, active, onClick }: {
 }
 
 type ScratchPadPanelProps = {
+	drafts: DraftMeta[];
+	currentDraftPath: string | null;
 	content: string;
 	mode: Mode;
 	isClosing?: boolean;
@@ -37,6 +40,9 @@ type ScratchPadPanelProps = {
 	onSetMode: (mode: Mode) => void;
 	onToggleCheckbox: (lineIndex: number) => void;
 	onExport: () => void;
+	onSelectDraft: (draftPath: string) => void;
+	onCreateDraft: () => void;
+	onDeleteDraft: (draftPath: string) => void;
 };
 
 /* 列表回车续号：覆盖 GFM task list + 普通列表 + 有序列表 */
@@ -142,9 +148,43 @@ const rehypeHighlightMark: Plugin<[], Root> = () => {
 	};
 };
 
+/* 草稿列表项组件 */
+const DraftItem = memo(function DraftItem({
+	draft,
+	isActive,
+	onSelect,
+	onDelete,
+}: {
+	draft: DraftMeta;
+	isActive: boolean;
+	onSelect: () => void;
+	onDelete: () => void;
+}) {
+	return (
+		<div
+			className={`scratch-pad-draft-item${isActive ? " active" : ""}`}
+			onClick={onSelect}
+			role="button"
+			tabIndex={0}
+			onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+		>
+			<span className="scratch-pad-draft-name" title={draft.name}>{draft.name}</span>
+			<button
+				className="scratch-pad-draft-del-btn"
+				title={t("scratchPad.deleteDraft")}
+				onClick={(e) => { e.stopPropagation(); onDelete(); }}
+				aria-label={t("scratchPad.deleteDraft")}
+			>
+				<Trash2 size={12} />
+			</button>
+		</div>
+	);
+});
 
 export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPanelProps) {
 	const {
+		drafts,
+		currentDraftPath,
 		content,
 		mode,
 		isClosing,
@@ -154,10 +194,17 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 		onSetMode,
 		onToggleCheckbox,
 		onExport,
+		onSelectDraft,
+		onCreateDraft,
+		onDeleteDraft,
 	} = props;
 
 	const empty = !content.trim();
 	const lines = content.split("\n");
+	const editorRef = useRef<HTMLTextAreaElement>(null);
+
+	// 文件列表显示/隐藏
+	const [showFileList, setShowFileList] = useState(true);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
@@ -170,6 +217,15 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 			ta.selectionStart = ta.selectionEnd = res.cursor;
 		});
 	}, [onChangeContent]);
+
+	/* 点击草稿列表中的删除按钮 */
+	const handleDeleteDraft = useCallback((draftPath: string) => {
+		if (drafts.length <= 1) {
+			// 只剩一个时不删除，保留最后一份草稿
+			return;
+		}
+		onDeleteDraft(draftPath);
+	}, [drafts.length, onDeleteDraft]);
 
 	return (
 		<div
@@ -187,93 +243,131 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 				</div>
 				<div className="scratch-pad-toolbar">
 					<ToolButton
+						icon={<FilePlus size={15} />}
+						label={t("scratchPad.newDraft")}
+						onClick={onCreateDraft}
+					/>
+					{currentDraftPath && drafts.length > 1 && (
+						<ToolButton
+							icon={<Trash2 size={15} />}
+							label={t("scratchPad.deleteDraft")}
+							onClick={() => handleDeleteDraft(currentDraftPath)}
+						/>
+					)}
+					<ToolButton
 						icon={<Pencil size={15} />}
 						label={t("scratchPad.edit")}
-						text={t("scratchPad.edit")}
 						active={mode === "edit"}
 						onClick={() => onSetMode("edit")}
 					/>
 					<ToolButton
 						icon={<Eye size={15} />}
 						label={t("scratchPad.preview")}
-						text={t("scratchPad.preview")}
 						active={mode === "preview"}
 						onClick={() => onSetMode("preview")}
 					/>
 					<ToolButton
+						icon={<Download size={15} />}
 						label={t("scratchPad.export")}
-						text={t("scratchPad.export")}
 						onClick={onExport}
 					/>
+					{drafts.length > 0 && (
+						<ToolButton
+							icon={<PanelRightOpen size={15} />}
+							label={showFileList ? t("scratchPad.hideFileList") : t("scratchPad.showFileList")}
+							active={showFileList}
+							onClick={() => setShowFileList(v => !v)}
+						/>
+					)}
 				</div>
 			</header>
 
-			<div className="scratch-pad-content">
-				{mode === "edit" ? (
-					<textarea
-						className="scratch-pad-editor"
-						value={content}
-						placeholder={t("scratchPad.placeholder")}
-						onChange={(e) => onChangeContent(e.target.value)}
-						onKeyDown={handleKeyDown}
-						autoFocus
-						spellCheck={false}
-					/>
-				) : (
-					<div className="scratch-pad-preview">
-						{empty ? (
-							<div className="scratch-pad-empty-hint">
-								<em>{t("scratchPad.empty")}</em>
-							</div>
-						) : (
-							<div className="scratch-pad-md">
-								<ReactMarkdown
-									remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
-									rehypePlugins={[rehypeKatex, rehypeHighlightMark]}
-									components={{
-										/* GFM task list：用 AST 节点行号直接定位源码行，避免 render-order 计数器漂移 */
-										li: ({ node, className, children, ...liProps }) => {
-											const classes = String(className ?? "");
-											const lineIndex = typeof node?.position?.start?.line === "number" ? node.position.start.line - 1 : undefined;
-											const isTaskItem = typeof lineIndex === "number" && /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]/.test(lines[lineIndex] ?? "");
-											if (!isTaskItem) {
-												return <li {...liProps} className={classes}>{children}</li>;
-											}
-											return (
-												<li
-													{...liProps}
-													className={classes}
-													role="button"
-													tabIndex={0}
-													onClick={(event) => {
-														const target = event.target as HTMLElement;
-														if (target.closest("a,button")) return;
-														onToggleCheckbox(lineIndex);
-													}}
-													onKeyDown={(event) => {
-														if (event.key !== "Enter" && event.key !== " ") return;
-														event.preventDefault();
-														onToggleCheckbox(lineIndex);
-													}}
-												>
-													{children}
-												</li>
-											);
-										},
-										input: ({ ...inputProps }) => (
-											<input
-												{...inputProps}
-												disabled={inputProps.type === "checkbox" ? false : inputProps.disabled}
-												readOnly={inputProps.type === "checkbox" ? true : inputProps.readOnly}
-												tabIndex={inputProps.type === "checkbox" ? -1 : inputProps.tabIndex}
-											/>
-										),
-									}}
-								>
-									{content}
-								</ReactMarkdown>
-							</div>
-						)}
+			<div className="scratch-pad-body">
+				{/* 编辑/预览区域 — 左 */}
+				<div className="scratch-pad-content">
+					{mode === "edit" ? (
+						<textarea
+							ref={editorRef}
+							className="scratch-pad-editor"
+							value={content}
+							placeholder={t("scratchPad.placeholder")}
+							onChange={(e) => onChangeContent(e.target.value)}
+							onKeyDown={handleKeyDown}
+							autoFocus
+							spellCheck={false}
+						/>
+					) : (
+						<div className="scratch-pad-preview">
+							{empty ? (
+								<div className="scratch-pad-empty-hint">
+									<em>{t("scratchPad.empty")}</em>
+								</div>
+							) : (
+								<div className="scratch-pad-md">
+									<ReactMarkdown
+										remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
+										rehypePlugins={[rehypeKatex, rehypeHighlightMark]}
+										components={{
+											/* GFM task list：用 AST 节点行号直接定位源码行，避免 render-order 计数器漂移 */
+											li: ({ node, className, children, ...liProps }) => {
+												const classes = String(className ?? "");
+												const lineIndex = typeof node?.position?.start?.line === "number" ? node.position.start.line - 1 : undefined;
+												const isTaskItem = typeof lineIndex === "number" && /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]/.test(lines[lineIndex] ?? "");
+												if (!isTaskItem) {
+													return <li {...liProps} className={classes}>{children}</li>;
+												}
+												return (
+													<li
+														{...liProps}
+														className={classes}
+														role="button"
+														tabIndex={0}
+														onClick={(event) => {
+															const target = event.target as HTMLElement;
+															if (target.closest("a,button")) return;
+															onToggleCheckbox(lineIndex);
+														}}
+														onKeyDown={(event) => {
+															if (event.key !== "Enter" && event.key !== " ") return;
+															event.preventDefault();
+															onToggleCheckbox(lineIndex);
+														}}
+													>
+														{children}
+													</li>
+												);
+											},
+											input: ({ ...inputProps }) => (
+												<input
+													{...inputProps}
+													disabled={inputProps.type === "checkbox" ? false : inputProps.disabled}
+													readOnly={inputProps.type === "checkbox" ? true : inputProps.readOnly}
+													tabIndex={inputProps.type === "checkbox" ? -1 : inputProps.tabIndex}
+												/>
+											),
+										}}
+									>
+										{content}
+									</ReactMarkdown>
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+
+				{showFileList && drafts.length > 0 && (
+					<div className="scratch-pad-draft-list">
+						<div className="scratch-pad-draft-list-scroll">
+							{drafts.map((d) => (
+								<DraftItem
+									key={d.path}
+									draft={d}
+									isActive={d.path === currentDraftPath}
+									onSelect={() => onSelectDraft(d.path)}
+									onDelete={() => handleDeleteDraft(d.path)}
+								/>
+							))}
+						</div>
 					</div>
 				)}
 			</div>

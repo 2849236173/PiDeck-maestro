@@ -52,6 +52,11 @@ export class PiRpcClient extends EventEmitter {
     this.write(command);
   }
 
+  /** 直接向 pi 的 stdin 写入原始 JSONL，不经过 pending 跟踪（用于 extension_ui_response 等消息） */
+  sendRaw(payload: Record<string, unknown>) {
+    this.stdin.write(`${JSON.stringify(payload)}\n`);
+  }
+
   close(error?: Error) {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);

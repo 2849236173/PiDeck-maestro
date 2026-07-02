@@ -20,6 +20,7 @@ import type {
 	OpenCodeImportReport,
 	OpenCodeSessionSummary,
 	ConfigFileDiagnostic,
+	DraftMeta,
 	CreateAgentInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -553,6 +554,12 @@ const api = {
 				state: AgentRuntimeState;
 			}) => void,
 		) => subscribe(ipcChannels.agentsRuntimeState, callback),
+		/** 向 Agent 发送扩展 UI 响应（用户回答了 select/confirm/input/editor 对话框） */
+		sendUiResponse: (agentId: string, requestId: string, response: { value?: string; cancelled?: boolean }) =>
+			ipcRenderer.invoke(ipcChannels.agentsUiResponse, agentId, requestId, response) as Promise<void>,
+		/** 监听 Agent 扩展 UI 请求（模型通过扩展调用了 ctx.ui.select/confirm/input/editor） */
+		onUiRequest: (callback: (request: { agentId: string; requestId: string; method: string; title: string; options?: string[]; placeholder?: string; prefill?: string; completed?: boolean; value?: string; cancelled?: boolean }) => void) =>
+			subscribe(ipcChannels.agentsUiRequest, callback),
 	},
 	pet: {
 		/** 宠物窗监听主进程推送的聚合状态 */
@@ -695,10 +702,18 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.feishuSessionBotSet, agentId, botId) as Promise<void>,
 	},
 	scratchPad: {
-		load: () => ipcRenderer.invoke(ipcChannels.scratchPadLoad) as Promise<ScratchPadData>,
-		save: (content: string, cursorPosition: number) =>
-			ipcRenderer.invoke(ipcChannels.scratchPadSave, content, cursorPosition) as Promise<void>,
-		export: () => ipcRenderer.invoke(ipcChannels.scratchPadExport) as Promise<boolean>,
+		list: () =>
+			ipcRenderer.invoke(ipcChannels.scratchPadList) as Promise<DraftMeta[]>,
+		create: () =>
+			ipcRenderer.invoke(ipcChannels.scratchPadCreate) as Promise<DraftMeta>,
+		delete: (draftPath: string) =>
+			ipcRenderer.invoke(ipcChannels.scratchPadDelete, draftPath) as Promise<void>,
+		load: (draftPath?: string) =>
+			ipcRenderer.invoke(ipcChannels.scratchPadLoad, draftPath) as Promise<ScratchPadData>,
+		save: (draftPath: string, content: string, cursorPosition: number) =>
+			ipcRenderer.invoke(ipcChannels.scratchPadSave, draftPath, content, cursorPosition) as Promise<void>,
+		export: (draftPath: string) =>
+			ipcRenderer.invoke(ipcChannels.scratchPadExport, draftPath) as Promise<boolean>,
 	},
 };
 

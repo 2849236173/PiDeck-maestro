@@ -116,6 +116,11 @@ export const ipcChannels = {
 	/** 流式思考内容更新，agent 忙碌时实时推送当前思考文本 */
 	agentsThinking: "agents:thinking",
 
+	/** Agent Extension UI 协议：主进程 → 渲染进程，推送扩展的 UI 请求（select/confirm/input/editor） */
+	agentsUiRequest: "agents:ui-request",
+	/** 渲染进程 → 主进程，传递用户在 UI 请求中的响应（选中的选项、输入的文本等） */
+	agentsUiResponse: "agents:ui-response",
+
 	configGetModels: "config:get-models",
 	configGetAuth: "config:get-auth",
 	configGetSettings: "config:get-settings",
@@ -212,7 +217,10 @@ export const ipcChannels = {
 	/** 宠物窗 → 主进程：请求显示右键上下文菜单 */
 	petContextMenu: "pet:context-menu",
 
-	// ===== Scratch Pad（草稿本） =====
+	// ===== Scratch Pad（草稿本/多草稿） =====
+	scratchPadList: "scratch-pad:list",
+	scratchPadCreate: "scratch-pad:create",
+	scratchPadDelete: "scratch-pad:delete",
 	scratchPadLoad: "scratch-pad:load",
 	scratchPadSave: "scratch-pad:save",
 	scratchPadExport: "scratch-pad:export",

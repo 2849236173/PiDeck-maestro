@@ -3605,6 +3605,211 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	font-family: var(--font-family-business);
 	text-transform: none;
 }
+.tool-card--ask {
+	border-color: color-mix(in srgb, var(--color-info) 26%, var(--color-border-subtle));
+	background: color-mix(in srgb, var(--color-info) 5%, var(--color-bg-muted));
+}
+.tool-card--ask .tool-card-icon {
+	color: var(--color-info);
+}
+.tool-card--ask .tool-card-name {
+	color: var(--color-info);
+	font-family: var(--font-family-business);
+	text-transform: none;
+}
+.ask-question-card-tool-inner {
+	padding: var(--space-2) var(--space-3);
+}
+.ask-question-card-tool-inner .ask-question-card-title {
+	margin-bottom: var(--space-1);
+}
+
+/* 内联提问卡片（实时会话中 system 消息形式） */
+.ask-question-card {
+	border-radius: var(--radius-sm);
+	background: color-mix(in srgb, var(--color-info) 5%, var(--color-bg-muted));
+	border: 1px solid color-mix(in srgb, var(--color-info) 22%, var(--color-border-subtle));
+	overflow: hidden;
+}
+.ask-question-card.pending {
+	background: color-mix(in srgb, var(--color-info) 7%, var(--color-bg-panel));
+}
+.ask-question-card-header {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-3);
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-sm);
+	line-height: var(--line-height-sm);
+}
+.ask-question-card-header .ask-question-card-title {
+	flex: 1;
+	color: var(--color-info);
+	font-family: var(--font-family-base);
+}
+.ask-question-card-status {
+	font-size: var(--font-size-xs);
+	color: var(--color-text-tertiary);
+	white-space: nowrap;
+}
+.ask-question-card.answered .ask-question-card-status {
+	color: var(--color-accent);
+}
+.ask-question-card.cancelled .ask-question-card-status {
+	color: var(--color-text-tertiary);
+}
+.ask-question-card-answer {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 0 var(--space-3) var(--space-2);
+	font-size: var(--font-size-sm);
+	color: var(--color-accent);
+}
+.ask-question-card-body {
+	padding: 0 var(--space-3) var(--space-3);
+}
+.ask-question-card-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-top: var(--space-1);
+}
+.ask-question-card-options-confirm {
+	flex-direction: row;
+}
+.ask-question-card-option {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-elevated);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-sm);
+	cursor: pointer;
+	transition: background 0.1s, border-color 0.1s;
+}
+.ask-question-card-option:hover {
+	background: color-mix(in srgb, var(--color-info) 12%, var(--color-bg-elevated));
+	border-color: var(--color-info);
+}
+.ask-question-card-option:active {
+	background: color-mix(in srgb, var(--color-info) 22%, var(--color-bg-elevated));
+}
+.ask-question-card-option:focus-visible {
+	outline: var(--focus-ring);
+	outline-offset: 2px;
+}
+.ask-question-card-option-custom {
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-xs);
+}
+.ask-question-card-option-yes {
+	border-color: var(--color-accent);
+	color: var(--color-accent);
+}
+.ask-question-card-option-no {
+	border-color: var(--color-danger);
+	color: var(--color-danger);
+}
+.ask-question-card-input-row {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	margin-top: var(--space-1);
+}
+.ask-question-card-input {
+	flex: 1;
+	min-height: 38px !important;
+	max-height: 120px;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-input);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-sm);
+	font-family: var(--font-family-base);
+	line-height: var(--line-height-md);
+	resize: none;
+}
+.ask-question-card-input:focus {
+	outline: none;
+	border-color: var(--color-info);
+}
+.ask-question-card-submit {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-2);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-info);
+	background: color-mix(in srgb, var(--color-info) 14%, var(--color-bg-elevated));
+	color: var(--color-info);
+	cursor: pointer;
+	transition: background 0.1s;
+}
+.ask-question-card-submit:hover {
+	background: color-mix(in srgb, var(--color-info) 25%, var(--color-bg-elevated));
+}
+.ask-question-card-submit:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.ask-question-card-submit:focus-visible {
+	outline: var(--focus-ring);
+	outline-offset: 2px;
+}
+.ask-question-card-editor-area {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin-top: var(--space-1);
+}
+.ask-question-card-editor {
+	width: 100%;
+	min-height: 120px;
+	max-height: 300px;
+	padding: var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-input);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-sm);
+	font-family: var(--font-family-base);
+	line-height: var(--line-height-md);
+	resize: vertical;
+}
+.ask-question-card-editor:focus {
+	outline: none;
+	border-color: var(--color-info);
+}
+.ask-question-card-editor-actions {
+	display: flex;
+	gap: var(--space-2);
+	justify-content: flex-end;
+}
+.ask-question-card-cancel {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-1) var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--color-border);
+	background: transparent;
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-sm);
+	cursor: pointer;
+}
+.ask-question-card-cancel:hover {
+	background: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+}
+.ask-question-card-cancel:focus-visible {
+	outline: var(--focus-ring);
+	outline-offset: 2px;
+}
+
 /* 收起状态工具组里的 skill chip */
 .tool-group-card-chip.skill {
 	border-color: color-mix(in srgb, var(--color-brand-purple) 28%, var(--color-border-subtle));
@@ -12163,7 +12368,7 @@ a.config-btn {
 	right: 18px;
 	top: 20vh;
 	z-index: 101;
-	width: 540px;
+	width: 640px;
 	max-width: calc(100vw - 36px);
 	height: min(640px, 68vh);
 	display: flex;
@@ -12246,6 +12451,105 @@ a.config-btn {
 	flex-wrap: nowrap;
 }
 
+.scratch-pad-body {
+	display: flex;
+	flex: 1;
+	overflow: hidden;
+}
+
+/* 草稿列表侧栏 — 右侧窄栏，可拖拽缩放 */
+/* 草稿列表侧栏 — 右侧窄栏 */
+.scratch-pad-draft-list {
+	width: 130px;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid var(--color-border-subtle);
+	background: transparent;
+	flex-shrink: 0;
+	overflow: hidden;
+}
+
+.scratch-pad-draft-list-scroll {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 6px 0;
+}
+
+/* 每个草稿项 */
+.scratch-pad-draft-item {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 28px;
+	padding: 0 6px 0 8px;
+	cursor: pointer;
+	border-left: 2px solid transparent;
+	user-select: none;
+	transition: background 100ms ease;
+}
+
+.scratch-pad-draft-item:hover {
+	background: var(--color-bg-hover);
+}
+
+.scratch-pad-draft-item.active {
+	background: var(--color-bg-active);
+	border-left-color: var(--color-accent);
+}
+
+.scratch-pad-draft-item:focus-visible {
+	outline: var(--focus-ring);
+	outline-offset: -2px;
+}
+
+.scratch-pad-draft-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: var(--color-text-secondary);
+	line-height: 1;
+	letter-spacing: 0.01em;
+}
+
+.scratch-pad-draft-item.active .scratch-pad-draft-name {
+	color: var(--color-text-primary);
+	font-weight: 500;
+}
+
+/* 删除按钮：hover 行时显示 */
+.scratch-pad-draft-del-btn {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border: none;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-tertiary);
+	cursor: pointer;
+	padding: 0;
+	flex-shrink: 0;
+}
+
+.scratch-pad-draft-item:hover .scratch-pad-draft-del-btn {
+	display: flex;
+}
+
+.scratch-pad-draft-del-btn:hover {
+	color: var(--color-danger);
+	background: var(--color-bg-hover);
+}
+
+.scratch-pad-draft-del-btn:focus-visible {
+	outline: var(--focus-ring);
+}
+
 .scratch-pad-content {
 	flex: 1;
 	overflow: hidden;
@@ -12298,35 +12602,20 @@ a.config-btn {
 	color: var(--color-danger);
 }
 
-/* ---------- Scratch Pad 头部按钮 ---------- */
-.scratch-pad-btn {
-	color: var(--color-text-tertiary);
-}
 
-.scratch-pad-btn:hover {
-	color: var(--color-text-primary);
-}
-
-.scratch-pad-btn.active {
-	color: var(--color-text-primary);
-}
-
-.scratch-pad-tool-btn {}
-
-/* ---------- Scratch Pad in-panel button ---------- */
+/* ---------- Scratch Pad 头部按钮（统一 icon-only 方钮） ---------- */
 button.scratch-pad-tool-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 4px;
-	width: auto;
-	min-width: 0;
+	width: 30px;
 	height: 30px;
-	padding: 0 8px;
+	padding: 0;
 	border: 1px solid transparent;
 	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--color-text-tertiary);
+	cursor: pointer;
 	box-shadow: none;
 }
 
@@ -12337,15 +12626,9 @@ button.scratch-pad-tool-btn:hover {
 }
 
 button.scratch-pad-tool-btn.active {
-	color: var(--color-text-primary);
-	border-color: var(--color-border-strong);
-	background: var(--color-bg-active);
-	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-.scratch-pad-tool-text {
-	font-size: var(--font-size-caption, 12px);
-	white-space: nowrap;
+	color: var(--color-accent);
+	border-color: var(--color-accent);
+	background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .scratch-pad-kbd {

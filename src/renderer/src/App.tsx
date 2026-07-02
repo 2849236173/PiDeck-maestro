@@ -88,6 +88,7 @@ import {
   UserBubble,
   AssistantText,
   ToolGroupCard,
+  AskQuestionCard,
   ThinkingBlock,
   ThinkingIndicator,
   applySuggestion,
@@ -371,6 +372,20 @@ function getEditorLogoUrl(editorId: string) {
   return EDITOR_LOGO_URLS[editorId];
 }
 
+/** 扩展 UI 请求，适配 onUiRequest 回调中的 request 对象 */
+interface UiRequest {
+	agentId: string;
+	requestId: string;
+	method: string;
+	title: string;
+	options?: string[];
+	placeholder?: string;
+	prefill?: string;
+	completed?: boolean;
+	value?: string;
+	cancelled?: boolean;
+}
+
 function migrateAgentRecord<T>(
   current: Record<string, T>,
   replacementById: Map<string, string>,
@@ -472,6 +487,8 @@ export function App() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [editorsOpen]);
+  /** 活跃的 Extension UI 请求 map（requestId → UiRequest），用于实时显示 ask_question 卡片 */
+  const [activeUiRequest, setActiveUiRequest] = useState<Record<string, UiRequest> | null>(null);
   /** Goal 状态 */
   const [goalText, setGoalText] = useState<string>("");
   const goalTextRef = useRef("");
@@ -1291,6 +1308,20 @@ export function App() {
         [payload.agentId]: payload.thinking,
       })),
     );
+    // 监听 Extension UI 请求（模型通过 ask_question 扩展发起 select/confirm/input/editor）
+    const offUiRequest = api.agents.onUiRequest((request) => {
+      setActiveUiRequest((current) => {
+        // 如果 requestId 已存在且带了 completed 标记，清除该请求
+        if (current?.[request.requestId] && request.completed) {
+          const next = { ...current };
+          delete next[request.requestId];
+          if (Object.keys(next).length === 0) return null;
+          return next;
+        }
+        // 新增或更新 UI 请求
+        return { ...(current ?? {}), [request.requestId]: request as UiRequest };
+      });
+    });
     return () => {
       offProjects();
       offState();
@@ -1300,6 +1331,7 @@ export function App() {
       offUpdateProgress();
       offRuntimeState();
       offThinking();
+      offUiRequest();
     };
   }, []);
 
@@ -2989,7 +3021,8 @@ export function App() {
       return { ...current, [agentId]: { ...prev, isStreaming: false } };
     });
     await api.agents.abort(agentId);
-    void refreshRuntimeState(agentId);
+    // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态，
+    // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
   }
 
   async function exportAgentHtml(agentId: string) {
@@ -4670,6 +4703,11 @@ ${goalTextRef.current}
                   />
                 ) : item.message.role === "error" ? (
                   <DiagnosticMessageCard key={item.message.id} message={item.message} />
+                ) : item.message.role === "system" && (item.message.meta as any)?.type === "askQuestion" ? (
+                  <AskQuestionCard key={item.message.id} message={item.message} onRespond={(response) => {
+                    const req = (item.message.meta as any).uiRequest;
+                    if (req && activeAgentId) api.agents.sendUiResponse(activeAgentId, req.requestId, response);
+                  }} />
                 ) : item.message.role === "system" && (item.message.meta as any)?.type === "compaction" ? (
                   <CompactionCard key={item.message.id} message={item.message} />
                 ) : item.message.role === "system" ? (
@@ -5693,6 +5731,8 @@ ${goalTextRef.current}
       {scratchPad.isOpen || scratchPad.isClosing ? (
         <div className={`scratch-pad-overlay${scratchPad.isClosing ? " closing" : ""}`} onClick={() => scratchPad.close()}>
           <ScratchPadPanel
+            drafts={scratchPad.drafts}
+            currentDraftPath={scratchPad.currentDraftPath}
             content={scratchPad.content}
             mode={scratchPad.mode}
             isClosing={scratchPad.isClosing}
@@ -5702,6 +5742,9 @@ ${goalTextRef.current}
             onSetMode={scratchPad.setMode}
             onToggleCheckbox={scratchPad.toggleTaskCheckbox}
             onExport={() => void scratchPad.exportFile()}
+            onSelectDraft={scratchPad.selectDraft}
+            onCreateDraft={scratchPad.createDraft}
+            onDeleteDraft={scratchPad.deleteDraft}
           />
         </div>
       ) : null}

@@ -574,6 +574,8 @@ export function createPreviewApi(): PiDesktopApi {
 			onThinking: noop,
 			onRpcLog: noop,
 			onRuntimeState: noop,
+			onUiRequest: noop,
+			sendUiResponse: async () => undefined,
 		},
 		pet: {
 			onState: noop,
@@ -653,8 +655,11 @@ export function createPreviewApi(): PiDesktopApi {
 			sessionBotSet: async () => {},
 		},
 		scratchPad: {
+			list: async () => [],
+			create: async () => ({ id: "", name: "", path: "", createdAt: 0, updatedAt: 0 }),
+			delete: async () => {},
 			load: async () => ({ content: "", lastEditedAt: 0, cursorPosition: 0 }),
-			save: async () => undefined,
+			save: async () => {},
 			export: async () => false,
 		},
 	};

@@ -1364,10 +1364,14 @@ export const ToolCard = memo(function ToolCard(props: {
 			? props.message.meta.durationMs
 			: undefined;
 	const showDuration = status !== "running" && durationMs !== undefined;
-	// 模型用 read 工具读取 SKILL.md 来加载 skill：识别后以 skill 徽标样式渲染，
-	// 让用户看到模型主动调用了哪个 skill（区别于普通文件读取）
+	// 模型用 read 工具读取 SKILL.md 来加载 skill：识别后以 skill 徽标样式渲染
 	const skillName = getReadSkillName(props.message);
 	const isSkillRead = Boolean(skillName);
+	// 历史会话中从 ask_question 工具结果反推的提问卡片数据
+	const askCard = props.message.meta?._askCard as
+		| { question?: string; type?: string; answered?: boolean; answer?: unknown; options?: string[] }
+		| undefined;
+	const isAskCard = Boolean(askCard?.question);
 	const statusLabel =
 		status === "running"
 			? t("tool.statusRunning")
@@ -1382,7 +1386,7 @@ export const ToolCard = memo(function ToolCard(props: {
 	};
 	return (
 		<section
-			className={`tool-card tone-${tone}${isSkillRead ? " tool-card--skill" : ""}`}
+			className={`tool-card tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}`}
 			data-status={status}
 			data-tool-kind={isSkillRead ? "skill" : getToolKind(toolName)}
 			data-message-id={props.message.id}
@@ -1393,17 +1397,17 @@ export const ToolCard = memo(function ToolCard(props: {
 				aria-expanded={expanded}
 			>
 				<span className="tool-card-icon">
-					{isSkillRead ? <Brain size={14} /> : toolIcon(toolName)}
+					{isSkillRead ? <Brain size={14} /> : isAskCard ? <MessageCircle size={14} /> : toolIcon(toolName)}
 				</span>
 				<span className="tool-card-name">
-					{isSkillRead ? `skill:${skillName}` : toolName}
+					{isSkillRead ? `skill:${skillName}` : isAskCard ? "提问" : toolName}
 				</span>
 				{!isSkillRead && kindLabel && (
 					<span className="tool-card-kind">{kindLabel}</span>
 				)}
 				<span className="tool-card-status">
 					{status === "running" && <span className="tool-card-spinner" aria-hidden="true" />}
-					{statusLabel}
+					{askCard?.answered ? "已回答" : (statusLabel)}
 				</span>
 				{showDuration && (
 					<span className="tool-card-duration" title={t("tool.durationTitle")}>
@@ -1422,7 +1426,23 @@ export const ToolCard = memo(function ToolCard(props: {
 			</button>
 			{expanded && (
 				<div className="tool-card-content">
-					<pre className="tool-card-detail">{detailText}</pre>
+					{isAskCard && askCard ? (
+						<div className="ask-question-card-tool-inner">
+							<div className="ask-question-card-title">{askCard.question}</div>
+							{askCard.answered ? (
+								<div className="ask-question-card-answered">
+									<Check size={13} className="ask-question-card-answered-ok" />
+									{typeof askCard.answer === "string" ? askCard.answer : "已回答"}
+								</div>
+							) : (
+								<div className="ask-question-card-answered" style={{ color: "var(--color-text-tertiary)" }}>
+									未回答
+								</div>
+							)}
+						</div>
+					) : (
+						<pre className="tool-card-detail">{detailText}</pre>
+					)}
 					<button
 						className="tool-card-copy"
 						onClick={handleCopy}
@@ -1506,6 +1526,216 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 				<time>{formatTime(props.message.timestamp)}</time>
 			</div>
 			<pre className="diagnostic-card-body">{stripAnsi(props.message.text)}</pre>
+		</article>
+	);
+});
+
+/**
+ * 内联提问卡片：渲染 Extension UI 请求（select/confirm/input/editor）作为 system 消息。
+ * 用于实时会话中模型通过 ask_question 扩展向用户发起交互。
+ */
+export const AskQuestionCard = memo(function AskQuestionCard(props: {
+	message: ChatMessage;
+	onRespond?: (response: { value?: string; cancelled?: boolean }) => void;
+}) {
+	const meta = props.message.meta as Record<string, unknown> | undefined;
+	const uiRequest = meta?.uiRequest as Record<string, unknown> | undefined;
+	const status = String(meta?.status ?? "pending");
+	const response = meta?.response as Record<string, unknown> | undefined;
+	const answered = status === "answered" && response && !response.cancelled;
+	const cancelled = status === "cancelled" || status === "error";
+
+	const [inputValue, setInputValue] = useState("");
+	const [showCustomInput, setShowCustomInput] = useState(false);
+	const [customValue, setCustomValue] = useState("");
+	const inputRef = useRef<HTMLTextAreaElement>(null);
+
+	// 编辑器输入 ref
+	const editorRef = useRef<HTMLTextAreaElement>(null);
+
+	// 当 prefill 变化时同步到 inputValue
+	useEffect(() => {
+		if (uiRequest?.prefill) setInputValue(String(uiRequest.prefill));
+	}, [uiRequest?.prefill]);
+
+	const handleSelect = (value: string) => {
+		props.onRespond?.({ value });
+	};
+
+	const handleConfirm = (value: boolean) => {
+		props.onRespond?.({ value: value ? "true" : "false" });
+	};
+
+	const handleInputSubmit = () => {
+		if (inputValue.trim()) {
+			props.onRespond?.({ value: inputValue });
+		}
+	};
+
+	const handleCustomSubmit = () => {
+		if (customValue.trim()) {
+			props.onRespond?.({ value: customValue });
+		}
+	};
+
+	const handleCancel = () => {
+		props.onRespond?.({ cancelled: true });
+	};
+
+	// 已完成的卡片：显示简要结果
+	if (answered || cancelled) {
+		const answerText = answered && response?.value != null ? String(response.value) : "";
+		return (
+			<article
+				className={`ask-question-card ${answered ? "answered" : "cancelled"}`}
+			>
+				<div className="ask-question-card-header">
+					<MessageCircle size={14} />
+					<span className="ask-question-card-title">
+						{String(meta?.uiRequest ? (uiRequest?.title ?? "") : "")}
+					</span>
+					<span className="ask-question-card-status">
+						{answered ? "网络答案" : "已取消"}
+					</span>
+				</div>
+				{answered && answerText && (
+					<div className="ask-question-card-answer">
+						<Check size={13} />
+						{answerText}
+					</div>
+				)}
+			</article>
+		);
+	}
+
+	// pending 卡片：显示交互界面
+	const method = String(uiRequest?.method ?? "input");
+	const title = String(uiRequest?.title ?? "");
+	const placeholder = String(uiRequest?.placeholder ?? "");
+	const options = uiRequest?.options as string[] | undefined;
+
+	return (
+		<article className="ask-question-card pending" data-message-id={props.message.id}>
+			<div className="ask-question-card-header">
+				<MessageCircle size={14} />
+				<span className="ask-question-card-title">{title || "AI 提问"}</span>
+				<span className="ask-question-card-status">等待回答</span>
+			</div>
+			<div className="ask-question-card-body">
+				{method === "select" && options && options.length > 0 && (
+					<div className="ask-question-card-options">
+						{options.map((opt, i) => (
+							<button
+								key={i}
+								className="ask-question-card-option"
+								onClick={() => handleSelect(opt)}
+							>
+								{opt}
+							</button>
+						))}
+						{!showCustomInput ? (
+							<button
+								className="ask-question-card-option ask-question-card-option-custom"
+								onClick={() => {
+									setShowCustomInput(true);
+									setTimeout(() => inputRef.current?.focus(), 50);
+								}}
+							>
+								✎ 自行输入...
+							</button>
+						) : (
+							<div className="ask-question-card-input-row">
+								<textarea
+									ref={inputRef}
+									className="ask-question-card-input"
+									placeholder="输入自定义答案..."
+									value={customValue}
+									onChange={(e) => setCustomValue(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !e.shiftKey) {
+											e.preventDefault();
+											handleCustomSubmit();
+										}
+									}}
+								/>
+								<button
+									className="ask-question-card-submit"
+									onClick={handleCustomSubmit}
+									disabled={!customValue.trim()}
+								>
+									<Check size={14} />
+								</button>
+							</div>
+						)}
+					</div>
+				)}
+				{method === "confirm" && (
+					<div className="ask-question-card-options ask-question-card-options-confirm">
+						<button
+							className="ask-question-card-option ask-question-card-option-yes"
+							onClick={() => handleConfirm(true)}
+						>
+							确定
+						</button>
+						<button
+							className="ask-question-card-option ask-question-card-option-no"
+							onClick={() => handleConfirm(false)}
+						>
+							取消
+						</button>
+					</div>
+				)}
+				{method === "input" && (
+					<div className="ask-question-card-input-row">
+						<textarea
+							ref={inputRef}
+							className="ask-question-card-input"
+							placeholder={placeholder || "输入回答..."}
+							value={inputValue}
+							onChange={(e) => setInputValue(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" && !e.shiftKey) {
+									e.preventDefault();
+									handleInputSubmit();
+								}
+							}}
+						/>
+						<button
+							className="ask-question-card-submit"
+							onClick={handleInputSubmit}
+							disabled={!inputValue.trim()}
+						>
+							<Check size={14} />
+						</button>
+					</div>
+				)}
+				{method === "editor" && (
+					<div className="ask-question-card-editor-area">
+						<textarea
+							ref={editorRef}
+							className="ask-question-card-editor"
+							placeholder={placeholder || "编辑内容..."}
+							value={inputValue}
+							onChange={(e) => setInputValue(e.target.value)}
+						/>
+						<div className="ask-question-card-editor-actions">
+							<button
+								className="ask-question-card-submit"
+								onClick={handleInputSubmit}
+								disabled={!inputValue.trim()}
+							>
+								提交
+							</button>
+							<button
+								className="ask-question-card-cancel"
+								onClick={handleCancel}
+							>
+								取消
+							</button>
+						</div>
+					</div>
+				)}
+			</div>
 		</article>
 	);
 });
