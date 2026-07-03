@@ -1391,21 +1391,31 @@ function getToolTone(message: ChatMessage): "running" | "error" | "warning" | "o
 }
 
 /** pi 内置工具名集合，用于与 MCP / 扩展工具区分。 */
-const BUILT_IN_TOOLS = new Set(["bash", "edit", "find", "grep", "ls", "read", "write", "ask_question"]);
+const BUILT_IN_TOOLS = new Set(["bash", "edit", "find", "grep", "ls", "read", "write"]);
+
+/**
+ * 扩展工具中带下划线的名称，会被 MCP-direct 正则误匹配为形如 {server}_{tool}。
+ * 在此登记后 getToolKind 将其归为 "extension" 而非 "mcp-direct"。
+ */
+const NON_MCP_TOOLS = new Set(["ask_question"]);
 
 /**
  * 识别工具来源类型：
  * - mcp-proxy：toolName 为 mcp（pi-mcp-adapter 代理模式，LLM 通过单一 mcp 工具调用具体 server/tool）
- * - mcp-direct：toolName 形如 {server}_{tool} 且非内置工具（directTools 模式，server 名去掉 -mcp 后缀）
+ * - mcp-direct：toolName 形如 {server}_{tool} 且非内置/非扩展工具（directTools 模式，server 名去掉 -mcp 后缀）
  * - builtin：pi 内置工具（bash/edit/find/grep/ls/read/write）
- * - extension：其余带下划线或自定义命名的扩展工具
+ * - extension：扩展工具或自定义命名的其他工具
  */
 function getToolKind(toolName: string): "mcp-proxy" | "mcp-direct" | "builtin" | "extension" {
 	const key = toolName.toLowerCase();
 	if (key === "mcp") return "mcp-proxy";
 	if (BUILT_IN_TOOLS.has(key)) return "builtin";
 	// directTools 模式：server_tool，server 名通常含字母/连字符，tool 名也是标识符
-	if (/^[a-z][a-z0-9-]*_[a-z][a-z0-9_-]*$/i.test(toolName)) return "mcp-direct";
+	if (/^[a-z][a-z0-9-]*_[a-z][a-z0-9_-]*$/i.test(toolName)) {
+		// 已知扩展工具名含下划线但不是 MCP 直连 → 归为 extension
+		if (NON_MCP_TOOLS.has(key)) return "extension";
+		return "mcp-direct";
+	}
 	return "extension";
 }
 
