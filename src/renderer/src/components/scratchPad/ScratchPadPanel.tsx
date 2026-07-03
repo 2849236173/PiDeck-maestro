@@ -203,8 +203,8 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 	const lines = content.split("\n");
 	const editorRef = useRef<HTMLTextAreaElement>(null);
 
-	// 文件列表显示/隐藏
-	const [showFileList, setShowFileList] = useState(true);
+	// 文件列表默认折叠，用户需要时手动展开
+	const [showFileList, setShowFileList] = useState(false);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
