@@ -361,34 +361,44 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 		persistState();
 
 		const todoListText = todoItems.map((item) => `${item.step}. ☐ ${item.text}`).join("\n");
-		const choice = await ctx.ui.select("PiDeck 计划模式 — 计划已生成，请选择下一步", [
-			"执行计划（AI 开始逐步实施，并自动标记完成进度）",
-			"继续只读分析（AI 继续分析，仍不能修改文件）",
-			"修改计划（编辑计划步骤后重新提交给 AI）",
-		]);
+		// 循环展示选单：取消「修改计划」时回到选单，避免用户误点后 agent 空停
+		let actionTaken = false;
+		while (!actionTaken) {
+			const choice = await ctx.ui.select("PiDeck 计划模式 — 计划已生成，请选择下一步", [
+				"执行计划（AI 开始逐步实施，并自动标记完成进度）",
+				"继续只读分析（AI 继续分析，仍不能修改文件）",
+				"修改计划（编辑计划步骤后重新提交给 AI）",
+			]);
 
-		if (choice?.startsWith("执行")) {
-			planModeEnabled = false;
-			executionMode = true;
-			restoreNormalModeTools();
-			updateWidget(ctx);
-			persistState();
-			pi.sendMessage(
-				{ customType: "pi-deck-plan-todos", content: `**Plan Steps (${todoItems.length})**\n\n${todoListText}`, display: true },
-				{ deliverAs: "followUp" },
-			);
-			pi.sendMessage(
-				{
-					customType: "pi-deck-plan-execute",
-					content: `Execute the approved plan.\n\n${todoItems.map((item) => `${item.step}. ${item.text}`).join("\n")}\n\nAfter completing a step, include [DONE:n].`,
-					display: true,
-				},
-				{ triggerTurn: true, deliverAs: "followUp" },
-			);
-		} else if (choice?.startsWith("修改")) {
-			const refinement = await ctx.ui.editor("如何修改计划？", "");
-			if (refinement?.trim()) {
-				pi.sendUserMessage(refinement.trim(), { deliverAs: "followUp" });
+			if (choice?.startsWith("执行")) {
+				planModeEnabled = false;
+				executionMode = true;
+				restoreNormalModeTools();
+				updateWidget(ctx);
+				persistState();
+				pi.sendMessage(
+					{ customType: "pi-deck-plan-todos", content: `**Plan Steps (${todoItems.length})**\n\n${todoListText}`, display: true },
+					{ deliverAs: "followUp" },
+				);
+				pi.sendMessage(
+					{
+						customType: "pi-deck-plan-execute",
+						content: `Execute the approved plan.\n\n${todoItems.map((item) => `${item.step}. ${item.text}`).join("\n")}\n\nAfter completing a step, include [DONE:n].`,
+						display: true,
+					},
+					{ triggerTurn: true, deliverAs: "followUp" },
+				);
+				actionTaken = true;
+			} else if (choice?.startsWith("修改")) {
+				const refinement = await ctx.ui.editor("如何修改计划？", "");
+				if (refinement?.trim()) {
+					pi.sendUserMessage(refinement.trim(), { deliverAs: "followUp" });
+					actionTaken = true;
+				}
+				// 取消或空内容 → 循环回到选单
+			} else {
+				// 继续只读分析 → 直接退出循环，agent 结束当前回合
+				actionTaken = true;
 			}
 		}
 	});
