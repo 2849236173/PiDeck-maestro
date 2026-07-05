@@ -1,6 +1,6 @@
-import { app } from "electron";
+import { app, shell } from "electron";
 import { existsSync, readFileSync } from "node:fs";
-import { readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import type { SessionSummary } from "../../shared/types";
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
@@ -25,12 +25,74 @@ export class SessionScanner {
    */
   async rename(filePath: string, newName: string): Promise<void> {
     const raw = await readFile(filePath, "utf8");
-    const meta = JSON.stringify({ sessionName: newName, ts: Date.now() });
-    await writeFile(filePath, `${meta}\n${raw}`, "utf8");
+    const lines = raw.split(/\r?\n/);
+    const metaLine = JSON.stringify({ sessionName: newName, ts: Date.now() });
+
+    // 查找已有的 sessionName 行并替换（首条匹配），避免每次重命名都前置插入导致文件膨胀
+    let found = false;
+    let sessionNameCount = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (typeof parsed.sessionName === "string") {
+          sessionNameCount++;
+          if (!found) {
+            lines[i] = metaLine;
+            found = true;
+          }
+        }
+      } catch {
+        // 跳过不可解析的行
+      }
+    }
+
+    if (!found) {
+      // 没有旧 sessionName 行，前置插入（行为与 pi 原生一致）
+      await writeFile(filePath, `${metaLine}\n${raw}`, "utf8");
+    } else {
+      // 已有 sessionName 行，更新后写回；如果 sessionName 行数超过阈值（5条），
+      // 说明重命名次数过多，清理多余的旧 sessionName 行（仅保留首条/替换后的当前行）。
+      if (sessionNameCount > 5) {
+        const filtered = lines.filter((line) => {
+          const trimmed = line.trim();
+          if (!trimmed) return true;
+          try {
+            const parsed = JSON.parse(trimmed);
+            // 已替换的当前行保留，其余 sessionName 行移除
+            if (typeof parsed.sessionName === "string" && parsed !== JSON.parse(metaLine)) {
+              return false;
+            }
+          } catch { /* 保留不可解析的行 */ }
+          return true;
+        });
+        await writeFile(filePath, filtered.join("\n"), "utf8");
+      } else {
+        await writeFile(filePath, lines.join("\n"), "utf8");
+      }
+    }
   }
 
   async delete(filePath: string): Promise<void> {
-    await unlink(filePath);
+    // 优先使用系统回收站（Electron shell.trashItem），避免文件永久丢失。
+    // 回收站不可用时（如 Linux 部分桌面环境），fallback 到 rename 到 .trash 子目录。
+    try {
+      await shell.trashItem(filePath);
+    } catch {
+      // shell.trashItem 失败时（如无回收站实现），将文件移到一个隐藏的 .trash 子目录
+      const trashDir = join(this.root, ".trash");
+      try {
+        const { mkdir, rename } = await import("node:fs/promises");
+        await mkdir(trashDir, { recursive: true });
+        const trashName = `${basename(filePath)}.${Date.now()}.deleted`;
+        await rename(filePath, join(trashDir, trashName));
+      } catch {
+        // 最终回退：直接删除
+        const { unlink } = await import("node:fs/promises");
+        await unlink(filePath);
+      }
+    }
   }
 
   /**

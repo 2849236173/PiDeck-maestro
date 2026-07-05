@@ -4268,6 +4268,36 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   font-size: var(--font-size-caption) !important;
 }
 
+.empty-state button {
+  min-width: 120px;
+  height: var(--control-height-lg);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-control);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-5);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.empty-state button:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.empty-state button:active {
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-primary));
+  border-color: var(--color-accent-strong);
+}
+.empty-state button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .composer {
   background: var(--color-bg-panel);
   padding: var(--space-1) var(--space-2) var(--space-1);
@@ -4555,6 +4585,52 @@ body.is-composer-resizing .composer-resize-handle::after {
 .composer-box.plan-mode .composer-footer {
   color: var(--color-brand-green);
 }
+.extension-widgets-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.extension-widgets-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid
+    color-mix(in srgb, var(--color-brand-green) 24%, var(--color-border-subtle));
+  border-radius: var(--radius-sm);
+  background: color-mix(
+    in srgb,
+    var(--color-brand-green) 7%,
+    var(--color-bg-panel)
+  );
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-micro);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+  text-align: left;
+}
+.extension-widgets-toggle:hover {
+  background: color-mix(
+    in srgb,
+    var(--color-brand-green) 12%,
+    var(--color-bg-hover)
+  );
+  color: var(--color-text-secondary);
+}
+.extension-widgets-toggle .toggle-arrow {
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.extension-widgets-toggle .toggle-arrow.expanded {
+  transform: rotate(180deg);
+}
+.extension-widgets-toggle .toggle-count {
+  margin-left: auto;
+  opacity: 0.6;
+}
 .extension-widget-stack {
   border: 1px solid
     color-mix(in srgb, var(--color-brand-green) 24%, var(--color-border-subtle));
@@ -4565,12 +4641,12 @@ body.is-composer-resizing .composer-resize-handle::after {
     var(--color-bg-panel)
   );
   box-shadow: var(--shadow-sm);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
   font-family: var(--font-family-business);
   font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
+  line-height: var(--line-height-micro);
   color: var(--color-text-secondary);
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 .extension-widget-line {
@@ -4579,7 +4655,7 @@ body.is-composer-resizing .composer-resize-handle::after {
   white-space: nowrap;
 }
 .extension-widget-line + .extension-widget-line {
-  margin-top: var(--space-1);
+  margin-top: 2px;
 }
 .composer-footer {
   display: flex;

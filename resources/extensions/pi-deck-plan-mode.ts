@@ -368,7 +368,6 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 				"执行计划（AI 开始逐步实施，并自动标记完成进度）",
 				"继续只读分析（AI 继续分析，仍不能修改文件）",
 				"修改计划（编辑计划步骤后重新提交给 AI）",
-				"取消计划（停止会话，退出计划模式）",
 			]);
 
 			if (choice?.startsWith("执行")) {
@@ -397,12 +396,12 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 					actionTaken = true;
 				}
 				// 取消或空内容 → 循环回到选单
-			} else if (choice?.startsWith("取消")) {
-				// 取消计划：退出计划模式，不发送后续消息，会话保持打开
-				setPlanMode(ctx, false);
+			} else if (choice?.startsWith("继续")) {
+				// 继续只读分析 → 直接退出循环，agent 结束当前回合
 				actionTaken = true;
 			} else {
-				// 继续只读分析 → 直接退出循环，agent 结束当前回合
+				// 用户关闭选单（点击外部 / Esc）→ 退出 plan 模式，不发送后续消息，会话保持打开
+				setPlanMode(ctx, false);
 				actionTaken = true;
 			}
 		}

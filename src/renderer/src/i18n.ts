@@ -182,6 +182,7 @@ const zhCN = {
   "app.sessionRenamed": "已重命名会话",
   "app.sessionRenameFailed": "重命名失败：{error}",
   "app.settingsSaved": "设置已保存。",
+  "app.widgetsToggle": "{count} 个组件",
   "app.shellProxyDisabled": "pi agent 代理已关闭。",
   "app.shellProxySaved": "pi agent 代理设置已保存；新建或重启 agent 后生效。",
   "app.stop": "停止",
@@ -1378,6 +1379,7 @@ const enUS: Record<TranslationKey, string> = {
   "app.sessionRenamed": "Session renamed",
   "app.sessionRenameFailed": "Rename failed: {error}",
   "app.settingsSaved": "Settings saved.",
+  "app.widgetsToggle": "{count} widget(s)",
   "app.shellProxyDisabled": "pi agent proxy disabled.",
   "app.shellProxySaved":
     "pi agent proxy saved. Create or restart agents for it to take effect.",

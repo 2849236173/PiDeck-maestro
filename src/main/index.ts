@@ -1334,6 +1334,19 @@ function registerIpc() {
 			agentManager.exportSessionHtml(projectId, filePath),
 	);
 	ipcMain.handle(ipcChannels.sessionsDelete, async (_event, filePath: string) => {
+		// 检查是否有活跃 Agent 正在使用该会话文件；如有则拒绝删除，避免 pi 进程访问已删除文件。
+		const normalizedTarget = filePath.replace(/\\/g, "/").toLowerCase();
+		const activeAgents = agentManager.list();
+		const usingAgent = activeAgents.find((agent) => {
+			const sessionPath = agent.sessionPath?.replace(/\\/g, "/").toLowerCase();
+			return sessionPath === normalizedTarget;
+		});
+		if (usingAgent) {
+			throw new Error(
+				`会话“${usingAgent.title}”正在使用中，请先关闭 Agent 后再删除`,
+			);
+		}
+
 		await sessionScanner.delete(filePath);
 		void appLogger.info("session", "Session deleted", { filePath });
 	});

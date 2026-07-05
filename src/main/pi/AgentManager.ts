@@ -1,8 +1,8 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile, copyFile, unlink } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
 import type {
 	AgentRuntimeState,
@@ -44,6 +44,8 @@ export class AgentManager {
 	private readonly creatingSessionAgents = new Map<string, Promise<AgentTab>>();
 	/** 记录每个 agent 当前执行的工具名称，无工具时为 null */
 	private readonly toolExecutingByAgent = new Map<string, string | null>();
+	/** 缓存每个 agent 的 entryId → JSONL 行号映射，用于编辑/删除定位。每次 loadMessages 后刷新。 */
+	private readonly entryIdToLineMap = new Map<string, Map<string, number>>();
 	/** 流式消息 emit 节流状态。 */
 	private readonly messageFlushTimers = new Map<string, NodeJS.Timeout>();
 	private readonly pendingMessageAgents = new Set<string>();
@@ -116,7 +118,27 @@ export class AgentManager {
 		});
 		const rawMessages = (response.data as { messages?: unknown[] } | undefined)?.messages ?? [];
 		const trimmed = this.trimHistoryMessages(rawMessages);
-		const messages = this.convertAgentMessages(agentId, trimmed);
+
+		// 获取 get_entries 以建立 entryId 列表，用于编辑/删除的精确定位。
+		// get_entries 返回 session tree 中的所有 entry（含废弃分支），
+		// 通过 leafId 回溯到 root 得到 active branch 的 entryId 有序列表。
+		let activeEntryIds: string[] | undefined;
+		try {
+			const entriesResponse = await runtime.process.client.request({
+				type: "get_entries",
+			}, 15_000);
+			const entriesData = entriesResponse.data as
+				| { entries?: Array<{ id: string; parentId: string | null }>; leafId?: string }
+				| undefined;
+			if (entriesData?.entries && entriesData?.leafId) {
+				activeEntryIds = this.buildActiveBranchEntryIds(entriesData.entries, entriesData.leafId);
+			}
+		} catch {
+			// get_entries 失败时不阻塞消息加载；编辑/删除走 fallback（_piDeckMsgSeq 计数）
+			void this.appLogger?.warn("agent", "Failed to get_entries for entryId mapping", { agentId });
+		}
+
+		const messages = this.convertAgentMessages(agentId, trimmed, activeEntryIds);
 		this.messages.set(agentId, messages);
 		this.refreshAutoTitle(agentId);
 		this.scheduleMessageEmit(agentId, true);
@@ -859,93 +881,239 @@ export class AgentManager {
 
 	/**
 	 * 使用 pi 的 switch_session RPC 重载当前会话，无需重启进程。
-	 * 流程：编辑 JSONL → 调用 switch_session（同路径）→ pi 从文件重建会话 → loadMessages 刷新。
-	 * 比 restart 快得多（不创建新进程）。
+	 * 流程：编辑 JSONL → 在文件首行插入 _reloadMarker → 调用 switch_session（同路径）
+	 * → pi 发现文件首行变更→缓存失效→重新读取 → 移除 _reloadMarker 行。
 	 *
-	 * 注意：switch_session 传入同路径时 pi RPC 可能不做实际重读（缓存），
-	 * 因此通过临时文件绕开缓存：复制到临时路径 → switch 到临时路径 →
-	 * 切换回原路径 → 清理临时文件。
+	 * 相比旧版本（临时文件复制→两次 switch_session），本方案：
+	 * - 只有一次 switch_session 调用
+	 * - 不产生临时文件残留
+	 * - 每次编辑的 _reloadMarker 不同，确保缓存必定失效
 	 */
 	private async reloadSession(agentId: string) {
+		const startTime = Date.now();
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session path not available for reload");
 
-		// 用临时文件绕过 pi RPC 的同路径缓存
-		const tempPath = sessionPath + ".reload";
+		const markerId = randomUUID();
+		const markerLine = JSON.stringify({ _reloadMarker: markerId, ts: Date.now() });
+
 		try {
-			await copyFile(sessionPath, tempPath);
-			await runtime.process.client.request({
-				type: "switch_session",
-				sessionPath: tempPath,
-			}, 60_000);
-			// 换回原路径（此时已经是修改后的文件）
-			await runtime.process.client.request({
+			// 先读取文件，在首行插入 _reloadMarker（确保 pi 读取时 content 不同，缓存失效）
+			const raw = await readFile(sessionPath, "utf8");
+			await writeFile(sessionPath, `${markerLine}\n${raw}`, "utf8");
+
+			void this.appLogger?.info("agent", "Session reload: switch_session start", {
+				agentId,
+				markerId,
+				elapsedMs: Date.now() - startTime,
+			});
+
+			// 调用 switch_session，pi 发现首行变化 → 缓存失效 → 重新读取文件
+			const response = await runtime.process.client.request({
 				type: "switch_session",
 				sessionPath,
-			}, 60_000);
-		} finally {
-			await unlink(tempPath).catch(() => {});
+			}, 30_000);
+
+			void this.appLogger?.info("agent", "Session reload: switch_session done", {
+				agentId,
+				markerId,
+				success: response.success,
+				elapsedMs: Date.now() - startTime,
+			});
+
+			// 恢复文件：移除首行的 _reloadMarker
+			const afterRaw = await readFile(sessionPath, "utf8");
+			const afterLines = afterRaw.split(/\r?\n/);
+			if (afterLines.length > 0 && afterLines[0].includes('_reloadMarker')) {
+				await writeFile(sessionPath, afterLines.slice(1).join("\n"), "utf8");
+			}
+
+			if (!response.success) {
+				void this.appLogger?.error("agent", "Session reload: switch_session failed", {
+					agentId,
+					error: response.error,
+					elapsedMs: Date.now() - startTime,
+				});
+				throw new Error(response.error ?? "switch_session failed");
+			}
+
+			await this.loadMessages(agentId);
+		} catch (error) {
+			// 出错时尝试恢复文件（移除 marker 行）
+			try {
+				const raw = await readFile(sessionPath, "utf8");
+				const lines = raw.split(/\r?\n/);
+				if (lines.length > 0 && lines[0].includes('_reloadMarker')) {
+					await writeFile(sessionPath, lines.slice(1).join("\n"), "utf8");
+				}
+			} catch { /* 恢复失败时 marker 行残留无害 */ }
+			void this.appLogger?.error("agent", "Session reload failed", {
+				agentId,
+				error: error instanceof Error ? error.message : String(error),
+				elapsedMs: Date.now() - startTime,
+			});
+			throw error;
 		}
-		await this.loadMessages(agentId);
 	}
 
 	/**
-	 * 编辑消息：修改 JSONL 中的 text 后通过 switch_session 重载，不重启进程。
-	 * 前端需在 agent idle 时调用。
+	 * 根据 entryId 在 JSONL 文件中找到对应的行号。
+	 * 先遍历每一行查找 entry 的 id 字段是否匹配 entryId。
+	 * 匹配时返回行号（0-based），找不到返回 -1。
 	 */
-	/**
-	 * 遍历 JSONL 行，按 convertAgentMessages 同样的规则过滤，找到第 msgIndex 条 desktop 消息对应的 JSONL 行号。
-	 * 手动同步两处的过滤逻辑：
-	 *   - user：始终计入（图片无文本时生成为 "[图片]"）
-	 *   - assistant：只计入 extractText 结果非空的行（纯工具调用被 .filter(m => m.text.trim()) 移除）
-	 *   - toolResult：始终计入（"✓/✗ toolName" 非空）
-	 * 返回 JSONL 行号（0-based），若找不到返回 -1。
-	 *
-	 * @param targetSeq 可选，_piDeckMsgSeq 值，当 count 方式找不到时作为内容级兜底扫描。
-	 */
-	private findJsonlLineForMessage(lines: string[], msgIndex: number, targetSeq?: number): number {
-		let desktopCount = 0;
-		let seqFallback = -1;
+	private findJsonlLineByEntryId(lines: string[], targetEntryId: string): number {
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (!line.trim()) continue;
-			let counts = false;
+			const line = lines[i].trim();
+			if (!line) continue;
 			try {
-				const entry = JSON.parse(line);
-				const msg = (entry as any)?.message;
-				const role = msg?.role;
-				if (role === "user") {
-					counts = true;
-				} else if (role === "assistant") {
-					const text = this.extractText(msg?.content);
-					counts = !!text.trim();
-				} else if (role === "toolResult") {
-					counts = true;
+				const parsed = JSON.parse(line);
+				if (parsed.id === targetEntryId || parsed.entryId === targetEntryId) {
+					return i;
 				}
-				// 按 _piDeckMsgSeq 内容匹配（兜底：删除后计数偏移导致 count 不到 target）
-				if (
-					targetSeq != null &&
-					seqFallback === -1 &&
-					typeof msg?._piDeckMsgSeq === "number" &&
-					msg._piDeckMsgSeq === targetSeq
-				) {
-					seqFallback = i;
+			} catch { /* 跳过不可解析的行 */ }
+		}
+		return -1;
+	}
+
+	/**
+	 * 修改 JSONL 前备份文件，最多保留最近 3 个备份，用于意外恢复。
+	 * 备份文件命名格式：{sessionPath}.{timestamp}.edit-backup
+	 */
+	private async backupSessionFile(sessionPath: string): Promise<void> {
+		const maxBackups = 3;
+		try {
+			const dir = dirname(sessionPath);
+			const base = basename(sessionPath);
+			const { readdir, copyFile, unlink } = await import("node:fs/promises");
+			const backupPrefix = `${base}.`;
+			const backupSuffix = ".edit-backup";
+
+			// 列出已有备份，按时间排序
+			const allFiles = await readdir(dir).catch(() => [] as string[]);
+			const backups = allFiles
+				.filter((f) => f.startsWith(backupPrefix) && f.endsWith(backupSuffix))
+				.sort()
+				.reverse();
+
+			// 超出限制时删除最旧的
+			while (backups.length >= maxBackups) {
+				const old = backups.pop();
+				if (old) await unlink(join(dir, old)).catch(() => {});
+			}
+
+			// 创建新备份
+			const backupPath = join(dir, `${base}.${Date.now()}${backupSuffix}`);
+			await copyFile(sessionPath, backupPath);
+		} catch {
+			// 备份失败不影响主流程
+			void this.appLogger?.warn("agent", "Session file backup failed", { sessionPath });
+		}
+	}
+
+	/**
+	 * 检查 Agent 是否处于可编辑/可删除的安全状态。
+	 * 要求：isStreaming === false && isCompacting !== true && tab.status !== "running"
+	 * 编辑/删除操作依赖 pi RPC 的 switch_session，在 busy 状态下行为不确定。
+	 */
+	private async ensureAgentIdle(agentId: string): Promise<void> {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return;
+
+		if (runtime.tab.status === "running") {
+			// 先查一次 runtime state 确认 stream 状态
+			try {
+				const state = await this.getRuntimeState(agentId);
+				if (state.isStreaming || state.isCompacting) {
+					throw new Error("Agent is busy streaming, please wait until it completes");
 				}
-			} catch { /* 跳过无法解析的行 */ }
-			if (counts) {
-				if (desktopCount === msgIndex) return i;
-				desktopCount++;
+				// isExecutingTool 时也视为 busy
+				if (state.isExecutingTool) {
+					throw new Error("Agent is executing a tool, please wait until it completes");
+				}
+			} catch (error) {
+				// 如果 getRuntimeState 本身失败，但 tab.status 为 running，仍然拒绝
+				if (error instanceof Error && error.message.includes("please wait")) {
+					throw error;
+				}
+				throw new Error("Agent is currently busy, please try again later");
 			}
 		}
-		return seqFallback;
+	}
+
+	/**
+	 * 根据 chatMessage.meta.entryId（首选）或 _piDeckMsgSeq（回退）
+	 * 在 JSONL 中找到对应行并返回行号和解析后的 entry。
+	 * 优先使用 entryId 定位（O(n) 扫描 JSONL，n=文件行数），
+	 * 回退使用旧的 _piDeckMsgSeq 计数定位（兼容旧版本已创建的聊天记录）。
+	 *
+	 * @returns [lineIndex, parsedEntry] 如果找到；否则抛出错误
+	 */
+	private locateJsonlEntry(
+		lines: string[],
+		messages: ChatMessage[],
+		msg: ChatMessage,
+	): { lineIndex: number; entry: Record<string, any> } {
+		const entryId = msg.meta?.entryId as string | undefined;
+
+		// 方案一：按 entryId 精确定位（首选）
+		if (entryId) {
+			const lineIndex = this.findJsonlLineByEntryId(lines, entryId);
+			if (lineIndex !== -1) {
+				return { lineIndex, entry: JSON.parse(lines[lineIndex]) };
+			}
+			// entryId 没找到（极少见：文件被外部修改导致 entryId 变化），回退到计数方案
+			void this.appLogger?.warn("agent",
+				`EntryId ${entryId} not found in JSONL, falling back to position-based lookup`,
+			);
+		}
+
+		// 方案二：按 _piDeckMsgSeq 计数定位（兼容旧版本）
+		const msgIndex = messages.indexOf(msg);
+		let desktopCount = 0;
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i].trim();
+			if (!line) continue;
+			try {
+				const entry = JSON.parse(line);
+				const role = (entry as any)?.message?.role;
+				if (role === "user") {
+					if (desktopCount === msgIndex) return { lineIndex: i, entry };
+					desktopCount++;
+				} else if (role === "assistant") {
+					const text = this.extractText((entry as any)?.message?.content);
+					if (text.trim()) {
+						if (desktopCount === msgIndex) return { lineIndex: i, entry };
+						desktopCount++;
+					}
+				} else if (role === "toolResult") {
+					if (desktopCount === msgIndex) return { lineIndex: i, entry };
+					desktopCount++;
+				}
+			} catch { /* 跳过不可解析的行 */ }
+		}
+
+		throw new Error("Message not found in session file");
 	}
 
 	/**
 	 * 编辑消息：修改 JSONL 中的 text 后通过 switch_session 重载，不重启进程。
 	 * 前端需在 agent idle 时调用。
+	 *
+	 * 流程：
+	 * 1. 检查 Agent 空闲状态（忙碌则拒绝）
+	 * 2. 通过 meta.entryId 精确定位 JSONL 行（回退：按 _piDeckMsgSeq 计数定位）
+	 * 3. 修改对应行的 text 内容
+	 * 4. 写回 JSONL
+	 * 5. 使用 _reloadMarker 方案让 pi 重新加载会话
 	 */
 	async editMessage(agentId: string, messageId: string, newText: string) {
+		const startTime = Date.now();
+		void this.appLogger?.info("agent", "Edit message requested", { agentId, messageId });
+
+		// 1. 检查 Agent 空闲状态
+		await this.ensureAgentIdle(agentId);
+
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
@@ -959,89 +1127,77 @@ export class AgentManager {
 		const msg = messages.find((m) => m.id === messageId);
 		if (!msg) throw new Error("Message not found");
 
-		// _piDeckMsgSeq 是初次加载时的计数位置，删除会在 JSONL 中留下空行，
-		// 导致计数偏移，因此 findJsonlLineForMessage 必须用当前桌面索引 msgIndex。
-		// 同时将 seq 作为 targetSeq 传入，供内容级兜底扫描。
-		const seq = typeof msg.meta?._piDeckMsgSeq === "number" ? msg.meta._piDeckMsgSeq : -1;
-		const msgIndex = messages.indexOf(msg);
-		const jsonlLine = this.findJsonlLineForMessage(lines, msgIndex, seq >= 0 ? seq : undefined);
-		if (jsonlLine === -1) throw new Error("Message not found in session file");
+		// 2. 定位 JSONL 行（优先 entryId，回退 _piDeckMsgSeq 计数）
+		const { lineIndex, entry } = this.locateJsonlEntry(lines, messages, msg);
+		const role = (entry as any)?.message?.role;
 
-		const entry = JSON.parse(lines[jsonlLine]) as { message?: Record<string, any> };
-		const role = entry.message?.role;
-
-		if (role === "user" || role === "assistant") {
-			const content = entry.message!.content;
-			if (Array.isArray(content)) {
-				const textBlock = content.find((c: any) => c.type === "text");
-				if (textBlock) {
-					textBlock.text = newText;
-				} else {
-					content.push({ type: "text", text: newText });
-				}
-			} else {
-				entry.message!.content = [{ type: "text", text: newText }];
-			}
-		} else {
+		if (role !== "user" && role !== "assistant") {
 			throw new Error("Only user and assistant messages can be edited");
 		}
 
-		// 持久化 _piDeckMsgSeq 到 JSONL 的 message 对象上，后续 reload 后可直接在
-		// convertAgentMessages 中读回，保持计数不因重载而跳变。
-		const persistedSeq = seq >= 0 ? seq : msgIndex;
-		entry.message = { ...entry.message!, _piDeckMsgSeq: persistedSeq };
+		// 2.5 写前备份（最多保留最近 3 个 .edit-backup 文件）
+		await this.backupSessionFile(sessionPath);
 
-		// 写回 JSONL
-		lines[jsonlLine] = JSON.stringify(entry);
+		// 3. 修改 text
+		const wrapped = entry as { message?: Record<string, any> };
+		const content = wrapped.message!.content;
+		if (Array.isArray(content)) {
+			const textBlock = content.find((c: any) => c.type === "text");
+			if (textBlock) {
+				textBlock.text = newText;
+			} else {
+				content.push({ type: "text", text: newText });
+			}
+		} else {
+			wrapped.message!.content = [{ type: "text", text: newText }];
+		}
+
+		// 4. 写回 JSONL
+		lines[lineIndex] = JSON.stringify(entry);
 		await writeFile(sessionPath, lines.join("\n"), "utf8");
 
-		// 更新桌面端内存
-		const newMsg = { ...msg, text: newText, meta: { ...msg.meta, _piDeckMsgSeq: seq } };
+		// 更新桌面端内存（保持 entryId 引用）
+		const newMsg = { ...msg, text: newText };
 		const newMessages = messages.map((m) => (m.id === messageId ? newMsg : m));
 		this.messages.set(agentId, newMessages);
 		this.scheduleMessageEmit(agentId, true);
 
-		// 保存 reload 前的桌面状态快照（已包含编辑后的文本）
-		const preReloadMessages = [...(this.messages.get(agentId) ?? [])];
-
-		// 重载 pi RPC 会话（让 pi 感知到编辑后的文本）
-		// 如果 reloadSession 失败或返回了重载前的状态（pi RPC 缓存），
-		// 下面的 snapshot 比较确保桌面端始终显示编辑后的内容。
+		// 5. 使用 _reloadMarker 重载 pi 会话
 		try {
 			await this.reloadSession(agentId);
-		} catch {
+		} catch (error) {
+			void this.appLogger?.error("agent", "Edit message: reload failed, desktop state preserved", {
+				agentId,
+				messageId,
+				error: error instanceof Error ? error.message : String(error),
+				elapsedMs: Date.now() - startTime,
+			});
 			// reload 失败不影响桌面端已生效的编辑
 		}
-		// 注意：不能用 messageId 重写来做 re-apply，因为 convertAgentMessages
-		// 生成的 ID 包含数组下标，reload 后下标偏移会导致无辜消息被错误覆盖。
-		// 改用 snapshot 比较：用 persistedSeq（写入 JSONL 的 _piDeckMsgSeq）找到
-		// reload 后对应的消息，如果其文本仍是旧文本（说明 pi 未感知编辑），还原桌面状态。
-		const afterReload = this.messages.get(agentId);
-		if (afterReload) {
-			const reloadedMsg = afterReload.find(
-				(m) => m.meta?._piDeckMsgSeq === persistedSeq,
-			);
-			if (reloadedMsg && reloadedMsg.text !== newText) {
-				// pi 返回了旧文本，还原为桌面状态
-				void this.appLogger?.warn("agent",
-					`pi RPC returned stale text after edit, restoring desktop state`,
-				);
-				this.messages.set(agentId, preReloadMessages);
-				this.scheduleMessageEmit(agentId, true);
-			} else if (!reloadedMsg && afterReload.length <= preReloadMessages.length) {
-				// 编辑的消息不在 reload 后的结果中（极罕见：pi 重新过滤了历史），
-				// 以桌面端为准
-				this.messages.set(agentId, preReloadMessages);
-				this.scheduleMessageEmit(agentId, true);
-			}
-		}
+
+		void this.appLogger?.info("agent", "Edit message completed", {
+			agentId,
+			messageId,
+			elapsedMs: Date.now() - startTime,
+		});
 	}
 
 	/**
-	 * 删除消息：从 JSONL 移除对应行后通过 switch_session 重载。
+	 * 删除消息：从 JSONL 中用 deleted 标记替换对应行后通过 switch_session 重载。
 	 * 前端需在 agent idle 时调用。
+	 *
+	 * 相比旧版本（置空行导致 JSONL 行数偏移），本方案：
+	 * - 用 {"type":"deleted","originalEntryId":"...","ts":...} 替换原行
+	 * - 保留行号稳定，不破坏 session tree parentId 引用
+	 * - entryId 精确定位不受之前删除操作影响
 	 */
 	async deleteMessage(agentId: string, messageId: string) {
+		const startTime = Date.now();
+		void this.appLogger?.info("agent", "Delete message requested", { agentId, messageId });
+
+		// 1. 检查 Agent 空闲状态
+		await this.ensureAgentIdle(agentId);
+
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
@@ -1055,45 +1211,47 @@ export class AgentManager {
 		const msg = messages.find((m) => m.id === messageId);
 		if (!msg) throw new Error("Message not found");
 
-		// _piDeckMsgSeq 是初次加载时的计数位置，删除会在 JSONL 中留下空行，
-		// 导致计数偏移，因此必须用当前桌面索引 msgIndex 而非 seq。
-		const seq = typeof msg.meta?._piDeckMsgSeq === "number" ? msg.meta._piDeckMsgSeq : -1;
-		const msgIndex = messages.indexOf(msg);
-		const jsonlLine = this.findJsonlLineForMessage(lines, msgIndex, seq >= 0 ? seq : undefined);
-		if (jsonlLine === -1) throw new Error("Message not found in session file");
+		// 2. 定位 JSONL 行（优先 entryId）
+		const { lineIndex, entry } = this.locateJsonlEntry(lines, messages, msg);
+		const entryId = (entry as any)?.id;
 
-		// 从 JSONL 移除该行（置空保持行号稳定，避免 session tree 错乱）
-		const newLines = [...lines];
-		newLines[jsonlLine] = "";
-		await writeFile(sessionPath, newLines.join("\n"), "utf8");
+		// 2.5 写前备份（最多保留最近 3 个 .edit-backup 文件）
+		await this.backupSessionFile(sessionPath);
 
-		// 更新桌面端内存
-		messages.splice(msgIndex, 1);
+		// 3. 用 deleted 标记替换原行（保留行号，不破坏 tree 结构）
+		lines[lineIndex] = JSON.stringify({
+			type: "deleted",
+			originalEntryId: entryId ?? `unknown-${messageId}`,
+			ts: Date.now(),
+		});
+		await writeFile(sessionPath, lines.join("\n"), "utf8");
+
+		// 4. 更新桌面端内存
+		const index = messages.findIndex((m) => m.id === messageId);
+		if (index !== -1) {
+			messages.splice(index, 1);
+		}
 		this.messages.set(agentId, messages);
 		this.scheduleMessageEmit(agentId, true);
 
-		// 保存 reload 前的桌面状态快照（splice 后已不含被删消息）
-		const preReloadMessages = [...(this.messages.get(agentId) ?? [])];
-
-		// 重载 pi RPC 会话（让 pi 感知到文件变更）
-		// reloadSession 内部的 switch_session 如果因同路径缓存未生效，
-		// pi 会返回删除前的旧消息列表，导致 reload 后消息数反而增多。
+		// 5. 使用 _reloadMarker 重载 pi 会话
 		try {
 			await this.reloadSession(agentId);
-		} catch {
+		} catch (error) {
+			void this.appLogger?.error("agent", "Delete message: reload failed, desktop state preserved", {
+				agentId,
+				messageId,
+				error: error instanceof Error ? error.message : String(error),
+				elapsedMs: Date.now() - startTime,
+			});
 			// reload 失败不影响桌面端已生效的删除
 		}
-		// 注意：不能用 messageId 过滤来做 re-apply，因为 convertAgentMessages
-		// 生成的 ID 包含数组下标，reload 后下标偏移会导致无辜消息被误删。
-		// 改用 snapshot 比较：如果 pi 返回了旧状态（消息比快照多），还原为桌面端状态。
-		const afterReload = this.messages.get(agentId);
-		if (afterReload && afterReload.length > preReloadMessages.length) {
-			void this.appLogger?.warn("agent",
-				`pi RPC returned stale messages after delete (${afterReload.length} > ${preReloadMessages.length}), restoring desktop state`,
-			);
-			this.messages.set(agentId, preReloadMessages);
-			this.scheduleMessageEmit(agentId, true);
-		}
+
+		void this.appLogger?.info("agent", "Delete message completed", {
+			agentId,
+			messageId,
+			elapsedMs: Date.now() - startTime,
+		});
 	}
 
 	/**
@@ -1588,19 +1746,34 @@ export class AgentManager {
 			if (pending.size === 0) this.pendingUIRequests.delete(agentId);
 		}
 
-		// 更新卡片消息状态为 answered 或 cancelled
+		// 更新卡片消息状态为 answered 或 cancelled；cancelled 时从消息流移除，不留痕迹
 		const messages = this.messages.get(agentId);
 		if (messages) {
-			for (const msg of messages) {
-				if (
-					msg.role === "system" &&
-					msg.meta?.type === "askQuestion" &&
-					(msg.meta as Record<string, unknown>).uiRequest &&
-					((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId
-				) {
-					(msg.meta as Record<string, string>).status = response.cancelled ? "cancelled" : "answered";
-					(msg.meta as Record<string, unknown>).response = response;
-					break;
+			if (response.cancelled) {
+				// 取消交互：从消息流中移除对应的 askQuestion 卡片，不在时间线上留下痕迹
+				const idx = messages.findIndex(
+					(msg) =>
+						msg.role === "system" &&
+						msg.meta?.type === "askQuestion" &&
+						(msg.meta as Record<string, unknown>).uiRequest &&
+						((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId,
+				);
+				if (idx !== -1) {
+					messages.splice(idx, 1);
+					this.messages.set(agentId, messages);
+				}
+			} else {
+				for (const msg of messages) {
+					if (
+						msg.role === "system" &&
+						msg.meta?.type === "askQuestion" &&
+						(msg.meta as Record<string, unknown>).uiRequest &&
+						((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId
+					) {
+						(msg.meta as Record<string, string>).status = "answered";
+						(msg.meta as Record<string, unknown>).response = response;
+						break;
+					}
 				}
 			}
 			this.scheduleMessageEmit(agentId, false);
@@ -2091,39 +2264,73 @@ export class AgentManager {
 		this.scheduleMessageEmit(agentId, true);
 	}
 
+		/**
+	 * 从 get_entries 响应构建 active branch 的 entryId 有序列表。
+	 * 从 leafId 沿 parentId 回溯至 root 得到有序列表。
+	 * 这个列表的顺序与 get_messages 返回的消息顺序一致，
+	 * 用于在 convertAgentMessages 中按位置匹配 entryId 到 message。
+	 */
+	private buildActiveBranchEntryIds(
+		entries: Array<{ id: string; parentId: string | null }>,
+		leafId: string,
+	): string[] {
+		const entryById = new Map<string, { id: string; parentId: string | null }>();
+		for (const entry of entries) {
+			entryById.set(entry.id, entry);
+		}
+
+		// 从 leafId 回溯到 root 得到 active branch entryId 有序列表
+		const activeBranch: string[] = [];
+		let currentId: string | null = leafId;
+		while (currentId) {
+			activeBranch.unshift(currentId);
+			const entry = entryById.get(currentId);
+			currentId = entry?.parentId ?? null;
+		}
+		return activeBranch;
+	}
+
 	private convertAgentMessages(
 		agentId: string,
 		rawMessages: unknown[],
+		activeEntryIds?: string[],
 	): ChatMessage[] {
 		const historicalToolCalls = this.collectHistoricalToolCalls(rawMessages);
 		const historicalOriginalContentByPath = this.collectHistoricalOriginalContentByPath(
 			rawMessages,
 			historicalToolCalls,
 		);
-		// 用于生成 _piDeckMsgSeq：仅对有文本的用户/助手/工具消息递增
-		let msgSeq = 0;
-		// 用于生成元消息 id（compaction/branchSummary）的计数器，避免与正文消息的 seq 冲突
+		// 用于生成元消息 id（compaction/branchSummary）的计数器
 		let metaSeq = 0;
+		// entryId 按 active branch 顺序与 rawMessages 一一对应
+		let entryIndex = 0;
 		return rawMessages
 			.flatMap<ChatMessage>((message, index) => {
 				if (!message || typeof message !== "object") return [];
 				const typed = message as any;
-				// 尝试读取持久化的 _piDeckMsgSeq（首次不存则 undefined）
-				const persistedSeq =
-					typeof typed._piDeckMsgSeq === "number" ? typed._piDeckMsgSeq : undefined;
+
+				// 从 activeEntryIds 按位置获取当前消息对应的 entryId
+				const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
+					? activeEntryIds[entryIndex]
+					: undefined;
+
 				if (typed.role === "user") {
 					const images = this.extractImages(typed.content);
 					const text = this.extractText(typed.content) ||
 						(images.length > 0 ? "[图片]" : "");
 					if (!text.trim()) return [];
-					const seq = persistedSeq ?? msgSeq++;
+					entryIndex++;
 					return [{
-						id: `${agentId}-history-${index}`,
+						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
 						role: "user" as const,
 						text,
 						timestamp: typed.timestamp ?? Date.now(),
-						meta: { _piDeckMsgSeq: seq },
+						meta: {
+							...(currentEntryId ? { entryId: currentEntryId } : {}),
+							// 保留 _piDeckMsgSeq 作为旧版本回退兼容
+							_piDeckMsgSeq: index,
+						},
 						...(images.length > 0 ? { images } : {}),
 					}];
 				}
@@ -2131,14 +2338,17 @@ export class AgentManager {
 					const text = this.extractText(typed.content);
 					if (!text.trim()) return [];
 					const thinking = this.extractThinking(typed.content);
-					const seq = persistedSeq ?? msgSeq++;
+					entryIndex++;
 					return [{
-						id: `${agentId}-history-${index}`,
+						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
 						role: "assistant" as const,
 						text,
 						timestamp: typed.timestamp ?? Date.now(),
-						meta: { _piDeckMsgSeq: seq },
+						meta: {
+							...(currentEntryId ? { entryId: currentEntryId } : {}),
+							_piDeckMsgSeq: index,
+						},
 						...(thinking ? { thinking } : {}),
 					}];
 				}
@@ -2174,15 +2384,16 @@ export class AgentManager {
 						result,
 						isError,
 					);
-					const seq = persistedSeq ?? msgSeq++;
+					entryIndex++;
 					return [{
-						id: `${agentId}-history-${index}`,
+						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
 						role: "tool" as const,
 						text: `${isError ? "✗" : "✓"} ${toolName}`,
 						timestamp: typed.timestamp ?? Date.now(),
 						meta: {
-							_piDeckMsgSeq: seq,
+							...(currentEntryId ? { entryId: currentEntryId } : {}),
+							_piDeckMsgSeq: index,
 							status: isError ? "error" : "done",
 							toolName,
 							toolCallId,

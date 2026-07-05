@@ -500,6 +500,10 @@ export function App() {
   const [extensionWidgetsByAgent, setExtensionWidgetsByAgent] = useState<
     Record<string, Record<string, string[]>>
   >({});
+  /** Extension widget �ۺ�/չ��״̬���� agent ��������һ���л�ʱ������ */
+  const [widgetsCollapsedByAgent, setWidgetsCollapsedByAgent] = useState<
+    Record<string, boolean>
+  >({});
   /** 输入框发送模式：normal 直接交给 agent，plan 通过隐藏标记触发 PiDeck Plan Mode 扩展。 */
   const [composerAgentMode, setComposerAgentMode] = useState<ComposerAgentMode>("normal");
   /** Goal 状态 */
@@ -4869,17 +4873,38 @@ ${goalTextRef.current}
               </button>
             </div>
           )}
-          {activeAgentId && extensionWidgetsByAgent[activeAgentId] && Object.keys(extensionWidgetsByAgent[activeAgentId]).length > 0 && (
-            Object.entries(extensionWidgetsByAgent[activeAgentId]).map(([widgetKey, widgetLines]) => (
-              <div key={widgetKey} className="extension-widget-stack" aria-live="polite">
-                {widgetLines.map((line, index) => (
-                  <div key={index} className="extension-widget-line">
-                    {line}
+          {activeAgentId && extensionWidgetsByAgent[activeAgentId] && Object.keys(extensionWidgetsByAgent[activeAgentId]).length > 0 && (() => {
+            const entries = Object.entries(extensionWidgetsByAgent[activeAgentId]);
+            const totalLines = entries.reduce((sum, [, lines]) => sum + lines.length, 0);
+            const collapsed = widgetsCollapsedByAgent[activeAgentId] ?? false;
+            return (
+              <div className="extension-widgets-container" key="widgets-container">
+                <button
+                  className="extension-widgets-toggle"
+                  onClick={() =>
+                    setWidgetsCollapsedByAgent((prev) => ({
+                      ...prev,
+                      [activeAgentId]: !collapsed,
+                    }))
+                  }
+                  title={collapsed ? t("app.expandList") : t("app.collapseList")}
+                >
+                  <ChevronDown size={14} className={`toggle-arrow${collapsed ? "" : " expanded"}`} />
+                  <span>{t("app.widgetsToggle", { count: totalLines })}</span>
+                  <span className="toggle-count">{entries.length} widget{entries.length > 1 ? "s" : ""}</span>
+                </button>
+                {!collapsed && entries.map(([widgetKey, widgetLines]) => (
+                  <div key={widgetKey} className="extension-widget-stack" aria-live="polite">
+                    {widgetLines.map((line, index) => (
+                      <div key={index} className="extension-widget-line">
+                        {line}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
-            ))
-          )}
+            );
+          })()}
           <div
             ref={composerBoxRef}
             className={`composer-box ${
