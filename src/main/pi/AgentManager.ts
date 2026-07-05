@@ -988,7 +988,8 @@ export class AgentManager {
 
 		// 持久化 _piDeckMsgSeq 到 JSONL 的 message 对象上，后续 reload 后可直接在
 		// convertAgentMessages 中读回，保持计数不因重载而跳变。
-		entry.message = { ...entry.message!, _piDeckMsgSeq: seq >= 0 ? seq : msgIndex };
+		const persistedSeq = seq >= 0 ? seq : msgIndex;
+		entry.message = { ...entry.message!, _piDeckMsgSeq: persistedSeq };
 
 		// 写回 JSONL
 		lines[jsonlLine] = JSON.stringify(entry);
@@ -1000,20 +1001,39 @@ export class AgentManager {
 		this.messages.set(agentId, newMessages);
 		this.scheduleMessageEmit(agentId, true);
 
+		// 保存 reload 前的桌面状态快照（已包含编辑后的文本）
+		const preReloadMessages = [...(this.messages.get(agentId) ?? [])];
+
 		// 重载 pi RPC 会话（让 pi 感知到编辑后的文本）
 		// 如果 reloadSession 失败或返回了重载前的状态（pi RPC 缓存），
-		// 下面的 re-apply 确保桌面端始终显示编辑后的内容。
+		// 下面的 snapshot 比较确保桌面端始终显示编辑后的内容。
 		try {
 			await this.reloadSession(agentId);
 		} catch {
 			// reload 失败不影响桌面端已生效的编辑
 		}
-		// 在 reloadSession（可能返回 pi 的旧状态）之上重新应用编辑
+		// 注意：不能用 messageId 重写来做 re-apply，因为 convertAgentMessages
+		// 生成的 ID 包含数组下标，reload 后下标偏移会导致无辜消息被错误覆盖。
+		// 改用 snapshot 比较：用 persistedSeq（写入 JSONL 的 _piDeckMsgSeq）找到
+		// reload 后对应的消息，如果其文本仍是旧文本（说明 pi 未感知编辑），还原桌面状态。
 		const afterReload = this.messages.get(agentId);
 		if (afterReload) {
-			const reapplied = afterReload.map((m) => (m.id === messageId ? newMsg : m));
-			this.messages.set(agentId, reapplied);
-			this.scheduleMessageEmit(agentId, true);
+			const reloadedMsg = afterReload.find(
+				(m) => m.meta?._piDeckMsgSeq === persistedSeq,
+			);
+			if (reloadedMsg && reloadedMsg.text !== newText) {
+				// pi 返回了旧文本，还原为桌面状态
+				void this.appLogger?.warn("agent",
+					`pi RPC returned stale text after edit, restoring desktop state`,
+				);
+				this.messages.set(agentId, preReloadMessages);
+				this.scheduleMessageEmit(agentId, true);
+			} else if (!reloadedMsg && afterReload.length <= preReloadMessages.length) {
+				// 编辑的消息不在 reload 后的结果中（极罕见：pi 重新过滤了历史），
+				// 以桌面端为准
+				this.messages.set(agentId, preReloadMessages);
+				this.scheduleMessageEmit(agentId, true);
+			}
 		}
 	}
 
@@ -1052,19 +1072,26 @@ export class AgentManager {
 		this.messages.set(agentId, messages);
 		this.scheduleMessageEmit(agentId, true);
 
+		// 保存 reload 前的桌面状态快照（splice 后已不含被删消息）
+		const preReloadMessages = [...(this.messages.get(agentId) ?? [])];
+
 		// 重载 pi RPC 会话（让 pi 感知到文件变更）
-		// 如果 reloadSession 失败或返回的仍是重载前的状态（pi RPC 缓存），
-		// 下面的 re-apply 确保桌面端始终持有正确的、不含已删除消息的状态。
+		// reloadSession 内部的 switch_session 如果因同路径缓存未生效，
+		// pi 会返回删除前的旧消息列表，导致 reload 后消息数反而增多。
 		try {
 			await this.reloadSession(agentId);
 		} catch {
 			// reload 失败不影响桌面端已生效的删除
 		}
-		// 在 reloadSession（可能返回 pi 的旧状态）之上重新应用删除
+		// 注意：不能用 messageId 过滤来做 re-apply，因为 convertAgentMessages
+		// 生成的 ID 包含数组下标，reload 后下标偏移会导致无辜消息被误删。
+		// 改用 snapshot 比较：如果 pi 返回了旧状态（消息比快照多），还原为桌面端状态。
 		const afterReload = this.messages.get(agentId);
-		if (afterReload) {
-			const deduped = afterReload.filter((m) => m.id !== messageId);
-			this.messages.set(agentId, deduped);
+		if (afterReload && afterReload.length > preReloadMessages.length) {
+			void this.appLogger?.warn("agent",
+				`pi RPC returned stale messages after delete (${afterReload.length} > ${preReloadMessages.length}), restoring desktop state`,
+			);
+			this.messages.set(agentId, preReloadMessages);
 			this.scheduleMessageEmit(agentId, true);
 		}
 	}

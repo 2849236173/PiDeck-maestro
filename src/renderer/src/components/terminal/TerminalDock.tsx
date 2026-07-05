@@ -18,10 +18,10 @@ const TERMINAL_THEMES = {
 	"pi-soft": {
 		label: "Pi Soft",
 		xterm: {
-			background: "#eef2f7",
+			background: "#f0f1ed",
 			foreground: "#243244",
 			cursor: "#16a34a",
-			selectionBackground: "#bbf7d0",
+			selectionBackground: "#d9f0e0",
 		},
 		xtermDark: {
 			background: "#15191d",
@@ -126,6 +126,7 @@ export function TerminalDock(props: {
 	}, [activeTab?.id]);
 
 	useEffect(() => {
+		if (!open) return;
 		let cancelled = false;
 		async function loadTabs() {
 			setLoading(true);
@@ -149,7 +150,7 @@ export function TerminalDock(props: {
 		return () => {
 			cancelled = true;
 		};
-	}, [props.agentId, props.terminal]);
+	}, [props.agentId, props.terminal, open]);
 
 	useEffect(() => {
 		const offData = props.terminal.onData((payload) => {

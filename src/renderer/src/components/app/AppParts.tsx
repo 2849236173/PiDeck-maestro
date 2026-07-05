@@ -448,6 +448,8 @@ export function ComposerToolbar(props: {
 	/** 当前发送模式，用于按钮文字和轻高亮 */
 	composerAgentMode?: ComposerAgentMode;
 	onOpenComposerModePicker?: () => void;
+	/** 取消计划模式：直接切回普通发送模式，不经过模式选择器 */
+	onCancelPlan?: () => void;
 	/** 在思考按钮后插入的额外指示器（如飞书链接状态） */
 	feishuIndicator?: ReactNode;
 
@@ -475,6 +477,17 @@ export function ComposerToolbar(props: {
 					title={t("app.composerModeTitle")}
 				>
 					{activeModeLabel}
+				</button>
+			)}
+			{activeMode === "plan" && props.onCancelPlan && (
+				<button
+					className="composer-mode-cancel"
+					disabled={props.disabled}
+					onClick={props.onCancelPlan}
+					title={t("app.composerModeCancelPlan")}
+				>
+					<X size={14} strokeWidth={2.5} aria-hidden="true" />
+					{t("app.composerModeCancelPlan")}
 				</button>
 			)}
 			<button onClick={props.onPickModel} disabled={props.disabled}>
@@ -2160,6 +2173,16 @@ export const TurnRow = memo(function TurnRow(props: {
 									showThinking={props.showThinking}
 								/>
 							))}
+						{/* 内联思考（来自 assistant 消息自身的 thinking 字段）：在工具调用和正文之前 */}
+						{props.showThinking &&
+							mergedThinking &&
+							standaloneThinking.length === 0 && (
+								<ThinkingBlock
+									text={mergedThinking}
+									endedAt={run.endedAt}
+									showThinking={props.showThinking}
+								/>
+							)}
 						{/* 工具调用组 */}
 						{toolGroups.map((g) => (
 							<ToolGroupCard key={g.id} group={g} />
@@ -2219,16 +2242,6 @@ export const TurnRow = memo(function TurnRow(props: {
 								isStreaming={props.isStreaming ?? false}
 							/>
 						) : null}
-						{/* 合并的思考内联展示（仅当没有独立思考组时附在正文后） */}
-						{props.showThinking &&
-							mergedThinking &&
-							standaloneThinking.length === 0 && (
-								<ThinkingBlock
-									text={mergedThinking}
-									endedAt={run.endedAt}
-									showThinking={props.showThinking}
-								/>
-							)}
 						{/* 操作栏：hover/focus 显隐，复制/编辑/删除整轮回答 */}
 						{mergedText && !editing && (
 							<div className="turn-row-actions">

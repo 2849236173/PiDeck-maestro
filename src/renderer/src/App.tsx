@@ -4706,8 +4706,22 @@ ${goalTextRef.current}
 
           {activeAgent?.status === "starting" && (
             <div className="history-loading">
-              <div className="loader" />
-              <span>{t("app.agentStarting")}</span>
+              <div className="history-loading-placeholder">
+                <div className="skeleton-bubble" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
+              </div>
+              <div className="history-loading-placeholder">
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
+              </div>
+              <div className="history-loading-placeholder">
+                <div className="skeleton-line" />
+                <div className="skeleton-line" />
+              </div>
+              <span style={{ paddingTop: "16px", alignSelf: "center", fontSize: "var(--font-size-small)" }}>{t("app.agentStarting")}</span>
             </div>
           )}
           {!activeAgent && (
@@ -4716,7 +4730,7 @@ ${goalTextRef.current}
               onCreate={() => createAgent()}
             />
           )}
-          {activeAgent && (
+          {activeAgent && activeAgent.status !== "starting" && (
             <div className="message-list">
               {/* 使用 groupToolMessages 渲染：user/error/system 独立条目，
                   assistant + tool 聚合为 agnet-run（TurnRow 自带操作栏） */}
@@ -4894,6 +4908,7 @@ ${goalTextRef.current}
               onCompact={compactAgent}
               composerAgentMode={composerAgentMode}
               onOpenComposerModePicker={() => setComposerModePickerOpen(true)}
+              onCancelPlan={() => setComposerAgentMode("normal")}
               feishuIndicator={
                 <FeishuLinkIndicator
                   status={feishu.status}
