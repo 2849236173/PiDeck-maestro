@@ -1346,9 +1346,20 @@ function getToolSubtitle(message: ChatMessage): string {
 	// 优先从 args 取参数（pi 工具事件的标准结构）
 	const args = parseToolArgs(meta.args);
 	if (args) {
-		for (const key of ["filePath", "file_path", "path", "file", "command", "pattern", "query"]) {
+		for (const key of [
+			// 文件操作类
+			"filePath", "file_path", "path", "file",
+			// bash/shell 命令
+			"command",
+			// 搜索/查询类（grep、web_search 等）
+			"pattern", "query", "queries",
+			// 网络获取类（fetch_content 等）
+			"url", "urls",
+		]) {
 			const v = args[key];
 			if (typeof v === "string" && v) return v;
+			// queries 和 urls 是数组，取第一条
+			if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v[0];
 		}
 	}
 	// 兼容历史平铺写法

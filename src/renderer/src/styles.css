@@ -3368,6 +3368,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .thinking-card.streaming {
 	border-top: 1px solid var(--color-accent);
 	border-color: var(--color-accent);
+	/* 呼吸脉冲：卡片边框在高亮与柔和之间平滑过渡，即使文本静止也能感知活跃 */
+	animation: thinking-border-pulse 1.8s ease-in-out infinite;
 }
 .thinking-card.streaming .thinking-card-content {
 	max-height: 240px;
@@ -3384,6 +3386,17 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 @keyframes thinking-cursor-blink {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0; }
+}
+/* 边框呼吸脉冲：脉冲幅度更大，确保即使余光扫过也能感知动画 */
+@keyframes thinking-border-pulse {
+	0%, 100% {
+		border-color: var(--color-accent);
+		box-shadow: 0 0 10px color-mix(in srgb, var(--color-accent) 22%, transparent);
+	}
+	50% {
+		border-color: color-mix(in srgb, var(--color-accent) 15%, var(--color-border-subtle));
+		box-shadow: 0 0 2px color-mix(in srgb, var(--color-accent) 6%, transparent);
+	}
 }
 
 /* ---------- 流式等待：ThinkingIndicator ---------- */
@@ -3442,7 +3455,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 	border-color: transparent;
 	background: transparent;
 	padding: 4px 0;
-	margin: 0;
+	margin: var(--space-4) 0 0 0;
 }
 .thinking-indicator[data-kind="waiting"] .thinking-indicator-dots span {
 	background: var(--color-text-tertiary, var(--color-text-secondary));
