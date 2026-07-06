@@ -679,26 +679,17 @@ export class AgentManager {
 	async abort(agentId: string) {
 		const runtime = this.requireRuntime(agentId);
 
-		// pi 正在等待 extension_ui_response（如 ask_question）时，abort RPC 可能不被处理
-		// 导致 10s 超时、agent 卡住、后续消息报 `Agent is already processing`。
-		// 先发 cancelled 信号解阻塞 pi，再发 abort 清理。
-		const pending = this.pendingUIRequests.get(agentId);
-		if (pending && pending.size > 0) {
-			for (const [requestId] of pending) {
-				this.sendUIResponse(agentId, requestId, { cancelled: true });
-			}
-		}
-
-		await runtime.process.client
+		// 不发 cancelled 信号——pi 内置 ask_question 收到 cancelled 后返回 undefined，
+		// 但其工具实现不处理 undefined，会默认选第一个选项。
+		// 直接发 abort（不等待返回），立刻清理 pending 请求并置 idle。
+		runtime.process.client
 			.request({ type: "abort" }, 10_000)
-			.catch((error) => {
-				this.addMessage(
-					agentId,
-					"error",
-					error instanceof Error ? error.message : String(error),
-				);
+			.catch(() => {
+				// abort 超时或失败不影响前端状态切换
 			});
-		// abort 返回后清理 pending 记录
+
+		// 立即清理 pending UI 记录并移除 ask_question 卡片，不等待 abort 返回
+		const pending = this.pendingUIRequests.get(agentId);
 		if (pending && pending.size > 0) {
 			const messages = this.messages.get(agentId);
 			if (messages) {

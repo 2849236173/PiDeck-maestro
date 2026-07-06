@@ -9,6 +9,7 @@ import {
 	getHeaderValue,
 	setHeaderValue,
 } from "./providerHeaders";
+import { buildModelsFromFetchedSelection } from "./modelsUtils";
 
 type FetchedModel = { id: string; name?: string };
 
@@ -37,24 +38,6 @@ const KNOWN_MODEL_FIELDS = new Set([
 	"headers",
 	"compat",
 ]);
-
-export function buildModelsFromFetchedSelection(
-	fetchedModels: FetchedModel[],
-	selectedModelIds: string[],
-	existingModels: ModelItem[],
-): ModelItem[] {
-	const existingIds = new Set(existingModels.map((model) => model.id));
-	const selectedIds = new Set(selectedModelIds);
-	return fetchedModels
-		.filter((model) => selectedIds.has(model.id) && !existingIds.has(model.id))
-		.map((model) => ({
-			id: model.id,
-			name: model.name ?? model.id,
-			contextWindow: 1000000,
-			maxTokens: 128000,
-			reasoning: true,
-		}));
-}
 
 function FetchedModelCombobox(props: {
 	models: FetchedModel[];
