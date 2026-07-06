@@ -2163,14 +2163,16 @@ export class AgentManager {
 			: undefined;
 		const askCard = (() => {
 			if (!askDetails) return undefined;
+			// abort 时覆写 answer 为 null、answered 为 false，确保卡片显示"已取消"
+			const aborted = this.abortedDuringAsk.has(agentId);
 			// 单问题格式：details.question (string), details.answer
 			if (askDetails.question) {
 				return {
 					question: askDetails.question,
 					type: askDetails.type,
-					answered: askDetails.answered,
-					answer: askDetails.answer,
-					answerLabel: askDetails.answerLabel,
+					answered: aborted ? false : askDetails.answered,
+					answer: aborted ? null : askDetails.answer,
+					answerLabel: aborted ? undefined : askDetails.answerLabel,
 					options: askDetails.options,
 				};
 			}
