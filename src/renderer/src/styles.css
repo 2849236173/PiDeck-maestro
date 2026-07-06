@@ -2875,6 +2875,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
   border-left: 3px solid var(--color-accent);
   padding-left: var(--space-2);
   background: color-mix(in srgb, var(--color-accent) 3%, var(--color-bg-panel));

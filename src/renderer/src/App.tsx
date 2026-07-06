@@ -4795,6 +4795,7 @@ ${goalTextRef.current}
                       onPreviewImage={setPreviewImage}
                       showThinking={settings.showThinking}
                       isStreaming={isRunStreaming}
+                      agentRunning={isAgentBusy}
                       onOpenExternal={(url) => api.app.openExternal(url)}
                       onOpenFile={openFilePath}
                       onDiffFile={diffFilePath}
@@ -4819,6 +4820,7 @@ ${goalTextRef.current}
                       onResendUserMessage={resendUserMessage}
                       onEditMessage={editMessage}
                       onDeleteMessage={deleteMessage}
+                      agentRunning={isAgentBusy}
                       isLastUserMessage={message.id === lastUserMessageId}
                       validCommandNames={validCommandNames}
                       validFilePaths={validFilePaths}

@@ -2156,6 +2156,8 @@ export const TurnRow = memo(function TurnRow(props: {
 	onDeleteMessage?: (messageId: string) => void;
 	onEditMessage?: (messageId: string, newText: string) => void;
 	fileSummariesByMessage?: Record<string, SessionModifiedFile[]>;
+	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
+	agentRunning?: boolean;
 }) {
 	const { run } = props;
 	const [editing, setEditing] = useState(false);
@@ -2327,7 +2329,7 @@ export const TurnRow = memo(function TurnRow(props: {
 						{mergedText && !editing && (
 							<div className="turn-row-actions">
 								<CopyMenu text={mergedText} markdown={mergedText} targetRef={rowRef} />
-								{!props.isStreaming && assistantMessages.at(-1)?.message.id && (
+								{!props.isStreaming && !props.agentRunning && assistantMessages.at(-1)?.message.id && (
 									<>
 										<button
 											className="turn-row-action-btn"
@@ -2400,6 +2402,8 @@ export const UserBubble = memo(function UserBubble(props: {
 	isLastUserMessage?: boolean;
 	validCommandNames?: Set<string>;
 	validFilePaths?: Set<string>;
+	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
+	agentRunning?: boolean;
 }) {
 	const { message } = props;
 	const rowRef = useRef<HTMLElement | null>(null);
@@ -2517,7 +2521,7 @@ export const UserBubble = memo(function UserBubble(props: {
 			</div>
 			<div className="user-turn-actions">
 				<CopyMenu text={cleanText} markdown={message.text} targetRef={rowRef} />
-				{!editing && (
+				{!editing && !props.agentRunning && (
 					<>
 						<button className="user-turn-action-btn" onClick={() => {
 							setEditText(cleanText);

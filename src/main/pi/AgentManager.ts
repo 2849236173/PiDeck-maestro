@@ -1,7 +1,7 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
 import type {
@@ -46,6 +46,8 @@ export class AgentManager {
 	private readonly toolExecutingByAgent = new Map<string, string | null>();
 	/** 缓存每个 agent 的 entryId → JSONL 行号映射，用于编辑/删除定位。每次 loadMessages 后刷新。 */
 	private readonly entryIdToLineMap = new Map<string, Map<string, number>>();
+	/** 每个 agent 的会话文件写入锁，防止并发 readFile→modify→writeFile 操作破坏 JSONL 文件 */
+	private readonly sessionLocks = new Map<string, Promise<void>>();
 	/** 流式消息 emit 节流状态。 */
 	private readonly messageFlushTimers = new Map<string, NodeJS.Timeout>();
 	private readonly pendingMessageAgents = new Set<string>();
@@ -993,6 +995,7 @@ export class AgentManager {
 	 * 根据 entryId 在 JSONL 文件中找到对应的行号。
 	 * 先遍历每一行查找 entry 的 id 字段是否匹配 entryId。
 	 * 匹配时返回行号（0-based），找不到返回 -1。
+	 * 跳过 type=deleted 的行（早期版本保留了 id），避免定位到已删条目。
 	 */
 	private findJsonlLineByEntryId(lines: string[], targetEntryId: string): number {
 		for (let i = 0; i < lines.length; i++) {
@@ -1000,6 +1003,9 @@ export class AgentManager {
 			if (!line) continue;
 			try {
 				const parsed = JSON.parse(line);
+				// 跳过已删条目：旧版本在 deleted 标记中保留了 id，
+				// 后续版本不再保留；两种情况下都不应匹配。
+				if (parsed.type === "deleted") continue;
 				if (parsed.id === targetEntryId || parsed.entryId === targetEntryId) {
 					return i;
 				}
@@ -1044,6 +1050,27 @@ export class AgentManager {
 	}
 
 	/**
+	 * 查找最近的会话文件备份，用于 reload 失败时恢复 JSONL。
+	 */
+	private findLatestBackup(sessionPath: string): string | null {
+		try {
+			const dir = dirname(sessionPath);
+			const base = basename(sessionPath);
+			const backupPrefix = `${base}.`;
+			const backupSuffix = ".edit-backup";
+			const allFiles = readdirSync(dir).filter(
+				(f: string) => f.startsWith(backupPrefix) && f.endsWith(backupSuffix),
+			);
+			if (allFiles.length === 0) return null;
+			// 按文件名排序（时间戳在文件名中，排序即按时间），取最新的
+			allFiles.sort().reverse();
+			return join(dir, allFiles[0]);
+		} catch {
+			return null;
+		}
+	}
+
+	/**
 	 * 检查 Agent 是否处于可编辑/可删除的安全状态。
 	 * 要求：isStreaming === false && isCompacting !== true && tab.status !== "running"
 	 * 编辑/删除操作依赖 pi RPC 的 switch_session，在 busy 状态下行为不确定。
@@ -1074,6 +1101,19 @@ export class AgentManager {
 	}
 
 	/**
+	 * 会话文件写入互斥锁：确保同一 agent 的 readFile→modify→writeFile 原子化。
+	 * 防止并发编辑/删除操作同时读取 JSONL 后互相覆盖。
+	 * 前一个操作完成（无论成功或失败）后，下一个操作才会开始。
+	 */
+	private async withSessionLock<T>(agentId: string, fn: () => Promise<T>): Promise<T> {
+		const prev = this.sessionLocks.get(agentId) ?? Promise.resolve();
+		const next = prev.then(() => fn(), () => fn());
+		// 链式尾部 catch 防止单个操作的失败阻断后续队列
+		this.sessionLocks.set(agentId, next.then(() => {}, () => {}));
+		return await next;
+	}
+
+	/**
 	 * 根据 chatMessage.meta.entryId（首选）或 _piDeckMsgSeq（回退）
 	 * 在 JSONL 中找到对应行并返回行号和解析后的 entry。
 	 * 优先使用 entryId 定位（O(n) 扫描 JSONL，n=文件行数），
@@ -1088,43 +1128,70 @@ export class AgentManager {
 	): { lineIndex: number; entry: Record<string, any> } {
 		const entryId = msg.meta?.entryId as string | undefined;
 
+		// ── 调试日志（输出到控制台） ──
+		console.log(`[locateJsonlEntry] msg.id=${msg.id}, meta.entryId=${entryId?.slice(0, 12) ?? "(none)"}, role=${msg.role}, text=[${msg.text.slice(0, 60)}]`);
+
 		// 方案一：按 entryId 精确定位（首选）
 		if (entryId) {
 			const lineIndex = this.findJsonlLineByEntryId(lines, entryId);
 			if (lineIndex !== -1) {
+				console.log(`[locateJsonlEntry] scheme1(entryId) found at line=${lineIndex}`);
 				return { lineIndex, entry: JSON.parse(lines[lineIndex]) };
 			}
-			// entryId 没找到（极少见：文件被外部修改导致 entryId 变化），回退到计数方案
-			void this.appLogger?.warn("agent",
-				`EntryId ${entryId} not found in JSONL, falling back to position-based lookup`,
-			);
+			console.warn(`[locateJsonlEntry] EntryId ${entryId} not found in JSONL, trying msg.id extraction`);
 		}
 
-		// 方案二：按 _piDeckMsgSeq 计数定位（兼容旧版本）
-		const msgIndex = messages.indexOf(msg);
-		let desktopCount = 0;
+		// 调试：记录 JSONL 前 10 行的 id，辅助排查 entryId 为何找不到
+		const lineIds = lines.slice(0, 10).map((l, idx) => {
+			try { const p = JSON.parse(l); return `${idx}:id=${p.id?.slice(0, 12) ?? "(no id)"}${p.entryId ? `,entryId=${String(p.entryId).slice(0, 12)}` : ""}`; }
+			catch { return `${idx}:(parse error)`; }
+		}).join("; ");
+		console.log(`[locateJsonlEntry] first 10 JSONL ids: [${lineIds}]`);
+
+		// 方案二：从 msg.id 提取 entryId（id 格式: `${agentId}-history-${entryId}`）
+		// 当 get_entries 返回的 entryId 在 JSONL 中找不到时尝试此方案；
+		// 也可用于 get_entries 失败时仍能从 msg.id 中恢复 entryId。
+		const idPrefix = `${msg.agentId}-history-`;
+		if (msg.id.startsWith(idPrefix)) {
+			const extracted = msg.id.slice(idPrefix.length);
+			console.log(`[locateJsonlEntry] scheme2 extracting from msg.id, extracted=[${extracted}]`);
+			const lineIndex = this.findJsonlLineByEntryId(lines, extracted);
+			if (lineIndex !== -1) {
+				console.log(`[locateJsonlEntry] scheme2 found at line=${lineIndex}`);
+				return { lineIndex, entry: JSON.parse(lines[lineIndex]) };
+			}
+			console.warn(`[locateJsonlEntry] scheme2 extracted [${extracted}] not found in JSONL`);
+		} else {
+			console.warn(`[locateJsonlEntry] msg.id does NOT start with prefix [${idPrefix}], cannot try scheme2`);
+		}
+
+		// 方案三：按角色 + 文本内容匹配（兜底方案）
+		// 当 JSONL 中存在多个分支时，计数方案会错误统计非活跃分支的条目。
+		// 改用文本匹配，只找与 msg 角色和文本内容完全一致的 entry。
+		// 注意：相同文本在不同消息中重复时只能返回第一个匹配，但对常见场景足够。
+		console.log(`[locateJsonlEntry] scheme3 scanning by role=${msg.role} + text match`);
+		let matchCount = 0;
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i].trim();
 			if (!line) continue;
 			try {
 				const entry = JSON.parse(line);
-				const role = (entry as any)?.message?.role;
-				if (role === "user") {
-					if (desktopCount === msgIndex) return { lineIndex: i, entry };
-					desktopCount++;
-				} else if (role === "assistant") {
+				const entryRole = (entry as any)?.message?.role;
+				if (
+					entryRole === msg.role ||
+					(entryRole === "toolResult" && msg.role === "tool")
+				) {
 					const text = this.extractText((entry as any)?.message?.content);
-					if (text.trim()) {
-						if (desktopCount === msgIndex) return { lineIndex: i, entry };
-						desktopCount++;
+					if (text === msg.text) {
+						matchCount++;
+						console.log(`[locateJsonlEntry] scheme3 found at line=${i}, role=${entryRole}, match#=${matchCount}`);
+						return { lineIndex: i, entry };
 					}
-				} else if (role === "toolResult") {
-					if (desktopCount === msgIndex) return { lineIndex: i, entry };
-					desktopCount++;
 				}
 			} catch { /* 跳过不可解析的行 */ }
 		}
 
+		console.error(`[locateJsonlEntry] ALL SCHEMES FAILED. msg.id=${msg.id}, role=${msg.role}, text=[${msg.text.slice(0, 100)}], jsonlLines=${lines.length}`);
 		throw new Error("Message not found in session file");
 	}
 
@@ -1134,7 +1201,7 @@ export class AgentManager {
 	 *
 	 * 流程：
 	 * 1. 检查 Agent 空闲状态（忙碌则拒绝）
-	 * 2. 通过 meta.entryId 精确定位 JSONL 行（回退：按 _piDeckMsgSeq 计数定位）
+	 * 2. 通过 meta.entryId 精确定位 JSONL 行（回退：msg.id 提取 entryId / 角色+文本匹配）
 	 * 3. 修改对应行的 text 内容
 	 * 4. 写回 JSONL
 	 * 5. 使用 _reloadMarker 方案让 pi 重新加载会话
@@ -1143,69 +1210,82 @@ export class AgentManager {
 		const startTime = Date.now();
 		void this.appLogger?.info("agent", "Edit message requested", { agentId, messageId });
 
-		// 1. 检查 Agent 空闲状态
-		await this.ensureAgentIdle(agentId);
+		await this.withSessionLock(agentId, async () => {
+			// 1. 检查 Agent 空闲状态
+			await this.ensureAgentIdle(agentId);
 
-		const runtime = this.requireRuntime(agentId);
-		const sessionPath = runtime.tab.sessionPath;
-		if (!sessionPath) throw new Error("Session not persisted");
+			const runtime = this.requireRuntime(agentId);
+			const sessionPath = runtime.tab.sessionPath;
+			if (!sessionPath) throw new Error("Session not persisted");
 
-		const raw = await readFile(sessionPath, "utf8").catch(() => "");
-		if (!raw) throw new Error("Session file is empty");
-		const lines = raw.split(/\r?\n/);
+			const raw = await readFile(sessionPath, "utf8").catch(() => "");
+			if (!raw) throw new Error("Session file is empty");
+			const lines = raw.split(/\r?\n/);
 
-		const messages = this.messages.get(agentId);
-		if (!messages) throw new Error("No messages for agent");
-		const msg = messages.find((m) => m.id === messageId);
-		if (!msg) throw new Error("Message not found");
+			const messages = this.messages.get(agentId);
+			if (!messages) throw new Error("No messages for agent");
+			const msg = messages.find((m) => m.id === messageId);
+			if (!msg) throw new Error("Message not found");
 
-		// 2. 定位 JSONL 行（优先 entryId，回退 _piDeckMsgSeq 计数）
-		const { lineIndex, entry } = this.locateJsonlEntry(lines, messages, msg);
-		const role = (entry as any)?.message?.role;
+			// 2. 定位 JSONL 行（优先 entryId，回退 _piDeckMsgSeq 计数）
+			const { lineIndex, entry } = this.locateJsonlEntry(lines, messages, msg);
+			const role = (entry as any)?.message?.role;
 
-		if (role !== "user" && role !== "assistant") {
-			throw new Error("Only user and assistant messages can be edited");
-		}
-
-		// 2.5 写前备份（最多保留最近 3 个 .edit-backup 文件）
-		await this.backupSessionFile(sessionPath);
-
-		// 3. 修改 text
-		const wrapped = entry as { message?: Record<string, any> };
-		const content = wrapped.message!.content;
-		if (Array.isArray(content)) {
-			const textBlock = content.find((c: any) => c.type === "text");
-			if (textBlock) {
-				textBlock.text = newText;
-			} else {
-				content.push({ type: "text", text: newText });
+			if (role !== "user" && role !== "assistant") {
+				throw new Error("Only user and assistant messages can be edited");
 			}
-		} else {
-			wrapped.message!.content = [{ type: "text", text: newText }];
-		}
 
-		// 4. 写回 JSONL
-		lines[lineIndex] = JSON.stringify(entry);
-		await writeFile(sessionPath, lines.join("\n"), "utf8");
+			// 2.5 写前备份（最多保留最近 3 个 .edit-backup 文件）
+			await this.backupSessionFile(sessionPath);
 
-		// 更新桌面端内存（保持 entryId 引用）
-		const newMsg = { ...msg, text: newText };
-		const newMessages = messages.map((m) => (m.id === messageId ? newMsg : m));
-		this.messages.set(agentId, newMessages);
-		this.scheduleMessageEmit(agentId, true);
+			// 3. 修改 text
+			const wrapped = entry as { message?: Record<string, any> };
+			const content = wrapped.message!.content;
+			if (Array.isArray(content)) {
+				const textBlock = content.find((c: any) => c.type === "text");
+				if (textBlock) {
+					textBlock.text = newText;
+				} else {
+					content.push({ type: "text", text: newText });
+				}
+			} else {
+				wrapped.message!.content = [{ type: "text", text: newText }];
+			}
 
-		// 5. 使用 _reloadMarker 重载 pi 会话
-		try {
-			await this.reloadSession(agentId);
-		} catch (error) {
-			void this.appLogger?.error("agent", "Edit message: reload failed, desktop state preserved", {
-				agentId,
-				messageId,
-				error: error instanceof Error ? error.message : String(error),
-				elapsedMs: Date.now() - startTime,
-			});
-			// reload 失败不影响桌面端已生效的编辑
-		}
+			// 4. 写回 JSONL
+			lines[lineIndex] = JSON.stringify(entry);
+			await writeFile(sessionPath, lines.join("\n"), "utf8");
+
+			// 5. 使用 _reloadMarker 重载 pi 会话
+			// 注意：不再手动更新桌面端内存——reloadSession 内部调用 loadMessages
+			// 会从 pi 拉取最新消息列表，保持桌面端与 pi 状态一致。
+			try {
+				await this.reloadSession(agentId);
+			} catch (error) {
+				// reload 失败时从备份恢复 JSONL
+				const errMsg = error instanceof Error ? error.message : String(error);
+				void this.appLogger?.error("agent", "Edit message: reload failed, restoring backup", {
+					agentId,
+					messageId,
+					error: errMsg,
+					elapsedMs: Date.now() - startTime,
+				});
+				try {
+					const backupPath = this.findLatestBackup(sessionPath);
+					if (backupPath) {
+						const backupContent = await readFile(backupPath, "utf8");
+						await writeFile(sessionPath, backupContent, "utf8");
+						await this.loadMessages(agentId).catch(() => {});
+					}
+				} catch (restoreError) {
+					void this.appLogger?.error("agent", "Edit message: failed to restore backup", {
+						agentId,
+						error: restoreError instanceof Error ? restoreError.message : String(restoreError),
+					});
+				}
+				throw error;
+			}
+		});
 
 		void this.appLogger?.info("agent", "Edit message completed", {
 			agentId,
@@ -1215,69 +1295,103 @@ export class AgentManager {
 	}
 
 	/**
-	 * 删除消息：从 JSONL 中用 deleted 标记替换对应行后通过 switch_session 重载。
-	 * 前端需在 agent idle 时调用。
+	 * 删除消息：在 JSONL 中用 deleted 标记替换对应行后通过 switch_session 重载。
 	 *
 	 * 相比旧版本（置空行导致 JSONL 行数偏移），本方案：
 	 * - 用 {"type":"deleted","originalEntryId":"...","ts":...} 替换原行
-	 * - 保留行号稳定，不破坏 session tree parentId 引用
+	 * - 同时将删掉 entry 的子 entry 的 parentId 重定向到被删 entry 的父节点（re-parenting），
+	 *   确保 pi 重载 session tree 时不会因 dangling parentId 丢弃整个子分支
+	 * - 保留行号稳定，不破坏行数对齐
 	 * - entryId 精确定位不受之前删除操作影响
 	 */
 	async deleteMessage(agentId: string, messageId: string) {
 		const startTime = Date.now();
 		void this.appLogger?.info("agent", "Delete message requested", { agentId, messageId });
 
-		// 1. 检查 Agent 空闲状态
-		await this.ensureAgentIdle(agentId);
+		await this.withSessionLock(agentId, async () => {
+			// 1. 检查 Agent 空闲状态
+			await this.ensureAgentIdle(agentId);
 
-		const runtime = this.requireRuntime(agentId);
-		const sessionPath = runtime.tab.sessionPath;
-		if (!sessionPath) throw new Error("Session not persisted");
+			const runtime = this.requireRuntime(agentId);
+			const sessionPath = runtime.tab.sessionPath;
+			if (!sessionPath) throw new Error("Session not persisted");
 
-		const raw = await readFile(sessionPath, "utf8").catch(() => "");
-		if (!raw) throw new Error("Session file is empty");
-		const lines = raw.split(/\r?\n/);
+			const raw = await readFile(sessionPath, "utf8").catch(() => "");
+			if (!raw) throw new Error("Session file is empty");
+			const lines = raw.split(/\r?\n/);
 
-		const messages = this.messages.get(agentId);
-		if (!messages) throw new Error("No messages for agent");
-		const msg = messages.find((m) => m.id === messageId);
-		if (!msg) throw new Error("Message not found");
+			const messages = this.messages.get(agentId);
+			if (!messages) throw new Error("No messages for agent");
+			const msg = messages.find((m) => m.id === messageId);
+			if (!msg) throw new Error("Message not found");
 
-		// 2. 定位 JSONL 行（优先 entryId）
-		const { lineIndex, entry } = this.locateJsonlEntry(lines, messages, msg);
-		const entryId = (entry as any)?.id;
+			// 2. 定位 JSONL 行（优先 entryId）
+			const { lineIndex, entry } = this.locateJsonlEntry(lines, messages, msg);
+			const deletedEntryId = (entry as any)?.id;
+			const deletedParentId = (entry as any)?.parentId;
+			const foundRole = (entry as any)?.message?.role;
+			console.log(`[deleteMessage] lineIndex=${lineIndex}, entryId=${deletedEntryId?.slice(0, 12) ?? "(none)"}, parentId=${deletedParentId?.slice(0, 12) ?? "(null)"}, entryRole=${foundRole ?? "(none)"}`);
 
-		// 2.5 写前备份（最多保留最近 3 个 .edit-backup 文件）
-		await this.backupSessionFile(sessionPath);
+			// 2.5 写前备份（最多保留最近 3 个 .edit-backup 文件）
+			await this.backupSessionFile(sessionPath);
 
-		// 3. 用 deleted 标记替换原行（保留行号，不破坏 tree 结构）
-		lines[lineIndex] = JSON.stringify({
-			type: "deleted",
-			originalEntryId: entryId ?? `unknown-${messageId}`,
-			ts: Date.now(),
-		});
-		await writeFile(sessionPath, lines.join("\n"), "utf8");
+			// 3. Re-parenting：将删掉 entry 的所有直接子节点的 parentId 指向被删 entry 的父节点。
+			// 这样 pi 在 switch_session 重载 session tree 时，子节点不会因为
+			// 父节点消失而变成 dangling orphan，避免 pi 丢弃整个子分支（“删一条丢多条”）。
+			if (deletedEntryId && deletedParentId !== undefined) {
+				for (let i = 0; i < lines.length; i++) {
+					if (i === lineIndex) continue;
+					const childLine = lines[i].trim();
+					if (!childLine) continue;
+					try {
+						const child = JSON.parse(childLine);
+						if (child.parentId === deletedEntryId) {
+							child.parentId = deletedParentId;
+							lines[i] = JSON.stringify(child);
+						}
+					} catch { /* 跳过无法解析的行 */ }
+				}
+			}
 
-		// 4. 更新桌面端内存
-		const index = messages.findIndex((m) => m.id === messageId);
-		if (index !== -1) {
-			messages.splice(index, 1);
-		}
-		this.messages.set(agentId, messages);
-		this.scheduleMessageEmit(agentId, true);
-
-		// 5. 使用 _reloadMarker 重载 pi 会话
-		try {
-			await this.reloadSession(agentId);
-		} catch (error) {
-			void this.appLogger?.error("agent", "Delete message: reload failed, desktop state preserved", {
-				agentId,
-				messageId,
-				error: error instanceof Error ? error.message : String(error),
-				elapsedMs: Date.now() - startTime,
+			// 4. 用 deleted 标记替换原行（不保留 id 字段，
+			// 避免 pi 的 get_entries 返回已删 entry 导致 activeEntryIds 与 messages 不匹配）
+			lines[lineIndex] = JSON.stringify({
+				type: "deleted",
+				originalEntryId: deletedEntryId ?? `unknown-${messageId}`,
+				ts: Date.now(),
 			});
-			// reload 失败不影响桌面端已生效的删除
-		}
+			await writeFile(sessionPath, lines.join("\n"), "utf8");
+
+			// 5. 使用 _reloadMarker 重载 pi 会话
+			// 不再手动更新 desktop 内存——reloadSession 内部调用 loadMessages
+			// 从 pi 拉取最新消息列表
+			try {
+				await this.reloadSession(agentId);
+			} catch (error) {
+				// reload 失败时从备份恢复 JSONL
+				const errMsg = error instanceof Error ? error.message : String(error);
+				void this.appLogger?.error("agent", "Delete message: reload failed, restoring backup", {
+					agentId,
+					messageId,
+					error: errMsg,
+					elapsedMs: Date.now() - startTime,
+				});
+				try {
+					const backupPath = this.findLatestBackup(sessionPath);
+					if (backupPath) {
+						const backupContent = await readFile(backupPath, "utf8");
+						await writeFile(sessionPath, backupContent, "utf8");
+						await this.loadMessages(agentId).catch(() => {});
+					}
+				} catch (restoreError) {
+					void this.appLogger?.error("agent", "Delete message: failed to restore backup", {
+						agentId,
+						error: restoreError instanceof Error ? restoreError.message : String(restoreError),
+					});
+				}
+				throw error;
+			}
+		});
 
 		void this.appLogger?.info("agent", "Delete message completed", {
 			agentId,
@@ -2344,25 +2458,28 @@ export class AgentManager {
 	 * 从 leafId 沿 parentId 回溯至 root 得到有序列表。
 	 * 这个列表的顺序与 get_messages 返回的消息顺序一致，
 	 * 用于在 convertAgentMessages 中按位置匹配 entryId 到 message。
+	 * 只保留 type=message 的 entryId（即 user/assistant/toolResult 角色消息），
+	 * 剔除 session、model_change、thinking_level_change、custom 等非消息条目，
+	 * 使返回的 id 列表与 get_messages 返回的 rawMessages 一一对齐。
 	 */
 	private buildActiveBranchEntryIds(
-		entries: Array<{ id: string; parentId: string | null }>,
+		entries: Array<{ id: string; parentId: string | null; type?: string; message?: { role?: string } }>,
 		leafId: string,
 	): string[] {
-		const entryById = new Map<string, { id: string; parentId: string | null }>();
+		const entryById = new Map<string, { id: string; parentId: string | null; type?: string; message?: { role?: string } }>();
 		for (const entry of entries) {
 			entryById.set(entry.id, entry);
 		}
 
-		// 从 leafId 回溯到 root 得到 active branch entryId 有序列表
-		const activeBranch: string[] = [];
+		// 从 leafId 回溯到 root，只保留 type=message 的条目
+		const allBranchIds: string[] = [];
 		let currentId: string | null = leafId;
 		while (currentId) {
-			activeBranch.unshift(currentId);
+			allBranchIds.unshift(currentId);
 			const entry = entryById.get(currentId);
 			currentId = entry?.parentId ?? null;
 		}
-		return activeBranch;
+		return allBranchIds.filter((id) => entryById.get(id)?.type === "message");
 	}
 
 	private convertAgentMessages(
@@ -2377,19 +2494,23 @@ export class AgentManager {
 		);
 		// 用于生成元消息 id（compaction/branchSummary）的计数器
 		let metaSeq = 0;
-		// entryId 按 active branch 顺序与 rawMessages 一一对应
+		// entryId 按 active branch 顺序与 rawMessages 一一对应。
+		// 注意：entryIndex 只在 user/assistant/toolResult 时递增，
+		// 因为 compactionSummary/branchSummary 在 get_entries 中无对应 entry，
+		// 同时 activeEntryIds 还包含 model_change/thinking_level_change/custom 等非角色条目。
+		// 因此 currentEntryId 的读取必须放在各个角色块内部，不能在所有条目前统一读取，
+		// 否则非 user/assistant/toolResult 条目会提前消费 entryIndex 槽位。
 		let entryIndex = 0;
 		return rawMessages
 			.flatMap<ChatMessage>((message, index) => {
 				if (!message || typeof message !== "object") return [];
 				const typed = message as any;
 
-				// 从 activeEntryIds 按位置获取当前消息对应的 entryId
-				const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
-					? activeEntryIds[entryIndex]
-					: undefined;
-
 				if (typed.role === "user") {
+					// 在角色块内读取 entryId，避免 compactionSummary 等元消息抢占 slot
+					const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
+						? activeEntryIds[entryIndex]
+						: undefined;
 					const images = this.extractImages(typed.content);
 					const text = this.extractText(typed.content) ||
 						(images.length > 0 ? "[图片]" : "");
@@ -2410,6 +2531,9 @@ export class AgentManager {
 					}];
 				}
 				if (typed.role === "assistant") {
+					const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
+						? activeEntryIds[entryIndex]
+						: undefined;
 					const text = this.extractText(typed.content);
 					if (!text.trim()) return [];
 					const thinking = this.extractThinking(typed.content);
@@ -2428,6 +2552,9 @@ export class AgentManager {
 					}];
 				}
 				if (typed.role === "toolResult") {
+					const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
+						? activeEntryIds[entryIndex]
+						: undefined;
 					const toolCallId = String(typed.toolCallId ?? `history-tool-${index}`);
 					const historicalCall = historicalToolCalls.get(toolCallId);
 					const toolName = String(typed.toolName ?? historicalCall?.name ?? "tool");
