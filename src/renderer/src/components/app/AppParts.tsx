@@ -198,6 +198,30 @@ function mergeModifiedFiles(
 	return Array.from(byPath.values());
 }
 
+/** 从工具消息的 args 中提取写入后的文件新内容，用于 diff 展示。
+ *  meta.args 可能被 AgentManager 序列化为 JSON 字符串（safeJson），需先反解。
+ *  write/create 工具直接从 content 字段取；edit/patch 工具将 newText 应用到 originalContent 上得到结果。 */
+function getToolNewContentFromMessage(toolName: string, args: unknown, originalContent: string | undefined): string | undefined {
+	if (!args) return undefined;
+	let parsed = args;
+	if (typeof parsed === "string" && parsed.trim()) {
+		try { parsed = JSON.parse(parsed); } catch { return undefined; }
+	}
+	if (typeof parsed !== "object") return undefined;
+	const record = parsed as Record<string, unknown>;
+	if (/write|create/i.test(toolName) && typeof record.content === "string") return record.content;
+	if (/edit|patch/i.test(toolName) &&
+		typeof record.newText === "string" &&
+		typeof record.oldText === "string" &&
+		originalContent) {
+		const idx = originalContent.indexOf(record.oldText);
+		if (idx >= 0) {
+			return originalContent.slice(0, idx) + record.newText + originalContent.slice(idx + record.oldText.length);
+		}
+	}
+	return undefined;
+}
+
 function collectModifiedFilesFromToolMessages(messages: ChatMessage[]) {
 	const byPath = new Map<string, SessionModifiedFile>();
 	for (const message of messages) {
@@ -214,6 +238,9 @@ function collectModifiedFilesFromToolMessages(messages: ChatMessage[]) {
 		for (const filePath of filePaths) {
 			const previous = byPath.get(filePath);
 			if (previous) byPath.delete(filePath);
+			// 从 args 中提取本次工具调用产生的新内容，用于 diff 对比展示
+			const originalContent = previous?.originalContent ??
+				(message.meta?.originalContent as string | undefined) ?? "";
 			byPath.set(filePath, {
 				path: filePath,
 				toolName,
@@ -221,10 +248,10 @@ function collectModifiedFilesFromToolMessages(messages: ChatMessage[]) {
 				changedLines:
 					(previous?.changedLines ?? 0) +
 					getToolChangedLineCountForPath(toolName, args, filePath),
-				originalContent:
-					previous?.originalContent ??
-					(message.meta?.originalContent as string | undefined) ??
-					"",
+				originalContent,
+				// 提取本次写入/编辑后的新内容，使 diff 点击时能直接使用会话级快照
+				// 而非降级到读磁盘（历史会话恢复时磁盘可能已变化或文件已删除）。
+				content: getToolNewContentFromMessage(toolName, args, originalContent) ?? previous?.content,
 			});
 		}
 	}

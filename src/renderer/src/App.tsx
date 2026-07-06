@@ -519,7 +519,13 @@ export function App() {
     Record<string, boolean>
   >({});
   /** 输入框发送模式：normal 直接交给 agent，plan 通过隐藏标记触发 PiDeck Plan Mode 扩展。 */
-  const [composerAgentMode, setComposerAgentMode] = useState<ComposerAgentMode>("normal");
+  const [composerAgentModes, setComposerAgentModes] = useState<Record<string, ComposerAgentMode>>({});
+  /** 当前 agent 的发送模式，按 agentId 隔离。 */
+  const currentComposerAgentMode = composerAgentModes[activeAgentId ?? ""] ?? "normal";
+  const setCurrentComposerAgentMode = (mode: ComposerAgentMode) => {
+    if (!activeAgentId) return;
+    setComposerAgentModes((prev) => ({ ...prev, [activeAgentId]: mode }));
+  };
   /** Goal 状态 */
   const [goalText, setGoalText] = useState<string>("");
   const goalTextRef = useRef("");
@@ -989,7 +995,7 @@ export function App() {
     ? "silent-shell"
     : prompt.startsWith("!")
       ? "shell"
-      : composerAgentMode === "plan"
+      : currentComposerAgentMode === "plan"
         ? "plan"
         : null;
   const composerStatusText =
@@ -3399,7 +3405,7 @@ ${text}
     // 下一帧 DOM 同步后再跑一次 syncComposerAutoHeight，让最终高度以清空后的 scrollHeight 为准。
     setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
     requestAnimationFrame(() => syncComposerAutoHeight());
-    await submitPromptSnapshot(activeAgentId, message, images, undefined, composerAgentMode);
+    await submitPromptSnapshot(activeAgentId, message, images, undefined, currentComposerAgentMode);
   }
 
   async function sendPromptAsFollowUp() {
@@ -3420,7 +3426,7 @@ ${text}
     setSendBehaviorMenuOpen(false);
     setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
     requestAnimationFrame(() => syncComposerAutoHeight());
-    await submitPromptSnapshot(activeAgentId, message, images, "followUp", composerAgentMode);
+    await submitPromptSnapshot(activeAgentId, message, images, "followUp", currentComposerAgentMode);
   }
 
   /** 处理 /goal 命令 */
@@ -4954,7 +4960,7 @@ ${goalTextRef.current}
                 ? "shell-silent-mode"
                 : prompt.startsWith("!")
                   ? "shell-mode"
-                  : composerAgentMode === "plan"
+                  : currentComposerAgentMode === "plan"
                     ? "plan-mode"
                     : ""
             }`}
@@ -4973,9 +4979,9 @@ ${goalTextRef.current}
               onPickModel={openModelPicker}
               onPickThinking={() => setThinkingPickerOpen(true)}
               onCompact={compactAgent}
-              composerAgentMode={composerAgentMode}
+              composerAgentMode={currentComposerAgentMode}
               onOpenComposerModePicker={() => setComposerModePickerOpen(true)}
-              onCancelPlan={() => setComposerAgentMode("normal")}
+              onCancelPlan={() => setCurrentComposerAgentMode("normal")}
               feishuIndicator={
                 <FeishuLinkIndicator
                   status={feishu.status}
@@ -5017,7 +5023,7 @@ ${goalTextRef.current}
                       ? t("app.composerSilentPlaceholder")
                       : prompt.startsWith("!")
                         ? t("app.composerShellPlaceholder")
-                        : composerAgentMode === "plan"
+                        : currentComposerAgentMode === "plan"
                           ? t("app.composerPlanPlaceholder")
                           : settings.sendShortcut === "enter-send"
                             ? t("app.composerEnterPlaceholder")
@@ -5640,10 +5646,10 @@ ${goalTextRef.current}
       )}
       {composerModePickerOpen && (
         <ComposerModePicker
-          currentMode={composerAgentMode}
+          currentMode={currentComposerAgentMode}
           onClose={() => setComposerModePickerOpen(false)}
           onPick={(mode) => {
-            setComposerAgentMode(mode);
+            setCurrentComposerAgentMode(mode);
             setComposerModePickerOpen(false);
           }}
         />
