@@ -100,14 +100,19 @@ export class PiRpcClient extends EventEmitter {
   private handleLine(line: string) {
     if (!line.trim()) return;
 
+    const t0 = line.length > 1024 * 1024 ? Date.now() : 0;
+
     let message: unknown;
     try {
       message = JSON.parse(line);
     } catch {
       // stdout 被非 JSON 内容污染时保留原文，方便用户排查 PATH、pi 版本或启动脚本问题。
+      if (t0) console.log("[perf] PiRpcClient JSON.parse FAILED", { size: line.length, elapsed: Date.now() - t0 });
       this.emit("protocol-error", line);
       return;
     }
+
+    if (t0) console.log("[perf] PiRpcClient JSON.parse", { size: line.length, elapsed: Date.now() - t0 });
 
     // 记录收到的 RPC 消息，方便调试
     this.emit("log", { direction: "recv", data: message });
@@ -116,7 +121,9 @@ export class PiRpcClient extends EventEmitter {
       const pending = this.pending.get(message.id)!;
       this.pending.delete(message.id);
       clearTimeout(pending.timer);
+      const t1 = t0 ? Date.now() : 0;
       pending.resolve(message);
+      if (t1) console.log("[perf] PiRpcClient pending.resolve", { id: message.id, elapsed: Date.now() - t0 });
       return;
     }
 

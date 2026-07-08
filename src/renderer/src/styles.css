@@ -2379,7 +2379,7 @@ body.is-terminal-resizing {
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px clamp(16px, 3vw, 36px) 24px;
+  padding: 18px clamp(24px, 4vw, 48px) 24px;
   min-height: 0;
   scroll-padding-top: 18px;
   scrollbar-width: thin;
@@ -4446,12 +4446,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   text-transform: none;
 }
 .tool-card--ask {
-  border-color: color-mix(
-    in srgb,
-    var(--color-info) 26%,
-    var(--color-border-subtle)
-  );
-  background: color-mix(in srgb, var(--color-info) 5%, var(--color-bg-muted));
+  background: transparent;
 }
 .tool-card--ask .tool-card-icon {
   color: var(--color-info);
@@ -5262,7 +5257,8 @@ body.is-composer-resizing .composer-resize-handle::after {
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   min-height: 28px;
   padding: 4px 8px;
   border: 0;
@@ -5275,8 +5271,14 @@ body.is-composer-resizing .composer-resize-handle::after {
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
-.extension-widget-card-trigger:hover {
+.extension-widget-card-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.extension-widget-card-header:hover {
   background: color-mix(in srgb, var(--color-bg-hover) 50%, var(--color-bg));
+  border-radius: var(--radius-sm);
 }
 .extension-widget-card-trigger:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -5302,14 +5304,12 @@ body.is-composer-resizing .composer-resize-handle::after {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 0;
+  margin-right: 6px;
   border-radius: var(--radius-xs);
-  background: transparent;
   color: var(--color-text-tertiary);
   cursor: pointer;
-  transition: all 0.12s ease;
   flex-shrink: 0;
-  padding: 0;
+  transition: all 0.12s ease;
   opacity: 0.5;
 }
 .extension-widget-card-close:hover {
@@ -5322,7 +5322,7 @@ body.is-composer-resizing .composer-resize-handle::after {
   outline-offset: 1px;
 }
 .extension-widget-card-content {
-  padding: 0 8px 6px 28px;
+  padding: 0 8px 6px 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;

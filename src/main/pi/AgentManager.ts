@@ -18,6 +18,7 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { PiProcess } from "./PiProcess";
+import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import { stripFeishuDocActionHint } from "../feishu/docActions";
 import type { SettingsStore } from "../settings/SettingsStore";
@@ -115,34 +116,62 @@ export class AgentManager {
 		return this.requireRuntime(agentId).tab.cwd;
 	}
 
-	async loadMessages(agentId: string) {
+	async loadMessages(agentId: string, skipEntries = false, earlyMessagesPromise?: Promise<RpcResponse>) {
+		const t0 = Date.now();
 		const runtime = this.requireRuntime(agentId);
-		const response = await runtime.process.client.request({
+
+		// 并行请求：get_messages 和 get_entries 互不依赖，可以同时发起
+		// 如果已有提前发出的请求（earlyMessagesPromise），直接复用，避免重复发送
+		const messagesPromise = earlyMessagesPromise ?? runtime.process.client.request({
 			type: "get_messages",
 		});
+
+		let entriesPromise: Promise<any> | undefined;
+		if (!skipEntries) {
+			entriesPromise = runtime.process.client.request({
+				type: "get_entries",
+			}, 15_000).catch(() => {
+				// get_entries 失败时不阻塞消息加载；编辑/删除走 fallback（_piDeckMsgSeq 计数）
+				void this.appLogger?.warn("agent", "Failed to get_entries for entryId mapping", { agentId });
+				return undefined;
+			});
+		}
+
+		const [response, entriesResult] = await Promise.all([
+			messagesPromise,
+			entriesPromise ?? Promise.resolve(undefined),
+		]);
+		const t1 = Date.now();
+		void this.appLogger?.info("agent", "[perf] loadMessages get_messages done", {
+			agentId,
+			t: t1 - t0,
+			skipEntries,
+			msgCount: ((response.data as any)?.messages?.length) ?? 0,
+		});
+		console.log("[perf] loadMessages get_messages done", { agentId, t: t1 - t0, msgCount: ((response.data as any)?.messages?.length) ?? 0 });
+
 		const rawMessages = (response.data as { messages?: unknown[] } | undefined)?.messages ?? [];
 		const trimmed = this.trimHistoryMessages(rawMessages);
 
-		// 获取 get_entries 以建立 entryId 列表，用于编辑/删除的精确定位。
-		// get_entries 返回 session tree 中的所有 entry（含废弃分支），
-		// 通过 leafId 回溯到 root 得到 active branch 的 entryId 有序列表。
+		// 解析 entryId 列表
 		let activeEntryIds: string[] | undefined;
-		try {
-			const entriesResponse = await runtime.process.client.request({
-				type: "get_entries",
-			}, 15_000);
-			const entriesData = entriesResponse.data as
+		if (entriesResult) {
+			const entriesData = entriesResult.data as
 				| { entries?: Array<{ id: string; parentId: string | null; type?: string; message?: { role?: string } }>; leafId?: string }
 				| undefined;
 			if (entriesData?.entries && entriesData?.leafId) {
 				activeEntryIds = this.buildActiveBranchEntryIds(entriesData.entries, entriesData.leafId);
 			}
-		} catch {
-			// get_entries 失败时不阻塞消息加载；编辑/删除走 fallback（_piDeckMsgSeq 计数）
-			void this.appLogger?.warn("agent", "Failed to get_entries for entryId mapping", { agentId });
 		}
 
 		const messages = this.convertAgentMessages(agentId, trimmed, activeEntryIds);
+		const t2 = Date.now();
+		void this.appLogger?.info("agent", "[perf] loadMessages convert + emit done", {
+			agentId,
+			t: t2 - t1,
+			msgCount: messages.length,
+		});
+		console.log("[perf] loadMessages convert + emit done", { agentId, t: t2 - t1, msgCount: messages.length });
 		// abort 时 ask_question 的 answer 已被覆写为 null，不再需要跟踪
 		this.abortedDuringAsk.delete(agentId);
 		this.messages.set(agentId, messages);
@@ -182,6 +211,7 @@ export class AgentManager {
 	}
 
 	private async createUnlocked(input: CreateAgentInput) {
+		const t0 = Date.now();
 		const project = this.getProject(input.projectId);
 		if (!project) throw new Error(`Project not found: ${input.projectId}`);
 
@@ -215,30 +245,32 @@ export class AgentManager {
 			createdAt: Date.now(),
 		};
 
-		if (input.sessionPath) {
-			void this.appLogger?.info("agent", "Agent repair assistant usage skipped (importers now handle this)", {
-				agentId: id,
-				sessionPath: input.sessionPath,
-			});
-		}
-		// 启动 pi 前完成项目信任确认：含 .pi 资源的项目首次打开弹窗，干净项目自动信任。
-		// pi 在 RPC 模式下 project_trust 事件 hasUI 恒为 false，无法依赖其内置信任流程，故由桌面端自行拦截。
+		const t1 = Date.now();
+		void this.appLogger?.info("agent", "[perf] ensureProjectTrust start", { agentId: id, t: t1 - t0 });
+		console.log("[perf] ensureProjectTrust start", { agentId: id, t: t1 - t0 });
 		const trustOverride = await this.ensureProjectTrust(project);
-		// 代理环境变量只能在子进程启动前注入；设置变更后通过 restart/new agent 创建新的进程快照。
-		// 每个 Agent 独立启动 pi RPC，避免复用进程时 session、事件监听和配置快照串线。
+		const t2 = Date.now();
+		void this.appLogger?.info("agent", "[perf] ensureProjectTrust done", { agentId: id, t: t2 - t1 });
+		console.log("[perf] ensureProjectTrust done", { agentId: id, t: t2 - t1 });
+
 		const process = new PiProcess(project.path, this.settingsStore.get());
 		const runtime: AgentRuntime = { tab, process };
 		this.agents.set(id, runtime);
 		this.messages.set(id, []);
 		this.emitState();
 
-		void this.appLogger?.info("agent", "Agent pi process start", {
-			agentId: id,
-			projectPath: project.path,
-			sessionPath: input.sessionPath,
-		});
+		void this.appLogger?.info("agent", "[perf] process.start start", { agentId: id, t: Date.now() - t2 });
+		console.log("[perf] process.start start", { agentId: id, t: Date.now() - t2 });
 		const client = process.start(input.sessionPath, trustOverride);
+		const t3 = Date.now();
+		void this.appLogger?.info("agent", "[perf] process.start done", { agentId: id, t: t3 - t2 });
+		console.log("[perf] process.start done", { agentId: id, t: t3 - t2 });
 
+		// 启动后立即连续发送两条命令，让 pi 启动后一次性处理，减少空闲等待
+		const statePromise = client.request({ type: "get_state" });
+		const messagesPromise = client.request({ type: "get_messages" });
+
+		// ... 事件监听器（省略，与原来一致）
 		process.on("event", (event) => this.handlePiEvent(id, event));
 		process.on("stderr", (text) =>
 			this.emit(ipcChannels.agentsLog, { agentId: id, text }),
@@ -308,14 +340,12 @@ export class AgentManager {
 		});
 
 		try {
-			void this.appLogger?.info("agent", "Agent get_state request start", {
-				agentId: id,
-			});
-			const state = await client.request({ type: "get_state" });
-			void this.appLogger?.info("agent", "Agent get_state request completed", {
-				agentId: id,
-				success: state.success,
-			});
+			void this.appLogger?.info("agent", "[perf] get_state start", { agentId: id, t: Date.now() - t3 });
+			console.log("[perf] get_state start", { agentId: id, t: Date.now() - t3 });
+			const state = await statePromise;
+			const t4 = Date.now();
+			void this.appLogger?.info("agent", "[perf] get_state done", { agentId: id, t: t4 - t3 });
+			console.log("[perf] get_state done", { agentId: id, t: t4 - t3 });
 			const data = state.data as
 				| { sessionId?: string; sessionFile?: string; sessionName?: string }
 				| undefined;
@@ -328,13 +358,19 @@ export class AgentManager {
 					? `${project.name} 历史会话`
 					: `${project.name} agent`);
 			tab.status = "idle";
-			// 加载历史消息，最多重试一次（新进程可能需要短暂初始化时间）
-			await this.loadMessages(id)
+			void this.appLogger?.info("agent", "[perf] loadMessages start", { agentId: id, t: Date.now() - t4 });
+			console.log("[perf] loadMessages start", { agentId: id, t: Date.now() - t4 });
+			// 加载历史消息（跳过 get_entries，编辑/删除时按需加载），最多重试一次
+			await this.loadMessages(id, true, messagesPromise)
 				.catch(() =>
 					new Promise<void>((resolve) => setTimeout(resolve, 800))
-						.then(() => this.loadMessages(id)),
+						.then(() => this.loadMessages(id, true)),
 				)
 				.catch(() => undefined);
+			void this.appLogger?.info("agent", "[perf] loadMessages done", { agentId: id, t: Date.now() - t4 });
+			console.log("[perf] loadMessages done", { agentId: id, t: Date.now() - t4 });
+			void this.appLogger?.info("agent", "[perf] total session open", { agentId: id, t: Date.now() - t0 });
+			console.log("[perf] total session open", { agentId: id, t: Date.now() - t0 });
 		} catch (error) {
 			tab.status = "error";
 			const rawMessage = error instanceof Error ? error.message : String(error);
@@ -834,20 +870,19 @@ export class AgentManager {
 		return Math.max(0, Math.min(100, value));
 	}
 
-	private trimHistoryMessages(rawMessages: unknown[], maxMessages = 200) {
-		if (rawMessages.length <= maxMessages) return rawMessages;
-		const cutoff = rawMessages.length - maxMessages;
-		let start = cutoff;
-		for (let index = cutoff; index >= 0; index -= 1) {
-			const message = rawMessages[index] as { role?: unknown } | undefined;
-			if (message?.role === "user") {
-				start = index;
-				break;
+	private trimHistoryMessages(rawMessages: unknown[], maxTurns = 20) {
+		if (rawMessages.length === 0) return rawMessages;
+		// 按对话轮次截断：找到最后 maxTurns 个用户提问，保留对应轮次及之后的全部消息
+		const userIndices: number[] = [];
+		for (let i = rawMessages.length - 1; i >= 0; i--) {
+			const msg = rawMessages[i] as { role?: unknown } | undefined;
+			if (msg?.role === "user") {
+				userIndices.unshift(i);
+				if (userIndices.length >= maxTurns) break;
 			}
 		}
-		// 历史恢复不能直接从固定条数截断：一轮会话里工具消息很多时，
-		// slice(-N) 会丢掉本轮用户提问，导致右侧定位缺失且列表从 AI 消息开始。
-		return rawMessages.slice(start);
+		if (userIndices.length === 0) return rawMessages.slice(-50);
+		return rawMessages.slice(userIndices[0]);
 	}
 
 	async cycleModel(agentId: string) {
@@ -2620,9 +2655,8 @@ export class AgentManager {
 							result: this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result)),
 							isError,
 							detailText,
-							...(originalContent && /write|edit|create|patch/i.test(toolName)
-								? { originalContent }
-								: {}),
+							// 初始加载不传 originalContent（edit 前后的完整文件内容），
+							// 仅在用户打开 diff 时通过 IPC 按需加载，减少 IPC 数据量。
 							...(askCard ? { _askCard: askCard } : {}),
 						},
 					}];

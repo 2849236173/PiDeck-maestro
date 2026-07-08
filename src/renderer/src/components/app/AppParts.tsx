@@ -516,27 +516,32 @@ export function ExtensionWidgetCard(props: {
 	const [expanded, setExpanded] = useState(true);
 	return (
 		<div className="extension-widget-card">
-			<button
-				className="extension-widget-card-trigger"
-				onClick={() => setExpanded((v) => !v)}
-				aria-expanded={expanded}
-			>
-				<ChevronDown
-					size={14}
-					className={`extension-widget-card-chevron${expanded ? " open" : ""}`}
-				/>
-				<span className="extension-widget-card-title">{props.widgetKey}</span>
+			<div className="extension-widget-card-header">
 				<button
+					className="extension-widget-card-trigger"
+					onClick={() => setExpanded((v) => !v)}
+					aria-expanded={expanded}
+				>
+					<ChevronDown
+						size={14}
+						className={`extension-widget-card-chevron${expanded ? " open" : ""}`}
+					/>
+					<span className="extension-widget-card-title">{props.widgetKey}</span>
+				</button>
+				<span
 					className="extension-widget-card-close"
 					onClick={(e) => {
 						e.stopPropagation();
 						props.onClose();
 					}}
 					title={t("common.close")}
+					role="button"
+					tabIndex={0}
+					onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); props.onClose(); } }}
 				>
 					<X size={12} strokeWidth={2} />
-				</button>
-			</button>
+				</span>
+			</div>
 			{expanded && (
 				<div className="extension-widget-card-content">
 					{props.lines.map((line, index) => (
@@ -3667,21 +3672,14 @@ export function SessionFileSummary(props: {
 	onDiffFile?: DiffFileHandler;
 }) {
 	const [expanded, setExpanded] = useState(false);
-	const totalLines = props.files.reduce(
-		(total, file) => total + (file.changedLines ?? 0),
-		0,
-	);
 	const visibleFiles = expanded ? props.files : props.files.slice(0, 4);
 	const hiddenCount = Math.max(0, props.files.length - visibleFiles.length);
 	return (
 		<section className="session-file-summary-list-card" aria-label={t("drawer.modifiedFilesAria")}>
 			<div className="session-file-summary-title">
 				<span>{t("drawer.modifiedFiles")}</span>
-				<small title={t("drawer.changedLinesEstimate")}>
+				<small>
 					{props.files.length} {t("app.files")}
-					{totalLines > 0
-						? ` · ${t("drawer.changedLinesShort", { count: totalLines })}`
-						: ""}
 				</small>
 			</div>
 			<ul className="session-file-summary-list">
@@ -3696,14 +3694,6 @@ export function SessionFileSummary(props: {
 								onClick={() => props.onDiffFile?.(file.path, file.originalContent, file.content)}
 							>
 								<span className="session-file-summary-name">{fileName}</span>
-								<span
-									className="session-file-summary-lines"
-									title={t("drawer.changedLinesEstimate")}
-								>
-									{file.changedLines
-										? `~${t("drawer.changedLines", { count: file.changedLines })}`
-										: t("drawer.changed")}
-								</span>
 							</button>
 						</li>
 					);
