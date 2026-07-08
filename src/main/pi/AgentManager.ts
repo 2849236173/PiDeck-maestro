@@ -66,6 +66,12 @@ export class AgentManager {
 	private readonly stateListeners = new Set<(tabs: AgentTab[]) => void>();
 	/** 开启了 RPC 日志记录的 agent id 集合 */
 	private readonly rpcLoggingAgents = new Set<string>();
+	/** 正在执行压缩操作的 agent，用于区分压缩重启和异常崩溃 */
+	private readonly compactingAgents = new Set<string>();
+	/** 用户主动停止的 agent，用于退出处理器中跳过自动重连 */
+	private readonly userInitiatedStop = new Set<string>();
+	/** 已尝试过自动重连的 agent（防止无限循环），重连成功后清除 */
+	private readonly autoRestartAttempted = new Set<string>();
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, options }>。
@@ -304,7 +310,41 @@ export class AgentManager {
 				this.rpcLogger?.push(logEntry);
 			}
 		});
-		process.on("exit", () => {
+		process.on("exit", (payload: { code: number | null; signal: string | null }) => {
+			// 用户主动停止 → 不自动重连
+			if (this.userInitiatedStop.has(id)) {
+				this.userInitiatedStop.delete(id);
+				tab.status = "closed";
+				this.emitState();
+				return;
+			}
+
+			// 手动压缩期间退出 → compact() 的 catch 块会负责重连
+			if (this.compactingAgents.has(id)) {
+				tab.status = "closed";
+				this.emitState();
+				return;
+			}
+
+			// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
+			if (!this.autoRestartAttempted.has(id) && tab.sessionPath && payload.code === 0) {
+				this.autoRestartAttempted.add(id);
+				tab.status = "starting";
+				this.emitState();
+				this.reattachProcess(id, tab.sessionPath)
+					.then(() => {
+						tab.status = "idle";
+						this.addMessage(id, "system", "会话压缩完成，Agent 已自动重连");
+						this.emitState();
+					})
+					.catch(() => {
+						tab.status = "closed";
+						this.addMessage(id, "error", "Agent 进程意外退出，自动重连失败");
+						this.emitState();
+					});
+				return;
+			}
+
 			tab.status = "closed";
 			this.emitState();
 		});
@@ -690,17 +730,147 @@ export class AgentManager {
 	/**
 	 * 手动触发上下文压缩。pi 会将历史消息摘要化以释放 context 空间，
 	 * 适用于长时间对话后 context 占比过高、但不想丢失关键信息的场景。
+	 *
+	 * 注意：pi 在压缩完成后可能会自动重启进程（尤其早期版本），此时 RPC 请求会因
+	 * "pi exited" 错误而失败。本方法检测到进程退出后会自动重连同一会话并加载消息，
+	 * 因此调用方不应把 RPC 失败等同于压缩失败。
 	 */
 	async compact(agentId: string, prompt?: string) {
 		const runtime = this.requireRuntime(agentId);
 		const trimmedPrompt = prompt?.trim();
-		// /compact 可带自定义摘要提示词；空字符串保持按钮触发时的默认 pi compact 行为。
-		await runtime.process.client.request(
-			trimmedPrompt ? { type: "compact", prompt: trimmedPrompt } : { type: "compact" },
-			120_000,
-		);
-		await this.loadMessages(agentId).catch(() => undefined);
+
+		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
+		this.compactingAgents.add(agentId);
+
+		try {
+			await runtime.process.client.request(
+				trimmedPrompt ? { type: "compact", prompt: trimmedPrompt } : { type: "compact" },
+				120_000,
+			);
+			this.compactingAgents.delete(agentId);
+			// 压缩成功且进程未退出，直接加载消息
+			await this.loadMessages(agentId).catch(() => undefined);
+		} catch (error) {
+			this.compactingAgents.delete(agentId);
+
+			// 如果进程在压缩期间退出（pi 压缩后自动重启进程的行为），
+			// RPC 请求会因连接断开而失败，但压缩实际已完成。
+			// 尝试重连同一会话，不从 compact() 层面抛出错误。
+			if (!runtime.process.isRunning() && runtime.tab.sessionPath) {
+				await this.reattachProcess(agentId, runtime.tab.sessionPath);
+				runtime.tab.status = "idle";
+				await this.loadMessages(agentId).catch(() => undefined);
+				this.addMessage(agentId, "system", "会话压缩完成");
+				this.emitState();
+			} else {
+				// 非退出相关的 RPC 错误，正常抛出
+				throw error;
+			}
+		}
+
 		return this.getRuntimeState(agentId);
+	}
+
+	/**
+	 * 进程退出后重新附加到同一会话：创建新的 PiProcess 并替换旧的进程引用。
+	 * 在压缩导致 pi 进程自动重启后调用，保持同一 agentId 可继续对话。
+	 *
+	 * 与 create() 中创建过程的区别：不重新分配 agentId、不解绑项目，
+	 * 只替换底层的 pi 进程和 RPC 客户端，保留所有消息和 tab 状态。
+	 */
+	private async reattachProcess(agentId: string, sessionPath: string): Promise<void> {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) throw new Error("Agent not found: " + agentId);
+
+		const project = this.getProject(runtime.tab.projectId);
+		if (!project) throw new Error("Project not found");
+
+		void this.appLogger?.info("agent", "Reattaching process", {
+			agentId,
+			sessionPath,
+		});
+
+		const process = new PiProcess(project.path, this.settingsStore.get());
+		const client = process.start(sessionPath);
+
+		// 注册事件监听（与 create() 保持一致）
+		process.on("event", (event) => this.handlePiEvent(agentId, event));
+		process.on("stderr", (text) =>
+			this.emit(ipcChannels.agentsLog, { agentId, text }),
+		);
+		process.on("protocol-error", (line) => {
+			this.emit(ipcChannels.agentsLog, {
+				agentId,
+				text: `Protocol error: ${line}`,
+			});
+		});
+		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
+			const data = entry.data as Record<string, any>;
+			let summary: string;
+			if (entry.direction === "send") {
+				const type = data.type ?? "?";
+				if (type === "prompt")
+					summary = `→ prompt: ${(data.message ?? "").slice(0, 60)}`;
+				else summary = `→ ${type}`;
+			} else {
+				const type = data.type ?? "?";
+				if (type === "response")
+					summary = `← ${data.command ?? "?"} ${data.success ? "✓" : "✗"}${data.error ? ` ${data.error}` : ""}`;
+				else summary = `← ${type}`;
+			}
+			const logEntry = {
+				id: randomUUID(),
+				agentId,
+				direction: entry.direction,
+				summary,
+				data,
+				time: Date.now(),
+			};
+			this.emit(ipcChannels.agentsRpcLog, logEntry);
+		});
+		// 重连后的进程再次退出 → 不再自动重连，防止无限循环
+		process.on("exit", () => {
+			runtime.tab.status = "closed";
+			this.emitState();
+		});
+		process.on("error", (error) => {
+			runtime.tab.status = "error";
+			this.addMessage(agentId, "error", error.message);
+			this.emitState();
+		});
+
+		// 替换旧进程引用（但不修改 agents map 中的 key）
+		runtime.process = process;
+
+		try {
+			const stateResponse = await client.request({ type: "get_state" });
+			const data = stateResponse.data as
+				| { sessionId?: string; sessionFile?: string; sessionName?: string }
+				| undefined;
+			runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
+			runtime.tab.sessionPath = data?.sessionFile ?? sessionPath;
+			runtime.tab.title = data?.sessionName ?? runtime.tab.title;
+			runtime.tab.status = "idle";
+
+			// 重连成功后清除自动重连标记，允许下一次再触发
+			this.autoRestartAttempted.delete(agentId);
+
+			// 如果有旧的 pending abort 标记，清理掉
+			this.abortedDuringAsk.delete(agentId);
+
+			await this.loadMessages(agentId).catch(() => undefined);
+
+			void this.appLogger?.info("agent", "Process reattached successfully", {
+				agentId,
+				elapsedMs: Date.now() - Date.now(),
+			});
+		} catch (error) {
+			void this.appLogger?.error("agent", "Process reattach failed", {
+				agentId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
 	}
 
 	/**
@@ -1560,6 +1730,8 @@ export class AgentManager {
 	async stop(agentId: string) {
 		const runtime = this.agents.get(agentId);
 		if (!runtime) return;
+		// 标记用户主动停止，退出处理器将跳过自动重连
+		this.userInitiatedStop.add(agentId);
 		const process = runtime.process;
 		this.agents.delete(agentId);
 		this.messages.delete(agentId);
@@ -1590,6 +1762,7 @@ export class AgentManager {
 	stopAll() {
 		// 应用退出时统一清理所有 pi 子进程，避免后台 agent 残留占用模型或文件句柄。
 		for (const runtime of this.agents.values()) {
+			this.userInitiatedStop.add(runtime.tab.id);
 			runtime.process.stop();
 		}
 		this.agents.clear();
