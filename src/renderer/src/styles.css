@@ -2901,7 +2901,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 .turn-row-meta {
   display: inline-flex;
@@ -3172,8 +3172,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   min-width: 0;
   overflow-x: clip;
   color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  line-height: 1.62;
+  font-size: 15px;
+  line-height: 1.68;
 }
 
 /* ---------- 诊断卡片：错误 / RPC / 系统状态 ---------- */
@@ -3270,40 +3270,13 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .tool-card {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--color-border-subtle);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--color-bg-muted);
+  background: transparent;
   overflow: hidden;
   transition:
     border-color 0.15s ease,
     background-color 0.15s ease;
-}
-.tool-card.tone-running {
-  border-color: color-mix(
-    in srgb,
-    var(--color-warning) 34%,
-    var(--color-border-subtle)
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-warning) 6%,
-    var(--color-bg-muted)
-  );
-}
-.tool-card.tone-error {
-  border-color: color-mix(
-    in srgb,
-    var(--color-danger) 28%,
-    var(--color-border-subtle)
-  );
-  background: var(--color-danger-soft);
-}
-.tool-card.tone-warning {
-  border-color: color-mix(
-    in srgb,
-    var(--color-warning) 24%,
-    var(--color-border-subtle)
-  );
 }
 .tool-card-trigger {
   display: flex;
@@ -3323,7 +3296,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   transition: background-color 0.12s ease;
 }
 .tool-card-trigger:hover {
-  background: var(--color-bg-hover);
+  background: color-mix(in srgb, var(--color-bg-hover) 50%, var(--color-bg));
 }
 .tool-card-trigger:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -3397,8 +3370,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   transform: rotate(180deg);
 }
 .tool-card-content {
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
+  background: transparent;
   position: relative;
 }
 .tool-card-detail {
@@ -3411,7 +3383,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   font-family: var(--font-family-mono);
   font-size: var(--font-size-caption);
   line-height: 1.6;
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
 }
 .tool-card-copy {
   position: absolute;
@@ -3441,31 +3413,10 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .tool-group-card {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--color-border-subtle);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-bg-muted) 72%, transparent);
+  background: transparent;
   overflow: hidden;
-  transition: border-color 0.15s ease;
-}
-.tool-group-card.tone-running {
-  border-color: color-mix(
-    in srgb,
-    var(--color-warning) 32%,
-    var(--color-border-subtle)
-  );
-  background: color-mix(
-    in srgb,
-    var(--color-warning) 6%,
-    var(--color-bg-muted)
-  );
-}
-.tool-group-card.tone-error {
-  border-color: color-mix(
-    in srgb,
-    var(--color-danger) 26%,
-    var(--color-border-subtle)
-  );
-  background: var(--color-danger-soft);
 }
 .tool-group-card-trigger {
   display: flex;
@@ -3593,9 +3544,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 .thinking-card {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--color-border-subtle);
+  border: 0;
   border-radius: var(--radius-md);
-  /* background: color-mix(in srgb, var(--color-info) 5%, var(--color-bg-muted)); */
   overflow: hidden;
 }
 .thinking-card-trigger {
@@ -3616,7 +3566,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   transition: background-color 0.12s ease;
 }
 .thinking-card-trigger:hover {
-  background: var(--color-bg-hover);
+  background: color-mix(in srgb, var(--color-bg-hover) 50%, var(--color-bg));
 }
 .thinking-card-trigger:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -3665,8 +3615,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 .thinking-card-content {
   padding: var(--space-2) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
+  border-top: 0;
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
   line-height: 1.6;
   white-space: pre-wrap;
@@ -3677,8 +3627,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 /* 流式思考卡片：实时展示推理过程 */
 .thinking-card.streaming {
-  border-top: 1px solid var(--color-accent);
-  border-color: var(--color-accent);
+  border-top: 0;
+  border-color: transparent;
   /* 与工具调用 running 状态一致的背景微色，让用户习惯性感知活跃状态 */
   background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-muted));
   /* 呼吸脉冲：卡片边框在高亮与柔和之间平滑过渡，即使文本静止也能感知活跃 */
@@ -3705,21 +3655,18 @@ body.is-terminal-resizing .terminal-resize-handle::before {
     opacity: 0;
   }
 }
-/* 边框呼吸脉冲：脉冲幅度更大，确保即使余光扫过也能感知动画 */
+/* 呼吸脉冲：幅度更大，确保即使余光扫过也能感知活跃 */
 @keyframes thinking-border-pulse {
   0%,
   100% {
-    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-muted));
     box-shadow: 0 0 10px
       color-mix(in srgb, var(--color-accent) 22%, transparent);
   }
   50% {
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 15%,
-      var(--color-border-subtle)
-    );
-    box-shadow: 0 0 2px color-mix(in srgb, var(--color-accent) 6%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-muted));
+    box-shadow: 0 0 14px
+      color-mix(in srgb, var(--color-accent) 35%, transparent);
   }
 }
 

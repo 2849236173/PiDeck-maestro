@@ -1404,6 +1404,10 @@ export const ToolCard = memo(function ToolCard(props: {
 				<span className="tool-card-name">
 					{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
 				</span>
+				<ChevronDown
+					size={14}
+					className={`tool-card-chevron${expanded ? " open" : ""}`}
+				/>
 				{!isSkillRead && kindLabel && (
 					<span className="tool-card-kind">{kindLabel}</span>
 				)}
@@ -1425,10 +1429,6 @@ export const ToolCard = memo(function ToolCard(props: {
 						{subtitle}
 					</span>
 				) : null}
-				<ChevronDown
-					size={14}
-					className={`tool-card-chevron${expanded ? " open" : ""}`}
-				/>
 			</button>
 			{expanded && (
 				<div className="tool-card-content">
@@ -1742,6 +1742,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 /** 思考过程折叠卡片：默认收起，展开后显示完整推理文本（超长时提供截断展开）。 */
 export const ThinkingBlock = memo(function ThinkingBlock(props: {
 	text: string;
+	startedAt?: number;
 	endedAt?: number;
 	showThinking?: boolean;
 }) {
@@ -1754,6 +1755,12 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 		expanded || !needsTruncate
 			? props.text
 			: `${props.text.slice(0, previewLen)}...`;
+	// 计算思考耗时（毫秒），有 endAt 且有 startAt 时才显示
+	const durationMs =
+		props.endedAt && props.startedAt && props.endedAt > props.startedAt
+			? props.endedAt - props.startedAt
+			: null;
+	const durationText = durationMs != null ? formatDuration(durationMs) : null;
 	return (
 		<section className="thinking-card">
 			<button
@@ -1763,17 +1770,16 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 			>
 				<Brain size={14} />
 				<span>{t("thinking.title")}</span>
+				<ChevronDown
+					size={14}
+					className={`thinking-card-chevron${expanded ? " open" : ""}`}
+				/>
 				{!expanded && props.text && (
 					<span className="thinking-card-subtitle" title={props.text}>
 						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}
 					</span>
 				)}
-				{props.endedAt ? <small>{formatTime(props.endedAt)}</small> : null}
-				<em>{expanded ? t("common.collapse") : t("common.expand")}</em>
-				<ChevronDown
-					size={14}
-					className={`thinking-card-chevron${expanded ? " open" : ""}`}
-				/>
+				{durationText && <small>{durationText}</small>}
 			</button>
 			{expanded && <div className="thinking-card-content">{previewText}</div>}
 		</section>
@@ -2085,6 +2091,7 @@ export const TurnRow = memo(function TurnRow(props: {
 									<ThinkingBlock
 										key={item.id}
 										text={item.text}
+										startedAt={item.startedAt}
 										endedAt={item.endedAt}
 										showThinking={props.showThinking}
 									/>
@@ -2101,6 +2108,7 @@ export const TurnRow = memo(function TurnRow(props: {
 						{props.showThinking && mergedThinking && !hasStandaloneThinking && (
 							<ThinkingBlock
 								text={mergedThinking}
+								startedAt={run.startedAt}
 								endedAt={run.endedAt}
 								showThinking={props.showThinking}
 							/>
