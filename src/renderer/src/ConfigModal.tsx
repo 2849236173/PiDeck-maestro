@@ -660,6 +660,52 @@ function ConfigModalContent(props: ConfigModalProps) {
 		});
 	};
 
+	const handleUpdateModelXhigh = (
+		providerName: string,
+		index: number,
+		value: "" | "xhigh" | "max",
+	) => {
+		const provider = modelsData.providers[providerName];
+		const currentModel = provider?.models[index];
+		if (!provider || !currentModel) return;
+		const models = [...provider.models];
+		const nextThinkingLevelMap = {
+			...(currentModel.thinkingLevelMap ?? {}),
+		};
+		if (value) nextThinkingLevelMap.xhigh = value;
+		else delete nextThinkingLevelMap.xhigh;
+		const nextModel = {
+			...currentModel,
+			// xhigh 只有 reasoning 模型才有意义；打开映射时同步开启，避免保存后 UI 看似配置成功但 pi 仍不展示思考档位。
+			reasoning: value ? true : currentModel.reasoning,
+		};
+		if (Object.keys(nextThinkingLevelMap).length > 0) {
+			nextModel.thinkingLevelMap = nextThinkingLevelMap;
+		} else {
+			delete nextModel.thinkingLevelMap;
+		}
+		models[index] = nextModel;
+
+		const nextProvider = value
+			? {
+				...provider,
+				compat: {
+					supportsDeveloperRole: false,
+					...(provider.compat ?? {}),
+					// xhigh 映射必须最终发送给上游；自动打开可减少用户遗漏 provider 兼容开关导致回退 high。
+					supportsReasoningEffort: true,
+				},
+			}
+			: { ...provider };
+		setModelsData({
+			...modelsData,
+			providers: {
+				...modelsData.providers,
+				[providerName]: { ...nextProvider, models },
+			},
+		});
+	};
+
 	const handleDeleteModel = (providerName: string, index: number) => {
 		const provider = modelsData.providers[providerName];
 		if (!provider) return;
@@ -1151,9 +1197,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onCancelRename={handleCancelRename}
 							onDeleteProvider={handleDeleteProvider}
 							onDuplicateProvider={handleDuplicateProvider}
-						onDeleteProviders={handleDeleteProviders}
+							onDeleteProviders={handleDeleteProviders}
 							onAddModel={handleAddModel}
 							onUpdateModel={handleUpdateModel}
+							onUpdateModelXhigh={handleUpdateModelXhigh}
 							onDeleteModel={handleDeleteModel}
 							onFetchModels={handleFetchModels}
 							onTestProvider={handleTestProvider}

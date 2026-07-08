@@ -203,6 +203,11 @@ export function ModelsTab(props: {
 		field: string,
 		value: unknown,
 	) => void;
+	onUpdateModelXhigh: (
+		providerName: string,
+		index: number,
+		value: "" | "xhigh" | "max",
+	) => void;
 	onDeleteModel: (providerName: string, index: number) => void;
 	onFetchModels: (providerName: string) => void;
 	onTestProvider: (providerName: string) => void;
@@ -912,6 +917,7 @@ export function ModelsTab(props: {
 											<span>{t("config.contextWindow")}</span>
 											<span>{t("config.maxTokens")}</span>
 											<span>{t("config.reasoning")}</span>
+											<span>{t("config.xhigh")}</span>
 											<span>{t("config.inputTypeImage")}</span>
 											<span></span>
 										</div>
@@ -919,8 +925,15 @@ export function ModelsTab(props: {
 											const modelAdvancedFields = Object.keys(m).filter(
 												(key) => !KNOWN_MODEL_FIELDS.has(key),
 											);
+											const xhighValue =
+												m.thinkingLevelMap?.xhigh === "xhigh" || m.thinkingLevelMap?.xhigh === "max"
+													? m.thinkingLevelMap.xhigh
+													: "";
+											const hasOnlyManagedThinkingLevelMap =
+												m.thinkingLevelMap &&
+												Object.keys(m.thinkingLevelMap).every((key) => key === "xhigh");
 											const modelComplexFields = ["api", "baseUrl", "thinkingLevelMap", "cost", "headers", "compat"].filter(
-												(key) => m[key] !== undefined,
+												(key) => m[key] !== undefined && (key !== "thinkingLevelMap" || !hasOnlyManagedThinkingLevelMap),
 											);
 											return (
 											<div
@@ -992,6 +1005,23 @@ export function ModelsTab(props: {
 														}
 													/>
 												</label>
+												<div className="config-xhigh-cell" title={t("config.xhighDesc")}>
+													<ConfigSelect
+														value={xhighValue}
+														options={[
+															{ value: "", label: t("config.xhighOff") },
+															{ value: "xhigh", label: "xhigh" },
+															{ value: "max", label: "max" },
+														]}
+														onChange={(value) =>
+															props.onUpdateModelXhigh(
+																name,
+																i,
+																value as "" | "xhigh" | "max",
+															)
+														}
+													/>
+												</div>
 													<div className="config-input-cell">
 														<label className="config-input-option">
 															<input

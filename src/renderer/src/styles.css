@@ -9119,7 +9119,7 @@ a.config-btn {
   /* 模型 id/name 容易很长，使用 minmax 防止输入框撑破 modal。 */
   grid-template-columns:
     minmax(100px, 1.2fr) minmax(80px, 0.8fr)
-    90px 90px 48px 70px 32px;
+    90px 90px 48px 76px 70px 32px;
   gap: 8px;
   align-items: center;
   padding: 0 10px 6px;
@@ -9133,7 +9133,7 @@ a.config-btn {
   display: grid;
   grid-template-columns:
     minmax(100px, 1.2fr) minmax(80px, 0.8fr)
-    90px 90px 48px 70px 32px;
+    90px 90px 48px 76px 70px 32px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -9216,6 +9216,25 @@ a.config-btn {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   white-space: nowrap;
+}
+
+.config-xhigh-cell {
+  min-width: 0;
+}
+
+.config-xhigh-cell .config-select-trigger {
+  height: 30px;
+  padding: 0 7px;
+  gap: 4px;
+  font-size: var(--font-size-caption);
+}
+
+.config-xhigh-cell .config-combobox-menu {
+  min-width: 92px;
+}
+
+.config-xhigh-cell .config-combobox-menu button {
+  font-size: var(--font-size-caption);
 }
 
 .config-auth-list {
