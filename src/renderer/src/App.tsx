@@ -83,6 +83,7 @@ import {
   ImagePreviewModal,
   LogoMark,
   ModelPicker,
+  PromptTemplatePicker,
   ProjectAvatar,
   ProjectContextMenu,
   PromptSuggestions,
@@ -492,6 +493,10 @@ export function App() {
   >({});
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [promptTemplatePickerOpen, setPromptTemplatePickerOpen] = useState(false);
+  const [promptTemplateList, setPromptTemplateList] = useState<
+    Array<{ name: string; path: string; description: string; content: string }>
+  >([]);
   const [composerModePickerOpen, setComposerModePickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
@@ -3137,6 +3142,46 @@ export function App() {
     setModelPickerOpen(true);
   }
 
+  async function openPromptTemplatePicker() {
+    if (!activeAgentId || isPendingAgentId(activeAgentId)) return;
+    const allTemplates: typeof promptTemplateList = [];
+    try {
+      const globalResult = await api.prompts.list();
+      allTemplates.push(...globalResult.templates);
+    } catch {
+      // 全局列表失败时继续加载项目列表
+    }
+    // 同时加载当前活动项目的项目级提示词
+    const activeProject = activeProjectId
+      ? projects.find((p) => p.id === activeProjectId)
+      : undefined;
+    if (activeProject) {
+      try {
+        const projectResult = await api.prompts.listByProject(activeProject.path);
+        allTemplates.push(...projectResult.templates);
+      } catch {
+        // 项目无 .pi/prompts/ 目录时静默跳过
+      }
+    }
+    setPromptTemplateList(allTemplates);
+    setPromptTemplatePickerOpen(true);
+  }
+
+  function selectPromptTemplate(template: {
+    name: string;
+    path: string;
+    description: string;
+    content: string;
+  }) {
+    // 插入斜线命令形式，pi 会在发送时自动展开，末尾加空格分割后续输入
+    setPrompt((prev) => {
+      const trimmed = prev ? prev.trimEnd() : "";
+      if (!trimmed) return "/" + template.name + " ";
+      return trimmed + " /" + template.name + " ";
+    });
+    setPromptTemplatePickerOpen(false);
+  }
+
   async function selectModel(model: AvailableModel) {
     if (!activeAgentId || isPendingAgentId(activeAgentId)) return;
     const state = await api.agents.setModel(
@@ -5255,9 +5300,9 @@ ${goalTextRef.current}
               state={activeRuntimeState}
               compacting={compacting}
               disabled={isAgentBusy || composerDisabled}
-              onCycleModel={cycleModel}
               onPickModel={openModelPicker}
               onPickThinking={() => setThinkingPickerOpen(true)}
+              onPickPromptTemplate={openPromptTemplatePicker}
               onCompact={() => compactAgent()}
               composerAgentMode={currentComposerAgentMode}
               onOpenComposerModePicker={() => setComposerModePickerOpen(true)}
@@ -5968,6 +6013,13 @@ ${goalTextRef.current}
           onValidateCustomPath={() =>
             validateCustomPiPath({ closeDialogOnSuccess: true })
           }
+        />
+      )}
+      {promptTemplatePickerOpen && (
+        <PromptTemplatePicker
+          templates={promptTemplateList}
+          onClose={() => setPromptTemplatePickerOpen(false)}
+          onPick={selectPromptTemplate}
         />
       )}
       {modelPickerOpen && (

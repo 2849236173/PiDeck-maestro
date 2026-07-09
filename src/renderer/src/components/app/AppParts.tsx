@@ -51,9 +51,11 @@ import {
 	AlertTriangle,
 	Check,
 	ChevronDown,
+	ChevronLeft,
 	ChevronRight,
 	GitBranch,
 	Brain,
+	Eye,
 	FileText,
 	Folder,
 	Globe2,
@@ -466,42 +468,48 @@ export function SessionStatus(props: {
 	state?: AgentRuntimeState;
 	duration?: number;
 }) {
-	if (!props.state) return null;
+	const state = props.state;
+	if (!state) return null;
+	const thinkingLevelLabel = THINKING_LEVELS.find(
+		(level) => level.value === state.thinkingLevel,
+	)?.labelKey;
 	return (
 		<div className="session-status">
 			<span className="model-chip">
-				{props.state.provider ? `${props.state.provider}/` : ""}{props.state.modelName ?? props.state.modelId ?? "model"}
+				{state.provider ? `${state.provider}/` : ""}{state.modelName ?? state.modelId ?? "model"}
 			</span>
-			<span className="think-chip">{t("app.think")}: {props.state.thinkingLevel ?? "-"}</span>
-			{props.state.contextPercent != null && (
+			<span className="think-chip">
+				{t("app.think")}: {thinkingLevelLabel ? t(thinkingLevelLabel) : state.thinkingLevel ?? "-"}
+			</span>
+			{state.contextPercent != null && (
 				<span className="ctx-chip">
 					{t("app.ctx")}:{" "}
-					{props.state.contextPercent?.toFixed?.(1) ??
-						props.state.contextPercent}
-					% / {formatCompact(props.state.contextWindow)}
+					{state.contextPercent?.toFixed?.(1) ??
+						state.contextPercent}
+					% / {formatCompact(state.contextWindow)}
 				</span>
 			)}
-			{props.state.inputTokens != null && (
+			{state.inputTokens != null && (
 				<span className="token-chip token-input">
-					↑ {formatCompact(props.state.inputTokens)}
+					↑ {formatCompact(state.inputTokens)}
 				</span>
 			)}
-			{props.state.outputTokens != null && (
+			{state.outputTokens != null && (
 				<span className="token-chip token-output">
-					↓ {formatCompact(props.state.outputTokens)}
+					↓ {formatCompact(state.outputTokens)}
 				</span>
 			)}
-			{props.state.cacheHitPercent != null && (
+			{state.cacheHitPercent != null && (
 				<span className="cache-chip">
-					{t("app.cacheHit")}: {props.state.cacheHitPercent?.toFixed?.(0) ?? props.state.cacheHitPercent}%
+					{t("app.cacheHit")}: {state.cacheHitPercent?.toFixed?.(0) ?? state.cacheHitPercent}%
 				</span>
 			)}
-			{props.state.cacheTotal != null && (
-				<span className="cache-chip cache-total">{t("app.cache")}: {formatCompact(props.state.cacheTotal)}</span>
+			{state.cacheTotal != null && (
+				<span className="cache-chip cache-total">{t("app.cache")}: {formatCompact(state.cacheTotal)}</span>
 			)}
-			{props.state.cost != null && (
+			{state.cost != null && (
 				<span className="cost-chip" title={t("app.totalCost")}>
-					${props.state.cost.toFixed(3)}
+					${state.cost.toFixed(3)}
 				</span>
 			)}
 		</div>
@@ -558,8 +566,8 @@ export function ComposerToolbar(props: {
 	state?: AgentRuntimeState;
 	compacting: boolean;
 	disabled?: boolean;
-	onCycleModel: () => void;
 	onPickModel: () => void;
+	onPickPromptTemplate: () => void;
 	onPickThinking: () => void;
 	onCompact: () => void;
 	/** 当前发送模式，用于按钮文字和轻高亮 */
@@ -610,8 +618,12 @@ export function ComposerToolbar(props: {
 			<button onClick={props.onPickModel} disabled={props.disabled}>
 				{t("app.model")}: {props.state?.provider ? `${props.state.provider}/` : ""}{props.state?.modelName ?? "-"}
 			</button>
-			<button onClick={props.onCycleModel} disabled={props.disabled}>
-				{t("app.cycleModel")}
+			<button
+				onClick={props.onPickPromptTemplate}
+				disabled={props.disabled}
+				title={t("app.promptTemplatePickerTitle")}
+			>
+				{t("app.promptTemplatePickerTitle")}
 			</button>
 			<button onClick={props.onPickThinking} disabled={props.disabled}>
 				{t("app.think")}: {thinkingDisplay}
@@ -931,6 +943,130 @@ export function ThinkingPicker(props: {
 						);
 					})}
 				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Prompt Template 选择器：列出 ~/.pi/agent/prompts/ 下所有 .md 模板，
+ * 点击后将模板内容插入到 composer 输入框。
+ */
+export function PromptTemplatePicker(props: {
+	templates: Array<{
+		name: string;
+		path: string;
+		description: string;
+		content: string;
+		scope?: "global" | "project";
+	}>;
+	onClose: () => void;
+	onPick: (template: {
+		name: string;
+		path: string;
+		description: string;
+		content: string;
+		scope?: "global" | "project";
+	}) => void;
+}) {
+	type TemplateItem = typeof props.templates[number];
+	const [search, setSearch] = useState("");
+	const [previewTemplate, setPreviewTemplate] = useState<TemplateItem | null>(null);
+	const normalizedSearch = search.trim().toLowerCase();
+	const filtered: TemplateItem[] = normalizedSearch
+		? props.templates.filter(
+				(t: TemplateItem) =>
+					t.name.toLowerCase().includes(normalizedSearch) ||
+					t.description.toLowerCase().includes(normalizedSearch),
+			)
+		: props.templates;
+
+	const templateList = filtered.map((template) => (
+		<div
+			key={template.path}
+			className="picker-palette-item-wrap"
+		>
+			<button
+				className="picker-palette-item"
+				onClick={() => props.onPick(template)}
+			>
+				<FileText size={14} strokeWidth={1.8} aria-hidden="true" />
+				<span className="picker-palette-label">/{template.name}</span>
+				<span className="picker-palette-desc">{template.description}</span>
+			</button>
+			<button
+				className="picker-palette-preview-btn"
+				title={t("common.preview")}
+				onClick={(e) => {
+					e.stopPropagation();
+					setPreviewTemplate(
+						previewTemplate?.path === template.path ? null : template,
+					);
+				}}
+			>
+				<Eye size={14} strokeWidth={1.8} />
+			</button>
+		</div>
+	));
+
+	const emptyState = filtered.length === 0 && (
+		<div className="picker-palette-empty">
+			{search
+				? t("app.promptTemplateSearchEmpty")
+				: t("app.promptTemplateEmpty")}
+		</div>
+	);
+
+	return (
+		<div className="picker-backdrop" onClick={props.onClose}>
+			<div
+				className="picker-palette prompt-template-picker"
+				onClick={(event) => event.stopPropagation()}
+			>
+				<div className="picker-palette-header">
+					{previewTemplate ? (
+						<>
+							<button
+								className="picker-preview-back-btn"
+								onClick={() => setPreviewTemplate(null)}
+								title={t("app.promptTemplateBackToPicker")}
+							>
+								<ChevronLeft size={16} strokeWidth={2.2} />
+							</button>
+							<span>{t("app.promptTemplatePreviewTitle", { name: "/" + previewTemplate.name })}</span>
+						</>
+					) : (
+						<span>{t("app.promptTemplatePickerTitle")}</span>
+					)}
+					<IconButton
+						className="picker-palette-close"
+						label={t("common.close")}
+						onClick={props.onClose}
+					>
+						<X size={16} strokeWidth={2.2} aria-hidden="true" />
+					</IconButton>
+				</div>
+				{!previewTemplate && (
+					<div className="picker-palette-search">
+						<input
+							autoFocus
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							placeholder={t("app.promptTemplateSearchPlaceholder")}
+						/>
+					</div>
+				)}
+				{previewTemplate ? (
+					<div className="picker-preview-inline">
+						<pre className="picker-preview-content">{previewTemplate.content}</pre>
+					</div>
+				) : (
+					<div className="picker-palette-list">
+						{templateList}
+						{emptyState}
+					</div>
+				)}
+				{/* 旧的弹框预览已移除，改为内联显示 */}
 			</div>
 		</div>
 	);
@@ -2157,7 +2293,12 @@ export const TurnRow = memo(function TurnRow(props: {
 							return (
 								<Fragment key={item.message.id}>
 									{props.showThinking && thinking && (
-										<ThinkingBlock text={thinking} showThinking={props.showThinking} />
+										<ThinkingBlock
+											text={thinking}
+											startedAt={run.startedAt}
+											endedAt={run.endedAt}
+											showThinking={props.showThinking}
+										/>
 									)}
 									{editing ? (
 										<div className="turn-row-edit-area" ref={editAreaRef}>

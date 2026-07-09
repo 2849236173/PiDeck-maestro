@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type {
 	PiExtensionSummary,
+	PiPromptTemplateSummary,
 	PiSkillSummary,
 	Project,
 	ProjectResourceListResult,
@@ -10,17 +11,20 @@ import { t } from "../../i18n";
 
 type ProjectResourcesApi = typeof window.piDesktop.projectResources;
 
-type ProjectResourceTab = "skills" | "extensions";
+type ProjectResourceTab = "skills" | "extensions" | "prompts";
 
 type DeleteTarget =
 	| { kind: "skill"; item: PiSkillSummary }
-	| { kind: "extension"; item: PiExtensionSummary };
+	| { kind: "extension"; item: PiExtensionSummary }
+	| { kind: "prompt"; item: PiPromptTemplateSummary };
 
 export function ProjectResourcesModal(props: {
 	project: Project;
 	onClose: () => void;
 }) {
 	const [data, setData] = useState<ProjectResourceListResult>({ skills: [], extensions: [] });
+	const [prompts, setPrompts] = useState<PiPromptTemplateSummary[]>([]);
+	const [promptsLoading, setPromptsLoading] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [createBusy, setCreateBusy] = useState(false);
 	const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -28,6 +32,16 @@ export function ProjectResourcesModal(props: {
 	const [activeTab, setActiveTab] = useState<ProjectResourceTab>("skills");
 	const [newName, setNewName] = useState("");
 	const [newDescription, setNewDescription] = useState("");
+	// 项目 prompt 创建状态
+	const [newPromptName, setNewPromptName] = useState("");
+	const [newPromptDescription, setNewPromptDescription] = useState("");
+	const [creatingPrompt, setCreatingPrompt] = useState(false);
+	// 项目 prompt 编辑器状态
+	const [editingProjectPrompt, setEditingProjectPrompt] = useState<PiPromptTemplateSummary | null>(null);
+	const [editProjectPromptContent, setEditProjectPromptContent] = useState("");
+	const [editProjectPromptLoading, setEditProjectPromptLoading] = useState(false);
+	const [editProjectPromptSaving, setEditProjectPromptSaving] = useState(false);
+	const [editProjectPromptSaved, setEditProjectPromptSaved] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	// 内建编辑器状态
 	const [editingSkill, setEditingSkill] = useState<PiSkillSummary | null>(null);
@@ -51,6 +65,26 @@ export function ProjectResourcesModal(props: {
 		},
 		[props.project.id],
 	);
+
+	/** 加载项目级提示词模板 */
+	const loadPrompts = useCallback(async () => {
+		setPromptsLoading(true);
+		setError(null);
+		try {
+			const result = await window.piDesktop.prompts.listByProject(props.project.path);
+			setPrompts(result.templates);
+		} catch (err) {
+			setPrompts([]);
+		}
+		setPromptsLoading(false);
+	}, [props.project.path]);
+
+	/** 进入提示词 tab 时自动加载 */
+	useEffect(() => {
+		if (activeTab === "prompts") {
+			void loadPrompts();
+		}
+	}, [activeTab, loadPrompts]);
 
 	useEffect(() => {
 		void refresh();
@@ -88,11 +122,17 @@ export function ProjectResourcesModal(props: {
 		try {
 			if (deleteTarget.kind === "skill") {
 				await api.deleteSkill(props.project.id, deleteTarget.item.path);
-			} else if (deleteTarget.item.path) {
+			} else if (deleteTarget.kind === "extension" && deleteTarget.item.path) {
 				await api.deleteExtension(props.project.id, deleteTarget.item.path);
+			} else if (deleteTarget.kind === "prompt") {
+				// 用文件名删除项目级 prompt
+				const fileName = deleteTarget.item.path.split(/[/\\]/).pop();
+				if (fileName) {
+					await window.piDesktop.prompts.deleteFromProject(props.project.path, fileName);
+				}
 			}
 			setDeleteTarget(null);
-			await refresh();
+			await Promise.all([refresh(), loadPrompts()]);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -166,6 +206,67 @@ export function ProjectResourcesModal(props: {
 		}
 	};
 
+	// ── 项目级 prompt 操作 ──
+
+	const canCreatePrompt = newPromptName.trim().length > 0 && newPromptDescription.trim().length > 0;
+
+	const createProjectPrompt = async () => {
+		if (!canCreatePrompt || creatingPrompt) return;
+		setCreatingPrompt(true);
+		setError(null);
+		try {
+			await window.piDesktop.prompts.createInProject(props.project.path, {
+				name: newPromptName.trim(),
+				description: newPromptDescription.trim(),
+			});
+			setNewPromptName("");
+			setNewPromptDescription("");
+			await loadPrompts();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setCreatingPrompt(false);
+		}
+	};
+
+	const openProjectPromptEditor = async (prompt: PiPromptTemplateSummary) => {
+		setEditingProjectPrompt(prompt);
+		setEditProjectPromptContent("");
+		setEditProjectPromptLoading(true);
+		setEditProjectPromptSaved(false);
+		setError(null);
+		try {
+			const content = await window.piDesktop.files.readContent(prompt.path);
+			setEditProjectPromptContent(content);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+			setEditingProjectPrompt(null);
+		} finally {
+			setEditProjectPromptLoading(false);
+		}
+	};
+
+	const saveProjectPromptEditor = async () => {
+		if (!editingProjectPrompt || editProjectPromptSaving) return;
+		setEditProjectPromptSaving(true);
+		setError(null);
+		try {
+			await window.piDesktop.files.writeContent(editingProjectPrompt.path, editProjectPromptContent);
+			setEditProjectPromptSaved(true);
+			window.setTimeout(() => setEditProjectPromptSaved(false), 2000);
+			await loadPrompts();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setEditProjectPromptSaving(false);
+		}
+	};
+
+	const cancelProjectPromptEditor = () => {
+		setEditingProjectPrompt(null);
+		setEditProjectPromptContent("");
+	};
+
 	return (
 		<div className="modal-backdrop project-resources-backdrop" onClick={props.onClose}>
 			<section
@@ -198,6 +299,13 @@ export function ProjectResourcesModal(props: {
 						onClick={() => setActiveTab("extensions")}
 					>
 						{t("projectResources.extensionsTab", { count: data.extensions.length })}
+					</button>
+					<button
+						type="button"
+						className={activeTab === "prompts" ? "active" : ""}
+						onClick={() => setActiveTab("prompts")}
+					>
+						{t("projectResources.promptsTab", { count: prompts.length })}
 					</button>
 					<button type="button" className="project-resources-refresh" onClick={() => void refresh()} disabled={loading}>
 						{loading ? t("common.loading") : t("common.refresh")}
@@ -281,7 +389,7 @@ export function ProjectResourcesModal(props: {
 							</article>
 						))}
 					</div>
-				) : (
+				) : activeTab === "extensions" ? (
 					<div className="project-resources-body">
 						<p className="project-resources-hint">{t("projectResources.extensionsHint")}</p>
 						<ResourceListEmpty loading={loading} empty={data.extensions.length === 0} label={t("projectResources.emptyExtensions")} />
@@ -308,6 +416,70 @@ export function ProjectResourcesModal(props: {
 							</article>
 						))}
 					</div>
+				) : editingProjectPrompt ? (
+					<div className="project-resources-editor-overlay">
+						<div className="project-resources-editor-header">
+							<strong>{editingProjectPrompt.name}.md</strong>
+							<button type="button" onClick={cancelProjectPromptEditor} aria-label={t("common.close")}>
+								<X size={16} />
+							</button>
+						</div>
+						{editProjectPromptLoading ? (
+							<div className="config-empty">{t("common.loading")}</div>
+						) : (
+							<textarea
+								value={editProjectPromptContent}
+								onChange={(event) => { setEditProjectPromptContent(event.target.value); setEditProjectPromptSaved(false); }}
+								spellCheck={false}
+							/>
+						)}
+						<div className="project-resources-editor-footer">
+							{editProjectPromptSaved && <span className="project-resources-editor-saved">{t("projectResources.editorSaved")}</span>}
+							<div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+								<button className="config-btn" onClick={cancelProjectPromptEditor}>{t("common.cancel")}</button>
+								<button className="config-btn primary" onClick={() => void saveProjectPromptEditor()} disabled={editProjectPromptSaving}>
+									{editProjectPromptSaving ? t("common.saving") : t("common.save")}
+								</button>
+							</div>
+						</div>
+					</div>
+				) : (
+					<div className="project-resources-body">
+						<section className="project-skill-create skill-create-card">
+							<strong>{t("projectResources.createPrompt")}</strong>
+							<label className="project-resources-name-field">
+								<span>{t("config.name")}</span>
+								<input value={newPromptName} placeholder="my-project-prompt" onChange={(event) => setNewPromptName(event.target.value)} />
+							</label>
+							<label className="project-resources-desc-field">
+								<span>{t("config.description")}</span>
+								<textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
+							</label>
+							<button className="config-btn primary" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
+								{creatingPrompt ? t("config.creatingSkill") : t("config.addSkill")}
+							</button>
+						</section>
+						<ResourceListEmpty loading={promptsLoading} empty={prompts.length === 0} label={t("projectResources.emptyPrompts")} />
+						{prompts.map((prompt) => (
+							<article key={prompt.path} className="project-resource-card">
+								<div className="project-resource-info">
+									<div className="project-resource-title">
+										<strong>/{prompt.name}</strong>
+									</div>
+									<small>{prompt.description}</small>
+									<small>{prompt.path}</small>
+								</div>
+								<div className="skill-card-actions project-resource-actions">
+									<button className="session-rename-button" onClick={() => void openProjectPromptEditor(prompt)}>
+										{t("common.edit")}
+									</button>
+									<button className="session-rename-button danger" onClick={() => setDeleteTarget({ kind: "prompt", item: prompt })}>
+										{t("common.delete")}
+									</button>
+								</div>
+							</article>
+						))}
+					</div>
 				)}
 			</section>
 
@@ -324,7 +496,9 @@ export function ProjectResourcesModal(props: {
 						<p>
 							{deleteTarget.kind === "skill"
 								? t("projectResources.deleteSkillConfirm", { name: deleteTarget.item.name })
-								: t("projectResources.deleteExtensionConfirm", { name: deleteTarget.item.source })}
+								: deleteTarget.kind === "extension"
+									? t("projectResources.deleteExtensionConfirm", { name: deleteTarget.item.source })
+									: t("projectResources.deletePromptConfirm", { name: deleteTarget.item.name })}
 						</p>
 						<div className="rename-dialog-actions">
 							<button disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>

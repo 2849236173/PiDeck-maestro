@@ -61,6 +61,7 @@ import type {
 	FeishuConnectInput,
 	FeishuTestResult,
 	SendPromptInput,
+	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
 } from "../shared/types";
@@ -80,6 +81,7 @@ import { WorktreeService } from "./git/WorktreeService";
 import { ConfigManager } from "./config/ConfigManager";
 import { TerminalSessionManager } from "./terminal/TerminalSessionManager";
 import { TelemetryService } from "./telemetry/TelemetryService";
+import { PromptManager } from "./prompts/PromptManager";
 import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
@@ -126,6 +128,7 @@ let gitService: GitService;
 let piLocator: PiLocator;
 let agentManager: AgentManager;
 let configManager: ConfigManager;
+let promptManager: PromptManager;
 let skillManager: SkillManager;
 let extensionManager: ExtensionManager;
 let projectResourceManager: ProjectResourceManager;
@@ -1745,6 +1748,42 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.skillsOpenFolder, (_event, path?: string) =>
 		skillManager.openFolder(path),
 	);
+
+	// ── Prompt Templates ──
+	ipcMain.handle(ipcChannels.promptsList, () => promptManager.list());
+	ipcMain.handle(ipcChannels.promptsCreate, async (_event, input: CreatePiPromptTemplateInput) => {
+		const result = await promptManager.create(input);
+		void appLogger.info("prompt", "Prompt template created", { name: input.name });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.promptsDelete, async (_event, filePath: string) => {
+		await promptManager.delete(filePath);
+		void appLogger.info("prompt", "Prompt template deleted", { filePath });
+	});
+	ipcMain.handle(ipcChannels.promptsOpenFolder, () => promptManager.openFolder());
+	ipcMain.handle(ipcChannels.promptsEdit, async (_event, filePath: string, content?: string) => {
+		if (content !== undefined) {
+			await promptManager.writeContent(filePath, content);
+			return;
+		}
+		return promptManager.readContent(filePath);
+	});
+	ipcMain.handle(ipcChannels.promptsListByProject, async (_event, projectPath: string) => {
+		return promptManager.listByProject(projectPath);
+	});
+	ipcMain.handle(ipcChannels.promptsCreateInProject, async (_event, projectPath: string, input: CreatePiPromptTemplateInput) => {
+		const result = await promptManager.createInProject(projectPath, input);
+		void appLogger.info("prompt", "Project prompt template created", {
+			projectPath,
+			name: input.name,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.promptsDeleteInProject, async (_event, projectPath: string, fileName: string) => {
+		await promptManager.deleteFromProject(projectPath, fileName);
+		void appLogger.info("prompt", "Project prompt template deleted", { projectPath, fileName });
+	});
+
 	ipcMain.handle(ipcChannels.extensionsList, () => extensionManager.list());
 	ipcMain.handle(ipcChannels.extensionsUninstall, async (_event, source: string, scope?: "user" | "project" | "unknown") => {
 		const result = await extensionManager.uninstall(source, scope);
@@ -2175,6 +2214,7 @@ app.whenReady().then(async () => {
 	worktreeService = new WorktreeService();
 	piLocator = new PiLocator();
 	configManager = new ConfigManager();
+	promptManager = new PromptManager();
 	skillManager = new SkillManager();
 	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get());
 	projectResourceManager = new ProjectResourceManager((projectId) => projectStore.get(projectId));

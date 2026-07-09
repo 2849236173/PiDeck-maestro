@@ -47,6 +47,9 @@ import type {
 	PiCommand,
 	PiExtensionListResult,
 	PiInstallStatus,
+	PiPromptTemplateListResult,
+	PiPromptTemplateSummary,
+	CreatePiPromptTemplateInput,
 	PiProxyTestResult,
 	PiUpdateCheckResult,
 	PiSkillListResult,
@@ -354,6 +357,24 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.skillsDelete, path) as Promise<void>,
 		openFolder: (path?: string) =>
 			ipcRenderer.invoke(ipcChannels.skillsOpenFolder, path) as Promise<void>,
+	},
+	prompts: {
+		list: () =>
+			ipcRenderer.invoke(ipcChannels.promptsList) as Promise<PiPromptTemplateListResult>,
+		create: (input: CreatePiPromptTemplateInput) =>
+			ipcRenderer.invoke(ipcChannels.promptsCreate, input) as Promise<PiPromptTemplateSummary>,
+		delete: (filePath: string) =>
+			ipcRenderer.invoke(ipcChannels.promptsDelete, filePath) as Promise<void>,
+		openFolder: () =>
+			ipcRenderer.invoke(ipcChannels.promptsOpenFolder) as Promise<void>,
+		edit: (filePath: string, content?: string) =>
+			ipcRenderer.invoke(ipcChannels.promptsEdit, filePath, content) as Promise<string | void>,
+		listByProject: (projectPath: string) =>
+			ipcRenderer.invoke(ipcChannels.promptsListByProject, projectPath) as Promise<PiPromptTemplateListResult>,
+		createInProject: (projectPath: string, input: CreatePiPromptTemplateInput) =>
+			ipcRenderer.invoke(ipcChannels.promptsCreateInProject, projectPath, input) as Promise<PiPromptTemplateSummary>,
+		deleteFromProject: (projectPath: string, fileName: string) =>
+			ipcRenderer.invoke(ipcChannels.promptsDeleteInProject, projectPath, fileName) as Promise<void>,
 	},
 	extensions: {
 		list: () =>

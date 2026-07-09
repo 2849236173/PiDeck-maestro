@@ -5,6 +5,7 @@ import { ModelsTab } from "./config/ModelsTab";
 import { RawTab } from "./config/RawTab";
 import { TrustTab } from "./config/TrustTab";
 import { SettingsTab } from "./config/SettingsTab";
+import { PromptsTab } from "./config/PromptsTab";
 import { SkillsTab } from "./config/SkillsTab";
 import { ExtensionsTab } from "./config/ExtensionsTab";
 import { EditorsTab } from "./config/EditorsTab";
@@ -19,7 +20,7 @@ import type {
 	ModelsFile,
 	SettingsFile,
 } from "./config/configTypes";
-import type { ConfigFileDiagnostic, PiExtensionListResult, PiExtensionSummary, PiSkillListResult, PiSkillLocation, PiSkillSummary } from "../../shared/types";
+import type { ConfigFileDiagnostic, CreatePiPromptTemplateInput, PiExtensionListResult, PiExtensionSummary, PiPromptTemplateListResult, PiPromptTemplateSummary, PiSkillListResult, PiSkillLocation, PiSkillSummary } from "../../shared/types";
 import { getProviderHeaders, KNOWN_PROVIDER_ENDPOINTS } from "./config/providerHeaders";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi })
@@ -174,7 +175,7 @@ export function ConfigModal(props: ConfigModalProps) {
 
 function ConfigModalContent(props: ConfigModalProps) {
 	const { open, onClose, onSaved } = props;
-	const [section, setSection] = useState<"config" | "skills" | "extensions" | "editors" | "im" | "logs">("config");
+	const [section, setSection] = useState<"config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs">("config");
 	const [tab, setTab] = useState<ConfigTab>("models");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -210,6 +211,19 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const [editGlobalContent, setEditGlobalContent] = useState("");
 	const [editGlobalLoading, setEditGlobalLoading] = useState(false);
 	const [editGlobalSaving, setEditGlobalSaving] = useState(false);
+	const [promptsData, setPromptsData] = useState<PiPromptTemplateListResult>({
+		templates: [],
+		globalDir: "",
+	});
+	const [creatingPrompt, setCreatingPrompt] = useState(false);
+	const [newPromptName, setNewPromptName] = useState("");
+	const [newPromptDescription, setNewPromptDescription] = useState("");
+	const [editingPrompt, setEditingPrompt] = useState<PiPromptTemplateSummary | null>(null);
+	const [editPromptContent, setEditPromptContent] = useState("");
+	const [editPromptLoading, setEditPromptLoading] = useState(false);
+	const [editPromptSaving, setEditPromptSaving] = useState(false);
+	/** 用户已删除的内置模板名称（仅当前会话有效） */
+	const [deletedBuiltinNames, setDeletedBuiltinNames] = useState<Set<string>>(new Set());
 	const [uninstallExtensionConfirm, setUninstallExtensionConfirm] = useState<PiExtensionSummary | null>(null);
 	const [rawContent, setRawContent] = useState("");
 	const [rawFileName, setRawFileName] = useState("models.json");
@@ -409,6 +423,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 		if (!open) return;
 		if (section === "skills") {
 			void refreshSkills();
+			return;
+		}
+		if (section === "prompts") {
+			void refreshPrompts();
 			return;
 		}
 		if (section === "extensions") {
@@ -916,6 +934,134 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	};
 
+	/** 刷新 prompt templates 列表 */
+	const refreshPrompts = async () => {
+		const res = await api.prompts.list();
+		// 过滤掉用户已删除的内置模板
+		res.templates = res.templates.filter(
+			(t) => t.userCreated || !deletedBuiltinNames.has(t.name),
+		);
+		setPromptsData(res);
+	};
+
+	/** 创建新 prompt template */
+	const handleCreatePrompt = async () => {
+		setCreatingPrompt(true);
+		setError(null);
+		try {
+			await api.prompts.create({
+				name: newPromptName,
+				description: newPromptDescription,
+			});
+			setNewPromptName("");
+			setNewPromptDescription("");
+			await refreshPrompts();
+			showToast(t("config.promptCreatedToast"));
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setCreatingPrompt(false);
+		}
+	};
+
+	/** 确认删除 prompt template */
+	const confirmDeletePrompt = async (target: PiPromptTemplateSummary) => {
+		setError(null);
+		if (target.userCreated) {
+			try {
+				await api.prompts.delete(target.path);
+				await refreshPrompts();
+				showToast(t("config.promptDeletedToast"));
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		} else {
+			// 内置模板：从显示列表中移除
+			setDeletedBuiltinNames((prev) => new Set(prev).add(target.name));
+			showToast(t("config.promptDeletedToast"));
+		}
+	};
+
+	/** 打开 prompt template 编辑器 */
+	const handleEditPrompt = async (template: PiPromptTemplateSummary) => {
+		// 内置模板直接使用预加载的 content，无需从文件读取
+		if (!template.userCreated) {
+			setEditingPrompt(template);
+			setEditPromptContent(template.content);
+			setEditPromptLoading(false);
+			setError(null);
+			return;
+		}
+		setEditingPrompt(template);
+		setEditPromptContent("");
+		setEditPromptLoading(true);
+		setError(null);
+		try {
+			const content = await api.prompts.edit(template.path);
+			setEditPromptContent(content as string);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+			setEditingPrompt(null);
+		} finally {
+			setEditPromptLoading(false);
+		}
+	};
+
+	/** 取消编辑 prompt template */
+	const handleCancelEditPrompt = () => {
+		setEditingPrompt(null);
+		setEditPromptContent("");
+	};
+
+	/** 保存 prompt template 编辑器内容 */
+	const handleSaveEditPrompt = async () => {
+		if (!editingPrompt || editPromptSaving) return;
+		setEditPromptSaving(true);
+		setError(null);
+		try {
+			if (!editingPrompt.userCreated) {
+				// 内置模板：先创建用户副本，再写入编辑内容
+				const created = await api.prompts.create({
+					name: editingPrompt.name,
+					description: editingPrompt.description,
+				});
+				await api.prompts.edit(created.path, editPromptContent);
+			} else {
+				await api.prompts.edit(editingPrompt.path, editPromptContent);
+			}
+			showToast(t("config.promptSavedToast"));
+			setEditingPrompt(null);
+			await refreshPrompts();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setEditPromptSaving(false);
+		}
+	};
+
+	/** Ctrl+S 快速保存：保存但不关闭弹框、不弹提示 */
+	const handleQuickSavePrompt = async () => {
+		if (!editingPrompt || editPromptSaving) return;
+		setEditPromptSaving(true);
+		setError(null);
+		try {
+			if (!editingPrompt.userCreated) {
+				const created = await api.prompts.create({
+					name: editingPrompt.name,
+					description: editingPrompt.description,
+				});
+				await api.prompts.edit(created.path, editPromptContent);
+			} else {
+				await api.prompts.edit(editingPrompt.path, editPromptContent);
+			}
+			await refreshPrompts();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setEditPromptSaving(false);
+		}
+	};
+
 	/** 从用户选择的 JSON 文件导入配置，成功后刷新当前 tab。 */
 	const refreshSkills = async () => {
 		const res = await api.skills.list();
@@ -1124,6 +1270,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 							>
 								{t("config.nav.skills")}
 							</button>
+							<button
+								className={section === "prompts" ? "active" : ""}
+								onClick={() => setSection("prompts")}
+							>
+								{t("config.nav.prompts")}
+							</button>
 						</div>
 						<div className="config-sidebar-group">
 							<span>{t("config.group.im")}</span>
@@ -1314,6 +1466,31 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onEdit={handleEditGlobalSkill}
 						/>
 						)
+					)}
+
+					{section === "prompts" && !loading && (
+						<PromptsTab
+							data={promptsData}
+							loading={loading}
+							creating={creatingPrompt}
+							newName={newPromptName}
+							newDescription={newPromptDescription}
+							editingTemplate={editingPrompt}
+							editContent={editPromptContent}
+							editLoading={editPromptLoading}
+							editSaving={editPromptSaving}
+							onRefresh={refreshPrompts}
+							onOpenRoot={() => api.prompts.openFolder()}
+							onChangeNewName={setNewPromptName}
+							onChangeNewDescription={setNewPromptDescription}
+							onCreate={handleCreatePrompt}
+							onDelete={confirmDeletePrompt}
+							onEdit={handleEditPrompt}
+							onQuickSave={handleQuickSavePrompt}
+							onCancelEdit={handleCancelEditPrompt}
+							onChangeEditContent={setEditPromptContent}
+							onSaveEdit={handleSaveEditPrompt}
+						/>
 					)}
 
 					{section === "extensions" && (

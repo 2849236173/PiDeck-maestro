@@ -475,6 +475,27 @@ export type CreatePiSkillInput = {
 	locationId: PiSkillLocation["id"];
 };
 
+/** pi Prompt Template，对应 ~/.pi/agent/prompts/<name>.md */
+export type PiPromptTemplateSummary = {
+	name: string;
+	path: string;
+	description: string;
+	content: string;
+	userCreated: boolean;
+	/** 模板范围：global (~/.pi/agent/prompts/) 或 project (.pi/prompts/) */
+	scope?: "global" | "project";
+};
+
+export type PiPromptTemplateListResult = {
+	templates: PiPromptTemplateSummary[];
+	globalDir: string;
+};
+
+export type CreatePiPromptTemplateInput = {
+	name: string;
+	description: string;
+};
+
 export type ProjectResourceListResult = {
 	skills: PiSkillSummary[];
 	extensions: PiExtensionSummary[];

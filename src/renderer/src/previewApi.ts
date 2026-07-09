@@ -445,6 +445,29 @@ export function createPreviewApi(): PiDesktopApi {
 				updated: false,
 			}),
 		},
+		prompts: {
+			list: async () => ({ templates: [], globalDir: "C:/Users/preview/.pi/agent/prompts" }),
+			create: async (input) => ({
+				name: input.name,
+				path: `C:/Users/preview/.pi/agent/prompts/${input.name}.md`,
+				description: input.description,
+				content: `---\ndescription: ${input.description}\n---\n\n${input.description}\n`,
+				userCreated: true,
+			}),
+			delete: async () => undefined,
+			openFolder: async () => undefined,
+			edit: async (_filePath, _content?) => "---\ndescription: Preview\n---\n\nPreview content",
+			listByProject: async () => ({ templates: [], globalDir: "" }),
+			createInProject: async (_projectPath, input) => ({
+				name: input.name,
+				path: `project://${_projectPath}/.pi/prompts/${input.name}.md`,
+				description: input.description,
+				content: `---\ndescription: ${input.description}\n---\n\n${input.description}\n`,
+				userCreated: true,
+				scope: "project",
+			}),
+			deleteFromProject: async () => undefined,
+		},
 		settings: {
 			get: async (): Promise<AppSettings> => ({ ...previewSettings }),
 			update: async (patch): Promise<AppSettings> => {
