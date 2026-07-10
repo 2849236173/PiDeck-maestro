@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, FileEdit, Pencil, Trash2, X } from "lucide-react";
+import { Check, FileEdit, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
 import type {
 	CreatePiPromptTemplateInput,
 	PiPromptTemplateListResult,
@@ -8,6 +8,7 @@ import type {
 import { t } from "../i18n";
 import { CloseIconButton } from "../components/ui/IconButton";
 import { MonacoEditor } from "../components/ui/MonacoEditor";
+import { PromptStoreTab } from "./PromptStoreTab";
 
 export function PromptsTab(props: {
 	data: PiPromptTemplateListResult;
@@ -38,6 +39,9 @@ export function PromptsTab(props: {
 }) {
 	const { data } = props;
 	const canCreate = props.newName.trim().length > 0 && props.newDescription.trim().length > 0;
+
+	// tab 切换："local"（本地模板） 或 "store"（在线商店）
+	const [promptTab, setPromptTab] = useState<"local" | "store">("local");
 
 	// Prompt 重命名状态
 	const [renamingTemplate, setRenamingTemplate] = useState<string | null>(null);
@@ -88,7 +92,30 @@ export function PromptsTab(props: {
 
 	return (
 		<div className="prompts-tab">
-			<div className="config-toolbar">
+			{/* tab 切换栏 */}
+			<div className="prompts-tab-bar">
+				<button
+					className={`prompts-tab-btn ${promptTab === "local" ? "active" : ""}`}
+					onClick={() => setPromptTab("local")}
+				>
+					{t("config.nav.prompts")}
+				</button>
+				<button
+					className={`prompts-tab-btn ${promptTab === "store" ? "active" : ""}`}
+					onClick={() => setPromptTab("store")}
+				>
+					<ShoppingBag size={14} strokeWidth={1.8} />
+					{t("config.promptStoreTab")}
+				</button>
+			</div>
+
+			{promptTab === "store" ? (
+				<PromptStoreTab
+					onImported={props.onRefresh}
+				/>
+			) : (
+				<>
+					<div className="config-toolbar">
 				<div>
 					<span className="config-count">
 						{t("config.count.prompts", { count: data.templates.length })}
@@ -215,8 +242,8 @@ export function PromptsTab(props: {
 				)}
 			</section>
 
-			{/* 编辑弹框 */}
-			{props.editingTemplate && (
+				{/* 编辑弹框 */}
+				{props.editingTemplate && (
 				<div
 					className="prompts-editor-backdrop"
 					onClick={props.onCancelEdit}
@@ -250,6 +277,8 @@ export function PromptsTab(props: {
 						)}
 					</div>
 				</div>
+			)}
+				</>
 			)}
 		</div>
 	);

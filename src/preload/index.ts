@@ -55,6 +55,8 @@ import type {
 	PiSkillListResult,
 	PiSkillSummary,
 	Project,
+	PromptStoreSearchResult,
+	PromptStoreItem,
 	ScratchPadData,
 	SendPromptInput,
 	SessionSummary,
@@ -383,6 +385,14 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.promptsRename, oldName, newName) as Promise<PiPromptTemplateSummary>,
 		renameInProject: (projectPath: string, oldName: string, newName: string) =>
 			ipcRenderer.invoke(ipcChannels.promptsRenameInProject, projectPath, oldName, newName) as Promise<PiPromptTemplateSummary>,
+	},
+	promptStore: {
+		search: (query: string, options?: { limit?: number; type?: string; category?: string; tag?: string }) =>
+			ipcRenderer.invoke(ipcChannels.promptStoreSearch, query, options) as Promise<PromptStoreSearchResult>,
+		get: (id: string) =>
+			ipcRenderer.invoke(ipcChannels.promptStoreGet, id) as Promise<PromptStoreItem>,
+		import: (data: { title: string; description: string; content: string }) =>
+			ipcRenderer.invoke(ipcChannels.promptStoreImport, data) as Promise<PiPromptTemplateSummary>,
 	},
 	extensions: {
 		list: () =>

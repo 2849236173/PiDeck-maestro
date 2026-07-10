@@ -29,7 +29,53 @@ export type PromptTemplateInfo = {
 	path: string;
 	description: string;
 	content: string;
+	argumentHint?: string;
 };
+
+/** 从 frontmatter 中提取 argument-hint 元数据 */
+export function parseArgumentHint(content: string): string | undefined {
+	const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+	if (!match) return undefined;
+	for (const line of match[1].split(/\r?\n/)) {
+		const idx = line.indexOf(":");
+		if (idx === -1) continue;
+		const key = line.slice(0, idx).trim();
+		if (key === "argument-hint") {
+			return line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
+		}
+	}
+	// 兜底：从内容正文中扫描 ${name} / ${name:default} 模式，按首次出现顺序推断提示
+	return scanArgumentHintFromBody(content);
+}
+
+/** 从内容正文中扫描 ${var} / ${var:default} 模式生成 argument-hint 兜底 */
+function scanArgumentHintFromBody(content: string): string | undefined {
+	// 去掉 frontmatter 部分
+	const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+	const seen = new Map<string, { hasDefault: boolean; defaultVal?: string }>();
+	const regex = /\$\{([a-zA-Z_]\w*)(?::(.*?))?\}/g;
+	let m: RegExpExecArray | null;
+	while ((m = regex.exec(body)) !== null) {
+		const name = m[1];
+		if (!seen.has(name)) {
+			seen.set(name, {
+				hasDefault: m[2] !== undefined,
+				defaultVal: m[2],
+			});
+		}
+	}
+	if (seen.size === 0) return undefined;
+	const hints: string[] = [];
+	// 按首次出现顺序输出
+	for (const [name, info] of seen) {
+		if (info.hasDefault) {
+			hints.push(`[${name}:${info.defaultVal}]`);
+		} else {
+			hints.push(`<${name}>`);
+		}
+	}
+	return hints.join(" ");
+}
 
 /** 内置 prompt 模板的中文 description 映射 */
 const BUILTIN_PROMPT_DESC_CN: Record<string, string> = {

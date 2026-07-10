@@ -807,6 +807,7 @@ export function PromptTemplatePicker(props: {
 		description: string;
 		content: string;
 		scope?: "global" | "project";
+		argumentHint?: string;
 	}>;
 	onClose: () => void;
 	onPick: (template: {
@@ -815,6 +816,7 @@ export function PromptTemplatePicker(props: {
 		description: string;
 		content: string;
 		scope?: "global" | "project";
+		argumentHint?: string;
 	}) => void;
 }) {
 	type TemplateItem = typeof props.templates[number];
@@ -840,6 +842,9 @@ export function PromptTemplatePicker(props: {
 			>
 				<FileText size={14} strokeWidth={1.8} aria-hidden="true" />
 				<span className="picker-palette-label">/{template.name}</span>
+				{template.argumentHint && (
+					<code className="picker-palette-arg-hint">{template.argumentHint}</code>
+				)}
 				<span className="picker-palette-desc">{template.description}</span>
 			</button>
 			<button

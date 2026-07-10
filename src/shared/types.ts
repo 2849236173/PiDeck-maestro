@@ -496,6 +496,56 @@ export type CreatePiPromptTemplateInput = {
 	description: string;
 };
 
+// ── Prompt Store (prompts.chat) ─────────────────────────────────────────
+
+/** prompts.chat API 返回的原始 prompt 条目（完整字段） */
+export interface PromptStoreRawItem {
+	id: string;
+	title: string;
+	slug: string;
+	description: string;
+	content: string;
+	type: string;
+	author: { id: string; name: string; username: string; avatar?: string; verified?: boolean };
+	category: { id: string; name: string; slug: string } | null;
+	tags: Array<{ promptId: string; tagId: string; tag: { id: string; name: string; slug: string; color?: string } }>;
+	voteCount: number;
+	viewCount: number;
+	createdAt: string;
+}
+
+/** UI 消费的扁平化 prompt 条目 */
+export interface PromptStoreItem {
+	id: string;
+	title: string;
+	description: string;
+	content: string;
+	type: string;
+	author: string;
+	category: string;
+	tags: string[];
+	votes: number;
+	createdAt: string;
+}
+
+/** prompts.chat REST API 搜索响应（/api/prompts?q=...） */
+export interface PromptStoreSearchResponse {
+	prompts: PromptStoreRawItem[];
+	total: number;
+	page: number;
+	perPage: number;
+	totalPages: number;
+}
+
+/** IPC 返回给渲染进程的搜索结果 */
+export interface PromptStoreSearchResult {
+	query: string;
+	count: number;
+	prompts: PromptStoreItem[];
+}
+
+export type PromptStoreSearchType = "TEXT" | "STRUCTURED" | "IMAGE" | "VIDEO" | "AUDIO";
+
 export type ProjectResourceListResult = {
 	skills: PiSkillSummary[];
 	extensions: PiExtensionSummary[];

@@ -509,6 +509,17 @@ export function createPreviewApi(): PiDesktopApi {
 				scope: "project",
 			}),
 		},
+		promptStore: {
+			search: async (_query, _opts) => ({ query: _query ?? "", count: 0, prompts: [] }),
+			get: async (_id) => ({ id: _id, title: "", description: "", content: "", type: "TEXT", author: "", category: "", tags: [], votes: 0, createdAt: "" }),
+			import: async (data) => ({
+				name: data.title.toLowerCase().replace(/[^\w-]+/g, "-"),
+				path: `C:/Users/preview/.pi/agent/prompts/${data.title.toLowerCase().replace(/[^\w-]+/g, "-")}.md`,
+				description: data.description,
+				content: data.content,
+				userCreated: true,
+			}),
+		},
 		settings: {
 			get: async (): Promise<AppSettings> => ({ ...previewSettings }),
 			update: async (patch): Promise<AppSettings> => {
