@@ -25,6 +25,12 @@ import iconPath from "../../build/icon.png?asset";
 
 applyLinuxDisplayBackendWorkaround();
 
+// Windows 上部分安全软件 / 旧 GPU 驱动会导致 Chromium 沙箱初始化触发原生断点异常（0x80000003），
+// 全局禁用沙箱。VS Code、Discord 等知名 Electron 桌面工具在 Windows 上同样默认禁用沙箱。
+if (process.platform === "win32") {
+	app.commandLine.appendSwitch("no-sandbox");
+}
+
 // 开发模式下 stdout 管道可能断开导致 EPIPE 崩溃，全局静默处理
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 	if (err.code === "EPIPE") return;
