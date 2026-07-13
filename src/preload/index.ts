@@ -798,6 +798,15 @@ const api = {
 		sessionBotSet: (agentId: string, botId: string | null) =>
 			ipcRenderer.invoke(ipcChannels.feishuSessionBotSet, agentId, botId) as Promise<void>,
 	},
+
+	// ===== 内置浏览器 =====
+	browser: {
+		/** 在系统默认浏览器中打开外部链接。
+		 *  用于 webview 不支持或需要另开浏览器查看的场景。 */
+		openExternal: (url: string) =>
+			ipcRenderer.invoke(ipcChannels.browserOpenExternal, url) as Promise<void>,
+	},
+
 	scratchPad: {
 		list: () =>
 			ipcRenderer.invoke(ipcChannels.scratchPadList) as Promise<DraftMeta[]>,

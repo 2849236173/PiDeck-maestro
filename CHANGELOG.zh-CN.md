@@ -4,6 +4,105 @@
 
 这里记录 PiDeck 各版本的重要变化。
 
+## v0.6.5 - 2026-07-13
+
+### 🚀 新功能
+
+- **Prompt 模板系统（大块）**
+  - `PromptManager` 完整 CRUD 和 IPC 桥，管理 `~/.pi/agent/prompts/` 模板
+  - `PromptsTab` 配置页（Monaco 编辑器创建/编辑/预览/删除）
+  - 输入框 `/` picker 选择模板，`$N` 占位符自动提示
+  - 项目级 prompt（ProjectResourcesModal 内创建/编辑/删除）
+  - 内置模板：review、test、fix、refactor、doc、explain、commit、pi-system、skill-discipline
+  - 发送时剥离 frontmatter，附带 `description` 元数据
+  - prompt/skill 名称支持 Unicode（中文、日文等）
+- **Prompt/Skill 商店集成**
+  - `prompts.chat` 商店搜索/预览/导入，变量提示语法自动转换
+  - 集成 Yao Open Prompts：121 个中文 Prompt，覆盖 9 个分类，支持分类筛选/搜索/预览
+  - 新增 Skill Store 标签页
+- **Git Worktree 工作区管理**
+  - `WorktreeService`：检测 git worktree，IPC 创建和删除
+  - 分支列表 + 创建对话框 + 删除按钮，按 worktree 分组展示会话
+  - 主工作区 header 点击加载父项目会话
+  - 启动时自动刷新 worktree
+- **消息多选 & 分享**
+  - 复选框多选模式，浮动操作栏支持文本/markdown/图片复制
+  - 图片复制走 `toBlob()` 修复 CSP 问题
+  - 复制成功脉冲动画 + toast 反馈
+- **内置浏览器预览**
+  - 右侧抽屉新增浏览器面板，支持多标签、地址栏、刷新/主页/前进/后退
+  - 支持全屏模式和 PC/手机/平板视口预设，便于不离开 PiDeck 快速查看网页
+  - 不支持的外部协议自动回退到系统默认浏览器打开
+- **会话管理器弹框**
+  - 项目右键菜单打开，列表展示全部会话，支持多选删除
+  - 每条会话可重命名、导出、删除，来源筛选（Pi/Codex/Claude/OpenCode）
+  - 统一 1300×850 弹框尺寸 + 背板点击关闭
+- **外部编辑器集成增强**
+  - 项目右键菜单新增「打开方式」→ 选择编辑器直接打开项目目录
+  - 编辑器弹窗定位改为 left/top + 视口夹紧，支持左侧项目栏触发
+- **Prompt 配置增强**
+  - 模板选择器显示 description + 变量提示，选择更直观
+  - 模板展开用 `\n\n` 分隔命令与用户输入
+  - 会话文件摘要从聊天区移到输入框上方（可折叠）
+  - 全局和项目级 prompt 重命名支持
+- **模型配置**
+  - 新增 `xhigh` 推理级别
+
+### ✨ 界面优化
+
+- **抽取公共 MonacoEditor 组件**：CSP 兼容本地 worker，暗色主题统一，ConfigModal/ProjectResourcesModal/PromptsTab 共用
+- **思考卡片视觉刷新**：去掉边框、显示耗时、箭头放标题后、hover 浅色
+- **工具卡片**：去掉边框和背景色，与思考卡片风格一致，详情用三级文本色
+- **回答字号**：提升至 15px，行高 1.68
+- **Turn row 间距**：块间间距从 8px 增大到 12px
+- **Extension Widget**：重新设计为可折叠卡片 + 关闭（X）按钮
+- **统一弹框尺寸**：全屏弹框统一 1300×850 + `min(vw,vh) - 48px` + 背板点击关闭
+- **统一图标按钮**：SkillsTab/ExtensionsTab/ProjectResourcesModal 文字按钮 → lucide 图标按钮，hover 显示标题
+  - 启用/禁用切换：ToggleRight(绿色高亮)/ToggleLeft(默认)
+- **模型选择 UI 精简**：288 行 → 124 行
+- **Enter 换行**：浏览器原生处理，不再手动插入 `<br>`
+- **中文 prompt 名称**：chip 正则支持 `\p{L}` Unicode，移除 `[a-zA-Z]` 限制
+
+### 🔧 性能优化
+
+- **会话打开优化**：`get_state` + `get_messages` 并行发起
+- **loadMessages**：`get_messages` + `get_entries` 通过 Promise.all 并行
+- **初始会话加载**：跳过 `get_entries`（延迟到编辑/删除时）
+- **IPC 传输裁剪**：剥离 tool ChatMessage meta 中的 `originalContent`
+- **历史消息计数**：按对话轮次（20 轮）而非原始消息数
+- **移除 `repairAssistantUsage`**：导入器已补齐，无需每次打开检查
+- **loadMessages 重试**：仅在失败时重试，不再无条件二次调用
+- **清理全部 `[perf]` 调试日志和未使用的计时代码**
+
+### 🐛 Bug 修复
+
+- **Windows 启动崩溃修复**：全局禁用 Chromium 沙箱（`--no-sandbox`），解决 `0x80000003` 断点异常
+- **pi 自动压缩后进程重启处理**：
+  - 新增 `compactingAgents`/`userInitiatedStop`/`autoRestartAttempted` 跟踪集合
+  - 进程退出处理器三层判断：用户停止 / 压缩中 / 干净退出自动重连
+  - `reattachProcess()` 保留 agentId + 消息，替换 PiProcess + RPC 客户端
+  - 手动压缩 RPC 失败后自动 `reattachProcess()`（压缩已写到会话文件）
+  - Stop/stopAll 标记用户主动停止，跳过自动重连
+- **onCompact 事件污染**：MouseEvent 传入 IPC 导致结构化克隆失败，改为 `() => compactAgent()`
+- **Extension RPC 生命周期**：
+  - 扩展命令在会话输出后清空（而非之前）
+  - 非对话框 UI 请求渲染为卡片，不弹出气泡
+  - 扩展 UI 请求生命周期：agent_end 时清空 pending
+- **消息渲染修复**：
+  - TurnRow 按 `run.items` 原始时序渲染，恢复思考/工具/回答交错显示
+  - `showThinking` 动态从 pi agent 读取，切换 agent 时生效
+  - 兼容 Anthropic-compatible 服务把同一段回答拆成多个 `content[].text` 的输出，拼接时不再额外插入换行，修复回答呈“竖排”显示
+  - `<button>` 嵌套修复：ExtensionWidgetCard 关闭用 `<span role=button>`
+- **Worktree**：细化项目处理和 worktree 下会话加载
+- **分享和 Widget UI**：视觉优化和布局修正
+- **Prompt frontmatter**：`description` 不再重复写入正文
+- **内置 prompt 描述翻译**：根据语言自动切换中/英文
+
+### 🛠 重构
+
+- 将 AppParts.tsx 中非组件导出抽取到 AppUtils.ts（修复 Vite Fast Refresh 警告）
+- RPC 扩展命令空闲检查逻辑明确化
+
 ## v0.6.4 - 2026-07-05
 
 ### 🚀 新功能

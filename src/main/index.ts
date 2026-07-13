@@ -621,6 +621,7 @@ async function createWindow() {
 			sandbox: false,
 			contextIsolation: true,
 			nodeIntegration: false,
+			webviewTag: true,
 		},
 	});
 	const createdWindow = mainWindow;
@@ -1230,6 +1231,11 @@ function registerIpc() {
 		const error = await shell.openPath(path);
 		// Electron 通过返回字符串报告打开失败；显式抛出后前端才能提示路径不存在或系统无法打开。
 		if (error) throw new Error(error);
+	});
+
+	ipcMain.handle(ipcChannels.browserOpenExternal, async (_event, url: string) => {
+		// shell.openExternal 使用系统默认浏览器打开链接，可控且安全。
+		await shell.openExternal(url);
 	});
 
 	ipcMain.handle(ipcChannels.filesReadContent, async (_event, path: string) => {

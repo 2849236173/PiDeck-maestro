@@ -768,6 +768,9 @@ export function createPreviewApi(): PiDesktopApi {
 			sessionBotGet: async () => null,
 			sessionBotSet: async () => {},
 		},
+		browser: {
+			openExternal: async () => {},
+		},
 		scratchPad: {
 			list: async () => [],
 			create: async () => ({ id: "", name: "", path: "", createdAt: 0, updatedAt: 0 }),

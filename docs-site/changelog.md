@@ -5,6 +5,23 @@
 - [中文 CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md)
 - [English CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.md)
 
+## v0.6.5
+
+发布时间：2026-07-13
+
+- 🚀 **Prompt 模板系统**：全新模板管理 + 内置模板 + `/` picker 快速插入
+- 🚀 **Prompt/Skill 商店**：集成 prompts.chat 和 Yao Open Prompts（121 个中文 Prompt）
+- 🚀 **Git Worktree 工作区**：git worktree 创建/删除，会话按分支分组
+- 🚀 **消息多选 & 分享**：多选转发，文字/图片复制
+- 🚀 **内置浏览器预览**：右侧抽屉浏览网页，多标签、全屏和移动端视口
+- 🚀 **会话管理器弹框**：多选删除、重命名、导出、来源筛选
+- 🚀 **外部编辑器集成**：项目右键「打开方式」直接选择编辑器
+- ✨ 公共 MonacoEditor 组件、统一图标按钮、统一弹框 1300×850
+- 🐛 Windows 启动崩溃修复（--no-sandbox 禁用沙箱，0x80000003）
+- 🐛 pi 压缩后进程重启断连修复 + Extension RPC 生命周期修复
+- 🐛 兼容分片 `content[].text` 输出，修复部分模型回答被额外换行成“竖排”
+- 🔧 会话打开性能优化、IPC 传输裁剪、清理调试日志
+
 ## v0.6.4
 
 发布时间：2026-07-05

@@ -108,7 +108,7 @@ import { parseRichInputChips, type RichInputChip } from "./RichInput";
 /** 复用 petdex 标准网格规格，在主设置面板里为宠物选择器渲染单格动画预览 */
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
-export type DrawerPanel = "files" | "sessions";
+export type DrawerPanel = "files" | "sessions" | "browser";
 
 export type SessionModifiedFile = {
 	path: string;
@@ -365,18 +365,49 @@ export function SessionStatus(props: {
 }
 
 /** 单个 extension widget 卡片：可折叠标题栏 + 内容行，支持手动关闭 */
+// widgetKey 由扩展定义且跨重启稳定,可按 widgetKey 持久化折叠状态。
+const EXTENSION_WIDGET_COLLAPSED_KEY_PREFIX =
+	"pid:extension-widget-collapsed:";
+
 export function ExtensionWidgetCard(props: {
 	widgetKey: string;
 	lines: string[];
 	onClose: () => void;
+	/** 会话唯一标识，用于避免 Todo 等同名 widget 在不同 agent 间共享折叠状态。 */
+	sessionIdOrPath?: string;
 }) {
-	const [expanded, setExpanded] = useState(true);
+	const storageKey = props.sessionIdOrPath
+		? `${EXTENSION_WIDGET_COLLAPSED_KEY_PREFIX}${props.sessionIdOrPath}:${props.widgetKey}`
+		: `${EXTENSION_WIDGET_COLLAPSED_KEY_PREFIX}${props.widgetKey}`;
+	const [expanded, setExpanded] = useState(() => {
+		if (typeof window === "undefined") return true;
+		const stored = localStorage.getItem(storageKey);
+		return stored !== null ? stored === "true" : true;
+	});
+	const prevStorageKeyRef = useRef(storageKey);
+
+	// 切换 agent/session 时只读取对应 key，不把上一 agent 的状态写到新 key。
+	useEffect(() => {
+		if (prevStorageKeyRef.current === storageKey) return;
+		prevStorageKeyRef.current = storageKey;
+		const stored = localStorage.getItem(storageKey);
+		setExpanded(stored !== null ? stored === "true" : true);
+	}, [storageKey]);
+
+	const handleToggleExpanded = useCallback(() => {
+		setExpanded((prev) => {
+			const next = !prev;
+			localStorage.setItem(storageKey, String(next));
+			return next;
+		});
+	}, [storageKey]);
+
 	return (
 		<div className="extension-widget-card">
 			<div className="extension-widget-card-header">
 				<button
 					className="extension-widget-card-trigger"
-					onClick={() => setExpanded((v) => !v)}
+					onClick={handleToggleExpanded}
 					aria-expanded={expanded}
 				>
 					<ChevronDown
@@ -3257,6 +3288,7 @@ export function ConversationOutline(props: {
 	terminalAction?: EntryAction;
 	filesAction?: EntryAction;
 	editorsAction?: EntryAction & { anchorRef?: React.RefObject<HTMLButtonElement | null> };
+	browserAction?: EntryAction;
 }) {
 	const [expanded, setExpanded] = useState(false);
 	const [dragging, setDragging] = useState(false);
@@ -3399,6 +3431,17 @@ export function ConversationOutline(props: {
 					{props.editorsAction.icon}
 				</button>
 			)}
+			{props.browserAction && (
+				<button
+					type="button"
+					className={`browser-entry${props.browserAction.active ? " active" : ""}`}
+					title={props.browserAction.label}
+					aria-label={props.browserAction.label}
+					onClick={props.browserAction.onClick}
+				>
+					{props.browserAction.icon}
+				</button>
+			)}
 		</div>
 	);
 }
@@ -3513,6 +3556,7 @@ export function DrawerContent(props: {
 }
 
 const MODIFIED_FILES_PREVIEW_LIMIT = 5;
+const MODIFIED_FILES_EXPANDED_STORAGE_KEY = "pid:modified-files-expanded";
 
 function FilesPanel(props: {
 	files: FileTreeNode[];
@@ -3526,7 +3570,17 @@ function FilesPanel(props: {
 	onOpenFile?: (path: string) => void;
 	onViewFile?: (path: string) => void;
 }) {
-	const [modifiedFilesExpanded, setModifiedFilesExpanded] = useState(false);
+	const [modifiedFilesExpanded, setModifiedFilesExpanded] = useState(() => {
+		if (typeof window === "undefined") return false;
+		return localStorage.getItem(MODIFIED_FILES_EXPANDED_STORAGE_KEY) === "true";
+	});
+	const handleToggleModifiedFiles = useCallback(() => {
+		setModifiedFilesExpanded((current) => {
+			const next = !current;
+			localStorage.setItem(MODIFIED_FILES_EXPANDED_STORAGE_KEY, String(next));
+			return next;
+		});
+	}, []);
 	// 后端按修改时间升序传入；抽屉顶部优先展示最新文件，避免文件多时用户看不到刚改的内容。
 	const latestModifiedFiles = [...props.modifiedFiles].reverse();
 	const visibleModifiedFiles = modifiedFilesExpanded
@@ -3598,7 +3652,7 @@ function FilesPanel(props: {
 						<button
 							className="modified-files-toggle"
 							type="button"
-							onClick={() => setModifiedFilesExpanded((current) => !current)}
+							onClick={handleToggleModifiedFiles}
 						>
 							{modifiedFilesExpanded
 								? t("common.collapse")
@@ -3623,13 +3677,80 @@ function FilesPanel(props: {
 	);
 }
 
+const SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX =
+	"pid:session-file-summary-collapsed:";
+const SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX =
+	"pid:session-file-summary-file-list-expanded:";
+
+/** 读取指定 session 的折叠状态(无存储返回默认值) */
+function loadCollapsed(sessionKey: string | null): boolean {
+	if (!sessionKey || typeof window === "undefined") return true;
+	const stored = localStorage.getItem(
+		SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX + sessionKey,
+	);
+	return stored !== null ? stored === "true" : true;
+}
+
+function loadFileListExpanded(sessionKey: string | null): boolean {
+	if (!sessionKey || typeof window === "undefined") return false;
+	const stored = localStorage.getItem(
+		SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX + sessionKey,
+	);
+	return stored !== null ? stored === "true" : false;
+}
+
 export function SessionFileSummary(props: {
 	files: SessionModifiedFile[];
 	onOpenFile?: (path: string) => void;
 	onDiffFile?: DiffFileHandler;
+	/** sessionIdOrPath: 会话唯一标识(如 sessionPath),用于按 agent/session 隔离折叠状态。
+	 *  组件卸载后再次挂载相同标识时,恢复之前保存的折叠偏好。 */
+	sessionIdOrPath?: string;
 }) {
-	const [collapsed, setCollapsed] = useState(true);
-	const [fileListExpanded, setFileListExpanded] = useState(false);
+	const [collapsed, setCollapsed] = useState(() =>
+		loadCollapsed(props.sessionIdOrPath ?? null),
+	);
+	const [fileListExpanded, setFileListExpanded] = useState(() =>
+		loadFileListExpanded(props.sessionIdOrPath ?? null),
+	);
+	const prevSessionRef = useRef(props.sessionIdOrPath);
+
+	// 当 sessionIdOrPath 变化时重新从 localStorage 读取
+	useEffect(() => {
+		if (prevSessionRef.current === props.sessionIdOrPath) return;
+		prevSessionRef.current = props.sessionIdOrPath;
+		setCollapsed(loadCollapsed(props.sessionIdOrPath ?? null));
+		setFileListExpanded(loadFileListExpanded(props.sessionIdOrPath ?? null));
+	}, [props.sessionIdOrPath]);
+
+	// 仅在用户主动点击时写 localStorage,不在 sessionIdOrPath 切换时误写
+	const handleToggleCollapsed = useCallback(() => {
+		setCollapsed((prev) => {
+			const next = !prev;
+			if (props.sessionIdOrPath) {
+				localStorage.setItem(
+					SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX + props.sessionIdOrPath,
+					String(next),
+				);
+			}
+			return next;
+		});
+	}, [props.sessionIdOrPath]);
+
+	const handleToggleFileList = useCallback(() => {
+		setFileListExpanded((prev) => {
+			const next = !prev;
+			if (props.sessionIdOrPath) {
+				localStorage.setItem(
+					SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX +
+						props.sessionIdOrPath,
+					String(next),
+				);
+			}
+			return next;
+		});
+	}, [props.sessionIdOrPath]);
+
 	const visibleFiles = fileListExpanded ? props.files : props.files.slice(0, 4);
 	const hiddenCount = Math.max(0, props.files.length - visibleFiles.length);
 
@@ -3641,7 +3762,7 @@ export function SessionFileSummary(props: {
 			<button
 				className="session-file-summary-header"
 				type="button"
-				onClick={() => setCollapsed((c) => !c)}
+				onClick={handleToggleCollapsed}
 				aria-expanded={!collapsed}
 			>
 				<ChevronDown
@@ -3676,7 +3797,7 @@ export function SessionFileSummary(props: {
 						<button
 							className="session-file-summary-toggle"
 							type="button"
-							onClick={() => setFileListExpanded((current) => !current)}
+							onClick={handleToggleFileList}
 						>
 							{fileListExpanded ? t("common.collapse") : t("drawer.moreFiles", { count: hiddenCount })}
 						</button>

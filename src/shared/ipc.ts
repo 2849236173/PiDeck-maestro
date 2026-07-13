@@ -259,4 +259,7 @@ export const ipcChannels = {
 	// ── 调试工具 ──
 	/** 设置面板 → 主进程：发送测试通知（调试弹窗样式） */
 	petTestNotify: "pet:test-notify",
+
+	// ===== 内置浏览器 =====
+	browserOpenExternal: "browser:open-external",
 } as const;

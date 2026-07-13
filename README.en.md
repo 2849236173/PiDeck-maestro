@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.4-green)
+![Version](https://img.shields.io/badge/version-0.6.5-green)
 
 `PiDeck` is **not** a fork of pi. It is a lightweight Electron shell that orchestrates multiple `pi --mode rpc` processes, providing a native desktop UI for projects, sessions, conversations, configuration, and tool orchestration — all powered by pi's native agent capabilities.
 
@@ -16,27 +16,24 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.6.4** (2026-07-05)
+> **Latest: v0.6.5** (2026-07-13)
 
-### v0.6.4 Updates
-- 🚀 **Plan Mode**: New mode picker in composer — agent generates a plan, then
-  executes step by step with confirmation
-- 🚀 **ask_question Enhanced**: Batch questions, structured options, persisted
-  results, polished cards
-- 🚀 **Message Edit/Delete**: Copy, edit, delete AI responses and user messages
-- 🚀 **ScratchPad Overlay**: Brand new scratch pad with preview and animation
-- 🚀 **pi-deck-todo Extension**: Built-in todo list extension
-- 🚀 **Content Width Restriction**: Draggable width slider, unlimited by default
-- 🚀 **Thinking Block Rework**: Card-based thinking, in-place alternation,
-  default expanded, status indicator
-- 🚀 **Extension Management**: Disable/enable built-in extensions, project-level
-  skill management
-- 🚀 **Trust Confirmation**: Desktop-intercepted trust, open untrusted projects
-- ✨ Thinking card breathing animation, web search card subtitle, composer
-  height optimization
-- ✨ Terminal/drawer smooth animation, unified chat background, tool card fixes
-- 🐛 Dark mode white backgrounds, RichInput newline loss, plan mode deadlock
-- 🐛 Linux Wayland fixes, Feishu fixes, message rendering fixes
+### v0.6.5 Updates
+- 🚀 **Prompt Templates System**: Full template management, built-in templates,
+  `/` picker with variable hints
+- 🚀 **Prompt/Skill Store**: Search, preview, import from prompts.chat
+  and Yao Open Prompts (121 Chinese prompts)
+- 🚀 **Git Worktree Workspace**: Branch management, session grouping by worktree
+- 🚀 **Multi-Select Messages**: Select, share, copy messages in batch
+- 🚀 **Built-in Browser Preview**: Browse in the right drawer with tabs, fullscreen, and mobile viewport presets
+- 🚀 **Session Manager**: Modal with multi-select delete, source filter
+- 🚀 **External Editor Integration**: Right-click project → "Open with" → pick editor
+- 🚀 **xhigh reasoning level** support
+- ✨ Common MonacoEditor component, unified icon buttons, unified modal sizing
+- 🐛 Windows startup crash fix (0x80000003)
+- 🐛 Pi compaction restart disconnect fix, Extension RPC lifecycle fix
+- 🐛 Interleaved thinking/tool/answer rendering, fragmented text rendering, dynamic showThinking
+- 🔧 Session open performance optimization, IPC payload reduction, cleanup
 
 [View Full Changelog →](CHANGELOG.md)
 
@@ -63,6 +60,7 @@
 | **Git Integration** | Real-time branch display with local + remote branch selector, branch count badge, switching support, and branch creation. |
 | **LAN Web Service** | Start a local web service from Settings so devices on the same network can open PiDeck through the host IP and port. |
 | **Session Activity View** | Thinking notes, tool calls, and answer updates are grouped into a compact flow with expandable/copyable details and clear status or exit-code labels. |
+| **Built-in Browser Preview** | Right-drawer browser with tabs, URL bar, fullscreen mode, and PC/mobile/tablet viewport presets for checking web pages alongside the conversation. |
 | **Session File Summary** | Completed agent runs show a compact list of modified file names and changed line counts; more than three files can be expanded. |
 | **Context-Aware Input** | `@` file suggestions from project tree, `!` shell execution, `/` slash commands, and command history — all from a single composer. |
 | **Update Prompt** | Periodically checks GitHub Releases and shows release notes plus recommended download links opened in the system browser. |

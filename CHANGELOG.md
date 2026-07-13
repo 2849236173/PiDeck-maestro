@@ -4,6 +4,105 @@
 
 All notable changes to PiDeck are documented here.
 
+## v0.6.5 - 2026-07-13
+
+### 🚀 New Features
+
+- **Prompt Templates System (Major)**
+  - `PromptManager` with full CRUD and IPC bridge for `~/.pi/agent/prompts/`
+  - `PromptsTab` settings page with Monaco Editor (create/edit/preview/delete)
+  - `/` picker in composer to insert templates with `$N` variable hints
+  - Project-level prompts (create/edit/delete in ProjectResourcesModal)
+  - Built-in templates: review, test, fix, refactor, doc, explain, commit, pi-system, skill-discipline
+  - Frontmatter stripping on send, `description` metadata attached to prompt RPC
+  - Unicode naming support (Chinese, Japanese, etc.) for prompts and skills
+- **Prompt/Skill Store Integration**
+  - `prompts.chat` store: search, preview, and import prompts with variable-hint conversion
+  - Yao Open Prompts: 121 bundled Chinese prompts across 9 categories with category filter, search, and preview
+  - New Skill Store tab for searching prompts.chat skills
+- **Git Worktree Workspace Management**
+  - `WorktreeService`: detect git worktrees, create/delete via IPC
+  - Branch list + create dialog + remove button under worktree-enabled projects
+  - Sessions grouped by worktree, main workspace header clickable to load parent sessions
+  - Auto-refresh worktrees on startup
+- **Multi-Select Messages & Sharing**
+  - Checkbox multi-select mode with floating action bar (text/markdown/image copy)
+  - Image copy via `toBlob()` fix for CSP compliance
+  - Success pulse animation + toast feedback
+- **Built-in Browser Preview**
+  - New right-drawer browser panel with tabs, URL bar, refresh/home/back/forward controls
+  - Fullscreen mode and PC/mobile/tablet viewport presets for quickly checking web pages without leaving PiDeck
+  - External-link fallback opens unsupported protocols in the system browser
+- **Session Manager Modal**
+  - Open from project context menu: lists all project sessions with multi-select delete
+  - Per-session rename, export, delete, source filter (Pi/Codex/Claude/OpenCode)
+  - Unified 1300×850 modal size with backdrop click-to-close
+- **External Editor Integration**
+  - Project context menu: right-click → "Open with" → pick editor (VS Code / Cursor / Zed / JetBrains)
+  - Editor popover position fixed (left/top) with viewport clamping, works from sidebar project context
+- **Prompt Configuration Enhancement**
+  - Prompt templates picker shows description + variable hints in dropdown
+  - Compose: template expansion separates command from user input with `\n\n`
+  - Session file summary moved from chat timeline to composer area (collapsible)
+  - Prompt rename supported across global and project levels
+- **Model Configuration**
+  - New `xhigh` reasoning level support
+
+### ✨ UI Polish
+
+- **Extracted common MonacoEditor component**: CSP-compatible local workers, dark theme, unified across ConfigModal, ProjectResourcesModal, PromptsTab
+- **Thinking card visual refresh**: "思考" label, border removed, duration shown, chevron right after label, lighter hover
+- **Tool cards**: borders and background tints removed to match thinking card style, tertiary text for details
+- **Answer text**: font-size increased to 15px, line-height 1.68
+- **Turn row gap**: increased from 8px to 12px between blocks
+- **Extension widgets**: redesigned as collapsible cards with dismiss (X) button
+- **Unified modal sizing**: all full-screen modals use 1300×850 + `min(vw,vh) - 48px` + backdrop click-to-close
+- **Uniform icon buttons**: SkillsTab, ExtensionsTab, ProjectResourcesModal — text buttons → lucide icon buttons with hover titles
+  - Enable/disable toggle icons: ToggleRight (green)/ToggleLeft (default)
+- **Model selection UI**: simplified and refined (288 → 124 lines)
+- **Enter key**: native browser newline handling, no manual `<br>` insertion
+- **Chinese prompt names**: chip regex now supports `\p{L}` Unicode (removed `[a-zA-Z]` restriction)
+
+### 🔧 Performance
+
+- **Session open optimization**: Parallel `get_state` + `get_messages` on agent start
+- **loadMessages**: parallel `get_messages` + `get_entries` via Promise.all
+- **Initial session load**: skip `get_entries` (defer to edit/delete)
+- **IPC payload reduction**: strip `originalContent` from tool ChatMessage meta
+- **History message counting**: by conversation turns (20 turns) instead of raw message count
+- **Removed `repairAssistantUsage`**: importers already add usage fields, no need to check on every session open
+- **loadMessages retry**: only on failure, not unconditionally
+- **Cleaned up all `[perf]` debug logs and unused timing code**
+
+### 🐛 Bug Fixes
+
+- **Windows crash fix**: globally disable Chromium sandbox (`--no-sandbox`), resolves `0x80000003` breakpoint crash on startup
+- **Pi auto-compaction process restart**:
+  - New tracking sets: `compactingAgents`, `userInitiatedStop`, `autoRestartAttempted`
+  - Process exit handler: three-tier check (user-stop / compacting / clean restart)
+  - `reattachProcess()`: preserves agentId + messages, replaces PiProcess + RPC client on restart
+  - Manual compaction RPC failure → auto `reattachProcess()` (compaction already written to file)
+  - Stop/stopAll marks user-initiated stop, skips auto-reconnect
+- **onCompact event pollution**: MouseEvent passed to IPC → structured clone failure; wrapped with `() => compactAgent()`
+- **Extension RPC lifecycle**:
+  - Extension commands now cleared after session output (not before)
+  - Non-dialog UI requests rendered as cards, no popup
+  - Extension UI request lifecycle: pending cleared on agent_end
+- **Message rendering**:
+  - TurnRow renders by `run.items` original chronological order, restoring interleaved thinking/tool/answer display
+  - `showThinking` dynamically read from pi agent config, takes effect on agent switch
+  - Fragmented `content[].text` blocks from Anthropic-compatible providers are concatenated without synthetic newlines, fixing vertical-looking assistant replies
+  - `<button>` nesting fixed: ExtensionWidgetCard close uses `<span role=button>`
+- **Worktree**: refined project handling, session loading under worktree projects fixed
+- **Share & widget UI**: visual polish and layout correction
+- **Prompt frontmatter**: `description` no longer duplicated into message body
+- **Translated built-in prompt descriptions**: auto-switch between zh-CN/en-US based on app language
+
+### 🛠 Refactor
+
+- Split non-component exports from `AppParts.tsx` into `AppUtils.ts` (fixes Vite Fast Refresh warning)
+- RPC extension command idle check clarified
+
 ## v0.6.4 - 2026-07-05
 
 ### 🚀 New Features

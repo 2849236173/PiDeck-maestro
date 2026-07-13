@@ -107,6 +107,7 @@ import {
   type DrawerPanel,
   type SessionModifiedFile,
 } from "./components/app/AppParts";
+import { BrowserPanel } from "./components/app/BrowserPanel";
 import {
   groupToolMessages,
   applySuggestion,
@@ -357,6 +358,44 @@ function resolveFileLinkPath(path: string, basePath?: string) {
   return `${basePath.replace(/[\\/]+$/, "")}${separator}${path.replace(/^[\\/]+/, "")}`;
 }
 
+const DISMISSED_EXTENSION_WIDGETS_STORAGE_KEY =
+  "pid:extension-widget-dismissed-by-session";
+
+function loadDismissedExtensionWidgets(): Record<string, string[]> {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(DISMISSED_EXTENSION_WIDGETS_STORAGE_KEY) ?? "{}",
+    );
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const result: Record<string, string[]> = {};
+    for (const [sessionKey, widgetKeys] of Object.entries(parsed)) {
+      if (Array.isArray(widgetKeys)) {
+        result[sessionKey] = widgetKeys.filter(
+          (widgetKey): widgetKey is string => typeof widgetKey === "string",
+        );
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function saveDismissedExtensionWidgets(value: Record<string, string[]>) {
+  try {
+    localStorage.setItem(
+      DISMISSED_EXTENSION_WIDGETS_STORAGE_KEY,
+      JSON.stringify(value),
+    );
+  } catch {
+    // localStorage 可能因隐私模式/配额失败；关闭状态丢失不应影响主流程。
+  }
+}
+
+function getAgentSessionStorageKey(agent?: AgentTab, fallbackAgentId?: string) {
+  return agent?.sessionPath ?? fallbackAgentId ?? "";
+}
+
 
 type PendingAgentTab = AgentTab & {
   pendingKind?: "create" | "restart";
@@ -530,6 +569,8 @@ export function App() {
   const [editorsAnchor, setEditorsAnchor] = useState<{ x: number; y: number } | null>(null);
   /** 右键项目也能唤起编辑器气泡，所以这里显式记录本次要打开的目录，避免依赖运行中 agent 的 cwd。 */
   const [editorsTargetPath, setEditorsTargetPath] = useState<string | null>(null);
+  /** 浏览器全屏模式：在完整窗口覆盖层中渲染浏览器面板，不受右侧抽屉宽度限制。 */
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const editorsRef = useRef<HTMLDivElement>(null);
 
   // 点击编辑器气泡外部时关闭
@@ -551,14 +592,21 @@ export function App() {
   const [extensionWidgetsByAgent, setExtensionWidgetsByAgent] = useState<
     Record<string, Record<string, string[]>>
   >({});
-  /** Extension widget �ۺ�/չ��״̬���� agent ��������һ���л�ʱ������ */
-  const [widgetsCollapsedByAgent, setWidgetsCollapsedByAgent] = useState<
-    Record<string, boolean>
-  >({});
-  /** 用户手动关闭的 extension widget（widgetKey） */
+  /** Extension widget 容器折叠状态（全局持久化，不按 agentId 隔离，重启后恢复） */
+  const [widgetsCollapsed, setWidgetsCollapsed] = useState(() => {
+    try {
+      return (
+        JSON.parse(localStorage.getItem("pid:extension-widgets-collapsed") ?? "false") ??
+        false
+      );
+    } catch {
+      return false;
+    }
+  });
+  /** 用户手动关闭的 extension widget（widgetKey）；按稳定 sessionPath 隔离，避免切换 agent 串状态。 */
   const [agentDismissedWidgets, setAgentDismissedWidgets] = useState<
     Record<string, string[]>
-  >({});
+  >(() => loadDismissedExtensionWidgets());
   /** 输入框发送模式：normal 直接交给 agent，plan 通过隐藏标记触发 PiDeck Plan Mode 扩展。 */
   const [composerAgentModes, setComposerAgentModes] = useState<Record<string, ComposerAgentMode>>({});
   /** 当前 agent 的发送模式，按 agentId 隔离。 */
@@ -5485,21 +5533,25 @@ ${goalTextRef.current}
           )}
           {activeAgentId && extensionWidgetsByAgent[activeAgentId] && Object.keys(extensionWidgetsByAgent[activeAgentId]).length > 0 && (() => {
             const entries = Object.entries(extensionWidgetsByAgent[activeAgentId]);
-            const collapsed = widgetsCollapsedByAgent[activeAgentId] ?? false;
+            const widgetSessionKey = getAgentSessionStorageKey(activeAgent, activeAgentId);
             return (
               <div className="extension-widgets-container" key="widgets-container">
-                {!collapsed && entries.filter(([key]) =>
-                  activeAgentId && !(agentDismissedWidgets[activeAgentId]?.includes(key))
+                {!widgetsCollapsed && entries.filter(([key]) =>
+                  widgetSessionKey && !(agentDismissedWidgets[widgetSessionKey]?.includes(key))
                 ).map(([widgetKey, widgetLines]) => (
                   <ExtensionWidgetCard
                     key={widgetKey}
                     widgetKey={widgetKey}
                     lines={widgetLines}
+                    sessionIdOrPath={widgetSessionKey}
                     onClose={() => {
+                      if (!widgetSessionKey) return;
                       setAgentDismissedWidgets((prev) => {
-                        const current = prev[activeAgentId!] ?? [];
+                        const current = prev[widgetSessionKey] ?? [];
                         if (current.includes(widgetKey)) return prev;
-                        return { ...prev, [activeAgentId!]: [...current, widgetKey] };
+                        const next = { ...prev, [widgetSessionKey]: [...current, widgetKey] };
+                        saveDismissedExtensionWidgets(next);
+                        return next;
                       });
                     }}
                   />
@@ -5512,6 +5564,7 @@ ${goalTextRef.current}
             <SessionFileSummary
               files={sessionFileSummaryByAgent[activeAgentId]}
               onDiffFile={diffFilePath}
+              sessionIdOrPath={activeAgent?.sessionPath ?? activeAgentId}
             />
           )}
           <div
@@ -5803,6 +5856,19 @@ ${goalTextRef.current}
               },
               icon: <Code size={17} />,
             }}
+            browserAction={{
+              active: drawer === "browser",
+              label: t("app.browser"),
+              onClick: () => {
+                if (drawer === "browser" && !drawerCollapsed) {
+                  setDrawer(null);
+                } else {
+                  setDrawer("browser");
+                  setDrawerCollapsed(false);
+                }
+              },
+              icon: <Globe size={17} />,
+            }}
           />
         )}
 
@@ -5822,7 +5888,14 @@ ${goalTextRef.current}
         data-open={drawer && !drawerCollapsed}
         data-rendered={Boolean(drawerContentPanel)}
       >
-        {drawerContentPanel && (
+        {drawerContentPanel === "browser" && !drawerCollapsed && !browserFullscreen ? (
+          <div className="drawer-content-frame">
+            <BrowserPanel
+              onClose={() => setDrawer(null)}
+              onToggleFullscreen={() => setBrowserFullscreen(true)}
+            />
+          </div>
+        ) : drawerContentPanel && drawerContentPanel !== "browser" ? (
           <LazyWrapper
             className="drawer-content-frame"
             enabled={true}
@@ -5888,7 +5961,7 @@ ${goalTextRef.current}
               onOpenFile={openFilePath}
             />
           </LazyWrapper>
-        )}
+        ) : null}
       </aside>
       {drawer && drawerCollapsed && (
         <button
@@ -6644,6 +6717,23 @@ ${goalTextRef.current}
               </button>
             ))
           )}
+        </div>
+      )}
+
+      {/* 浏览器全屏覆盖层 */}
+      {browserFullscreen && (
+        <div className="modal-backdrop" onClick={() => setBrowserFullscreen(false)}>
+          <div className="browser-modal" onClick={(e) => e.stopPropagation()}>
+            <BrowserPanel
+              isFullscreen
+              onClose={() => setBrowserFullscreen(false)}
+              onMinimize={() => {
+                setBrowserFullscreen(false);
+                setDrawer("browser");
+                setDrawerCollapsed(false);
+              }}
+            />
+          </div>
         </div>
       )}
 
