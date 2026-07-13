@@ -20,7 +20,7 @@ import { ipcChannels } from "../../shared/ipc";
 import { PiProcess } from "./PiProcess";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
-import { stripFeishuDocActionHint } from "../feishu/docActions";
+import { extractMessageText } from "./messageContent";
 import type { SettingsStore } from "../settings/SettingsStore";
 import type { ConfigManager } from "../config/ConfigManager";
 import type { RpcLogger } from "../logging/RpcLogger";
@@ -3212,25 +3212,7 @@ export class AgentManager {
 	}
 
 	private extractText(content: unknown): string {
-		if (typeof content === "string") return stripFeishuDocActionHint(content);
-		if (Array.isArray(content)) {
-			const text = content
-				.map((item) => {
-					if (typeof item === "string") return item;
-					if (item && typeof item === "object") {
-						const typed = item as any;
-						if (typed.type === "image") return "";
-						// thinking 块以 <thinking> 标签嵌入 text，保留原始交替顺序
-						if (typed.type === "thinking") return `<thinking>${String(typed.thinking ?? "")}</thinking>`;
-						return String(typed.text ?? "");
-					}
-					return "";
-				})
-				.filter(Boolean)
-				.join("\n");
-			return stripFeishuDocActionHint(text);
-		}
-		return "";
+		return extractMessageText(content);
 	}
 
 	/** 从 pi 历史消息 content 中恢复图片附件，用于历史会话重新打开后的图片展示。 */
