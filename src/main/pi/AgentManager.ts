@@ -1,7 +1,7 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
 import type {
@@ -55,6 +55,11 @@ export class AgentManager {
 	private readonly pendingMessageAgents = new Set<string>();
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
+	/**
+	 * 超过该大小的历史会话不自动 get_messages。
+	 * pi 当前不支持 limit/cursor，40MB JSONL 会以单行大 JSON 返回，主进程 JSON.parse 会短暂冻结整个应用。
+	 */
+	private static readonly MAX_AUTO_HISTORY_LOAD_BYTES = 8 * 1024 * 1024;
 	/**
 	 * 工具结果文本截断阈值（字符数）。工具结果（如 bash 输出、文件读取）可能达数十 KB，
 	 * 若完整存入 ChatMessage.meta 并随流式 emit 反复全量传输，会显著放大 IPC payload
@@ -222,6 +227,20 @@ export class AgentManager {
 		return sessionPath?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 	}
 
+	private getHistoryAutoLoadDecision(sessionPath?: string): { shouldLoad: boolean; sizeBytes?: number } {
+		if (!sessionPath) return { shouldLoad: true };
+		try {
+			const sizeBytes = statSync(sessionPath).size;
+			return {
+				shouldLoad: sizeBytes <= AgentManager.MAX_AUTO_HISTORY_LOAD_BYTES,
+				sizeBytes,
+			};
+		} catch {
+			// 无法读取大小时保留旧行为尝试加载，避免临时文件/权限异常直接导致历史不可见。
+			return { shouldLoad: true };
+		}
+	}
+
 	private findRuntimeBySessionKey(sessionKey: string) {
 		return [...this.agents.values()].find(
 			(runtime) =>
@@ -289,9 +308,13 @@ export class AgentManager {
 			spawnCallMs: t3 - t2,
 		});
 
-		// 启动后立即连续发送两条命令，让 pi 启动后一次性处理，减少空闲等待
+		// 启动后立即获取状态；历史消息仅在文件不大时预取。
+		// 大会话 get_messages 会返回超大单行 JSON，JSON.parse 会阻塞 Electron 主进程，宁可先让 Agent 可用。
 		const statePromise = client.request({ type: "get_state" });
-		const messagesPromise = client.request({ type: "get_messages" });
+		const historyLoadDecision = this.getHistoryAutoLoadDecision(input.sessionPath);
+		const messagesPromise = historyLoadDecision.shouldLoad
+			? client.request({ type: "get_messages" })
+			: undefined;
 
 		// ... 事件监听器（省略，与原来一致）
 		process.on("event", (event) => this.handlePiEvent(id, event));
@@ -421,35 +444,55 @@ export class AgentManager {
 			// 同时插入一条临时系统消息，给用户明确的加载反馈，避免空白页面看起来像冻结。
 			// preserveMessagesAfter 保护加载期间用户新发的消息/流式回复，防止历史结果回写时覆盖当前会话。
 			const preserveMessagesAfter = Date.now();
-			this.addMessage(id, "system", "正在加载历史会话，大会话可能需要几秒钟…", {
-				historyLoading: true,
-			});
-			void this.loadMessages(id, true, messagesPromise, { preserveMessagesAfter })
-				.catch(() =>
-					new Promise<void>((resolve) => setTimeout(resolve, 800))
-						.then(() => this.loadMessages(id, true, undefined, { preserveMessagesAfter })),
-				)
-				.then(() => {
-					void this.appLogger?.info("agent", "Agent history loaded in background", {
-						agentId: id,
-						totalMs: Date.now() - preserveMessagesAfter,
+			if (messagesPromise) {
+				if (input.sessionPath) {
+					this.addMessage(id, "system", "正在加载历史会话，大会话可能需要几秒钟…", {
+						historyLoading: true,
 					});
-				})
-				.catch((error) => {
-					const list = this.messages.get(id) ?? [];
-					const loadingMessage = list.find((message) => message.meta?.historyLoading === true);
-					if (loadingMessage) {
-						loadingMessage.role = "error";
-						loadingMessage.text = "历史会话加载失败，可继续使用当前 Agent 或重新打开会话重试。";
-						loadingMessage.meta = { historyLoading: "failed" };
-						loadingMessage.timestamp = Date.now();
-						this.scheduleMessageEmit(id, true);
-					}
-					void this.appLogger?.warn("agent", "Agent history background load failed", {
-						agentId: id,
-						error: error instanceof Error ? error.message : String(error),
+				}
+				void this.loadMessages(id, true, messagesPromise, { preserveMessagesAfter })
+					.catch(() =>
+						new Promise<void>((resolve) => setTimeout(resolve, 800))
+							.then(() => this.loadMessages(id, true, undefined, { preserveMessagesAfter })),
+					)
+					.then(() => {
+						void this.appLogger?.info("agent", "Agent history loaded in background", {
+							agentId: id,
+							totalMs: Date.now() - preserveMessagesAfter,
+						});
+					})
+					.catch((error) => {
+						const list = this.messages.get(id) ?? [];
+						const loadingMessage = list.find((message) => message.meta?.historyLoading === true);
+						if (loadingMessage) {
+							loadingMessage.role = "error";
+							loadingMessage.text = "历史会话加载失败，可继续使用当前 Agent 或重新打开会话重试。";
+							loadingMessage.meta = { historyLoading: "failed" };
+							loadingMessage.timestamp = Date.now();
+							this.scheduleMessageEmit(id, true);
+						}
+						void this.appLogger?.warn("agent", "Agent history background load failed", {
+							agentId: id,
+							error: error instanceof Error ? error.message : String(error),
+						});
 					});
+			} else if (input.sessionPath) {
+				this.addMessage(
+					id,
+					"system",
+					"历史会话文件较大，已跳过自动加载以避免界面冻结；Agent 已可继续使用。",
+					{
+						historyLoading: "skipped-large-session",
+						sessionSizeBytes: historyLoadDecision.sizeBytes,
+					},
+				);
+				void this.appLogger?.info("agent", "Agent history auto-load skipped", {
+					agentId: id,
+					sessionPath: input.sessionPath,
+					sizeBytes: historyLoadDecision.sizeBytes,
+					maxAutoLoadBytes: AgentManager.MAX_AUTO_HISTORY_LOAD_BYTES,
 				});
+			}
 			void this.appLogger?.info("agent", "Agent create completed", {
 				agentId: id,
 				totalMs: Date.now() - t0,
