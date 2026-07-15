@@ -2016,6 +2016,20 @@ export class AgentManager {
 		const typed = event as Record<string, any>;
 		const runtime = this.agents.get(agentId);
 
+		// 扩展/RPC 调用 setSessionName 后 Pi 会发 session_info_changed；
+		// 同步到 tab.title，使侧边栏与手动 rename 路径看到同一标题。
+		// 忽略空 name，避免把已有标题抹掉。
+		if (typed.type === "session_info_changed" && runtime) {
+			const name =
+				typeof typed.name === "string"
+					? typed.name.replace(/\s+/g, " ").trim()
+					: "";
+			if (name && name !== runtime.tab.title) {
+				runtime.tab.title = name;
+				this.emitState();
+			}
+		}
+
 		if (typed.type === "agent_start" && runtime) {
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
