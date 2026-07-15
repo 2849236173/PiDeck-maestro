@@ -67,7 +67,6 @@ export function FileDiffViewer(props: {
 	const [error, setError] = useState<string | null>(null);
 	const [sideBySide, setSideBySide] = useState(true);
 	const [readOnly, setReadOnly] = useState(true);
-	const [loadedPath, setLoadedPath] = useState<string | null>(null);
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [showHint, setShowHint] = useState(false);
@@ -84,7 +83,6 @@ export function FileDiffViewer(props: {
 
 	useEffect(() => {
 		ensureMonaco();
-		if (loadedPath === props.filePath) return;
 
 		let cancelled = false;
 		async function load() {
@@ -129,7 +127,6 @@ export function FileDiffViewer(props: {
 					}
 					setContent(result);
 					setOriginal(originalResult);
-					setLoadedPath(props.filePath);
 					if (result === "" && !loading) {
 						// 文件可能已被删除或为空
 						setError(t("config.fileDeletedOrEmpty"));
@@ -143,7 +140,7 @@ export function FileDiffViewer(props: {
 		}
 		void load();
 		return () => { cancelled = true; };
-	}, [props.filePath, props.readContent, props.readOriginalContent, props.originalContent, isDiffMode, loadedPath]);
+	}, [props.filePath, props.readContent, props.readOriginalContent, props.originalContent, isDiffMode]);
 
 	const handleClose = useCallback(() => {
 		props.onClose();
