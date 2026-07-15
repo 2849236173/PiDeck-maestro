@@ -56,6 +56,25 @@ jobs:
       - name: Build documentation site
         run: npm run docs:build
 
+      - name: Generate sitemap
+        run: |
+          BASE="${VITEPRESS_BASE:-/PiDeck/}"
+          SITEMAP="docs-site/.vitepress/dist/sitemap.xml"
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > "$SITEMAP"
+          echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' >> "$SITEMAP"
+          find docs-site/.vitepress/dist -type f -name '*.html' | sort | while read -r file; do
+            rel="${file#docs-site/.vitepress/dist/}"
+            rel="${rel%.html}"
+            if [ "$rel" = "index" ]; then
+              loc="$BASE"
+            else
+              loc="$BASE$rel/"
+            fi
+            echo "  <url><loc>https://ayuayue.github.io/PiDeck${loc}</loc></url>" >> "$SITEMAP"
+          done
+          echo '</urlset>' >> "$SITEMAP"
+          cat "$SITEMAP"
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3

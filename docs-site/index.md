@@ -4,7 +4,7 @@ layout: home
 hero:
   name: PiDeck
   text: 多项目 pi Agent 桌面工作台
-  tagline: 在一个原生桌面应用里管理项目、会话、配置、终端和工具调用，让本地 pi 编码助手工作流更稳定。
+  tagline: 在统一的桌面工作区中管理本地 pi 编码助手会话、配置、Git 和终端，支持 Windows、macOS、Linux，让本地 AI 编码工作流更稳定高效。
   actions:
     - theme: brand
       text: 下载最新版本
@@ -18,17 +18,17 @@ hero:
 
 features:
   - title: 多项目工作区
-    details: 添加、搜索、拖动排序和切换本地项目目录，每个 Agent 会话都保持项目级隔离。
-  - title: 会话活动轨迹
-    details: 恢复历史会话，按流程查看思考、工具调用和回答片段，并在回答下方看到本轮修改摘要。
-  - title: 配置与 Skills
-    details: 可视化管理 models、auth、settings 和全局 Skills，减少频繁打开配置文件的上下文切换。
-  - title: 文件与 Git
-    details: 文件抽屉展示项目文件和 Git 状态，分支选择器支持查看并切换本地与远程分支。
+    details: 添加、搜索、拖动排序和切换本地项目目录，每个 Agent 会话都保持项目级隔离，同时运行多个 pi Agent。
+  - title: 会话历史与恢复
+    details: 恢复历史会话，按时间线查看工具调用和回答细节，并回放历史会话中的修改内容，支持 Codex 和 Claude 会话导入。
+  - title: Git 集成
+    details: 实时分支显示和切换，文件树展示 Git 状态，支持本地和远程分支管理，worktree 工作区支持。
   - title: 内嵌终端 Dock
-    details: 当前 Agent 绑定独立终端 tab，适合执行命令、观察输出和保持会话上下文。
-  - title: 跨平台打包
-    details: Windows、macOS、Linux 预构建包通过 GitHub Releases 发布，源码开发也只需常规 npm 命令。
+    details: 当前 Agent 绑定独立终端 tab，支持 PowerShell/cmd/sh fallback、多 tab、主题切换、拖拽高度、右键复制。
+  - title: 配置与插件管理
+    details: 可视化编辑 Models、Auth、Settings，全局和项目级 Skills 与 Extension 管理，斜线命令和模板快速插入。
+  - title: 跨平台下载
+    details: Windows、macOS、Linux 安装包通过 GitHub Releases 发布，源码开发支持 npm 命令，内置浏览器预览。
 ---
 
 <figure class="home-showcase">

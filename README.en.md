@@ -10,6 +10,10 @@
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![Version](https://img.shields.io/badge/version-0.6.5-green)
 
+**PiDeck** is an open-source desktop workbench for managing pi Agent sessions across local project folders, with import support for local Codex and Claude sessions so you can browse and restore them in one place. Built with Electron + TypeScript, it provides multi-project workspace management, AI session history, Git integration, built-in terminal, visual config management, and plugin extensions—so local AI coding assistants stay consistent, traceable, and configurable across projects.
+
+**Who it's for:** Developers who want to manage multiple local-project AI coding assistant sessions from a desktop app, review session history and Git status in one place, and configure pi through visual editors instead of raw JSON files.
+
 `PiDeck` is **not** a fork of pi. It is a lightweight Electron shell that orchestrates multiple `pi --mode rpc` processes, providing a native desktop UI for projects, sessions, conversations, configuration, and tool orchestration — all powered by pi's native agent capabilities.
 
 ---

@@ -31,6 +31,36 @@ title: 贡献者
   </div>
 </div>
 
+<div class="contributor-card">
+  <div class="contributor-avatar">Fr</div>
+  <div class="contributor-info">
+    <strong>frostime</strong>
+    <span class="contributor-handle">@frostime</span>
+    <p>自定义字体/字号与缩放比例、模型选择器自动滚动、最大推理等级、RPC 扩展 UI 生命周期修复</p>
+    <a href="https://github.com/frostime" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">mg</div>
+  <div class="contributor-info">
+    <strong>magic2066</strong>
+    <span class="contributor-handle">@magic2066</span>
+    <p>修复 Codex 子代理会话导入展示、修复 Linux 桌面宠物拖拽和 dev 启动</p>
+    <a href="https://github.com/magic2066" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">pk</div>
+  <div class="contributor-info">
+    <strong>pangolinknight</strong>
+    <span class="contributor-handle">@pangolinknight</span>
+    <p>主进程流式消息节流合并与工具结果截断，修复大会话渲染进程白屏</p>
+    <a href="https://github.com/pangolinknight" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
 </div>
 
 <style scoped>

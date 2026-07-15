@@ -1,7 +1,7 @@
 {
   "name": "pi-desktop",
   "version": "0.6.5",
-  "description": "PiDeck workbench for managing multiple pi RPC agents across project folders.",
+  "description": "PiDeck is an open-source desktop workbench to manage multiple pi AI coding agents across local project folders with session history, Git integration, terminal, and config management.",
   "private": true,
   "license": "MIT",
   "author": {
@@ -24,11 +24,32 @@
   },
   "keywords": [
     "pi",
+    "pi-agent",
+    "ai-coding-agent",
     "coding-agent",
     "electron",
+    "electron-app",
     "desktop",
+    "desktop-app",
     "rpc",
-    "agent"
+    "agent",
+    "ai-assistant",
+    "local-ai",
+    "developer-tools",
+    "productivity",
+    "workspace",
+    "session-management",
+    "git",
+    "terminal",
+    "monaco-editor",
+    "claude-code",
+    "codex",
+    "multi-project",
+    "typescript",
+    "windows",
+    "macos",
+    "linux",
+    "open-source"
   ],
   "main": "out/main/index.js",
   "scripts": {

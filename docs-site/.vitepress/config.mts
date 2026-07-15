@@ -3,25 +3,67 @@ import { defineConfig } from "vitepress";
 const base = process.env.VITEPRESS_BASE ?? "/PiDeck/";
 
 export default defineConfig({
-  title: "PiDeck",
-  description: "面向本地开发工作的 pi Agent 桌面工作台",
+  title: "PiDeck - pi Agent Desktop Workbench",
+  description: "PiDeck is an open-source desktop workbench for managing multiple pi AI coding agents across local project folders. Features session history, Git integration, built-in terminal, and visual config management.",
   lang: "zh-CN",
   base,
   cleanUrls: true,
   lastUpdated: true,
   head: [
     ["link", { rel: "icon", href: `${base}icon.svg` }],
-    ["meta", { property: "og:title", content: "PiDeck" }],
-    ["meta", { property: "og:description", content: "在桌面端管理多个 pi 编码助手会话。" }],
+    ["link", { rel: "canonical", href: "https://ayuayue.github.io/PiDeck/" }],
+    ["meta", { name: "keywords", content: "PiDeck, pi, pi-agent, ai-coding-agent, desktop, electron, rpc, local-ai, developer-tools, coding-assistant, workspace, session-management, git, terminal, windows, macos, linux, open-source" }],
+    ["meta", { name: "author", content: "ayuayue" }],
+    ["meta", { name: "robots", content: "index, follow" }],
+    ["meta", { property: "og:site_name", content: "PiDeck" }],
+    ["meta", { property: "og:title", content: "PiDeck - pi Agent Desktop Workbench" }],
+    ["meta", { property: "og:description", content: "Open-source desktop workbench to manage pi AI coding agents across local project folders. Features session history, Git integration, terminal, and plugin management." }],
     ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:url", content: "https://ayuayue.github.io/PiDeck/" }],
+    ["meta", { property: "og:image", content: "https://ayuayue.github.io/PiDeck/og-image.png" }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:title", content: "PiDeck - pi Agent Desktop Workbench" }],
+    ["meta", { name: "twitter:description", content: "Manage multiple pi AI coding agents in local workspaces. Open-source desktop app with sessions, Git, terminal, and extensions." }],
+    ["meta", { name: "twitter:image", content: "https://ayuayue.github.io/PiDeck/og-image.png" }],
+    [
+      "script",
+      { type: "application/ld+json" },
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "PiDeck",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "description": "Open-source desktop workbench for managing multiple pi AI coding agents across local project folders.",
+        "url": "https://ayuayue.github.io/PiDeck",
+        "downloadUrl": "https://github.com/ayuayue/PiDeck/releases",
+        "sourceCodeRepository": "https://github.com/ayuayue/PiDeck",
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Organization",
+          "name": "ayuayue",
+          "url": "https://github.com/ayuayue"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      })
+    ]
   ],
   themeConfig: {
     logo: "/icon.svg",
     siteTitle: "PiDeck",
     nav: [
       { text: "首页", link: "/" },
+      { text: "English", link: "/en" },
       { text: "使用指南", link: "/guide/usage-guide" },
       { text: "功能", link: "/guide/features" },
+      { text: "FAQ", link: "/guide/faq" },
+      { text: "对比", link: "/guide/comparison" },
       { text: "更新日志", link: "/changelog" },
       {
         text: "下载",
@@ -37,6 +79,8 @@ export default defineConfig({
             { text: "快速开始", link: "/guide/getting-started" },
             { text: "功能介绍", link: "/guide/features" },
             { text: "配置与 Skills", link: "/guide/settings" },
+            { text: "常见问题", link: "/guide/faq" },
+            { text: "产品对比", link: "/guide/comparison" },
             { text: "开发与打包", link: "/guide/development" },
             { text: "贡献者", link: "/guide/contributors" },
           ],
