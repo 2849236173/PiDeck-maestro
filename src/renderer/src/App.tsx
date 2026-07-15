@@ -1141,6 +1141,8 @@ export function App() {
         const blob = await toBlobImg(el as HTMLElement, {
           pixelRatio: Math.min(2, window.devicePixelRatio || 1),
           backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || undefined,
+          // 截图时给消息列表添加内边距，避免文字贴边
+          style: { padding: "24px" },
           filter: (node) =>
             !(node instanceof HTMLElement) ||
             (!node.classList.contains("turn-row-actions") &&

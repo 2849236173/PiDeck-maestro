@@ -11734,7 +11734,7 @@ a.config-btn {
   gap: 8px;
   min-width: 0;
   min-height: 0;
-  padding: 10px 14px;
+  padding: 8px 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   background: var(--color-bg-muted);
@@ -11786,7 +11786,7 @@ a.config-btn {
 .image-clear-btn {
   align-self: flex-end;
   height: 28px;
-  padding: 0 14px;
+  padding: 0 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-bg-panel);
