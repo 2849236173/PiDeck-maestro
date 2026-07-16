@@ -140,7 +140,10 @@ export function FileDiffViewer(props: {
 		}
 		void load();
 		return () => { cancelled = true; };
-	}, [props.filePath, props.readContent, props.readOriginalContent, props.originalContent, isDiffMode]);
+	// readContent/readOriginalContent 是稳定的 API 回调（上层已 useCallback），
+	// 不参与 effect deps，避免父组件因其他状态变化重渲染时反复加载文件导致编辑器重置到顶部。
+	// originalContent（diff 前置内容）和 isDiffMode（view/diff 模式切换）需要监听。
+	}, [props.filePath, props.originalContent, isDiffMode]);
 
 	const handleClose = useCallback(() => {
 		props.onClose();

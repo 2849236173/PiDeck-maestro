@@ -28,6 +28,7 @@ import {
   Play,
   Plus,
   Trash2,
+  Wrench,
   Minus,
   FolderOpen,
   Globe,
@@ -826,6 +827,19 @@ export function App() {
   const selectEditorTab = useCallback((tabId: string) => {
     setActiveTabId(tabId);
   }, []);
+  /** 稳定版文件读写回调，避免内联函数导致 FileDiffViewer 的 useEffect 每轮渲染都重新触发。 */
+  const handleReadContent = useCallback(
+    (path: string) => api.files.readContent(path),
+    [],
+  );
+  const handleReadOriginalContent = useCallback(
+    (path: string) => api.git.originalContent(path),
+    [],
+  );
+  const handleSaveContent = useCallback(
+    (path: string, content: string) => api.files.writeContent(path, content),
+    [],
+  );
   const [codexImportProject, setCodexImportProject] = useState<Project | null>(
     null,
   );
@@ -898,6 +912,9 @@ export function App() {
   const [agentRpcLogging, setAgentRpcLogging] = useState<Map<string, boolean>>(new Map());
   /** 是否自动滚动到最新消息 */
   const [autoScroll, setAutoScroll] = useState(true);
+  /** 用 ref 同步 autoScroll，供 ResizeObserver 回调读取最新值，避免响应式时序间隙导致滚动抢跑。 */
+  const autoScrollRef = useRef(true);
+  autoScrollRef.current = autoScroll;
   /** 是否显示"移动到最新"按钮 */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   /** 会话定位跳转到尚未加载的旧消息时，先扩展分页再在 effect 中滚动定位；此状态保存待跳转的消息 id。 */
@@ -1911,6 +1928,7 @@ export function App() {
     if (!timeline) return;
     timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
     setAutoScroll(true);
+    autoScrollRef.current = true;
     setShowScrollToBottom(false);
   }
 
@@ -2066,9 +2084,13 @@ export function App() {
 
       if (isAtBottom) {
         setAutoScroll(true);
+        autoScrollRef.current = true;
         setShowScrollToBottom(false);
       } else {
         setAutoScroll(false);
+        // 同步更新 ref，确保 ResizeObserver 回调在 React 状态更新生效前读到最新值，
+        // 避免用户已滚到上方但 DOM 增长触发的 observer 因闭包旧值抢滚动到底部。
+        autoScrollRef.current = false;
         setShowScrollToBottom(true);
       }
     };
@@ -2092,8 +2114,10 @@ export function App() {
     const messageList = timeline.querySelector(".message-list");
     if (!messageList) return;
 
+    // 使用 ref 而非闭包值，防止 DOM 变化与 React 状态更新之间的时序间隙造成滚动抢跑：
+    // 用户已滚到上方（autoScroll=false），但状态更新尚未生效，observer 闭包中的 autoScroll 仍为 true。
     const scrollIfNeeded = () => {
-      if (!autoScroll) return;
+      if (!autoScrollRef.current) return;
       timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
     };
     // 重建 observer 时先主动滚一次，处理 autoScroll 从 false→true 但列表高度未变的场景。
@@ -3812,6 +3836,7 @@ ${text}
     // 由 pi runtime 保证在当前工具调用结束后、下一次 LLM 调用前注入。
     // 不论之前是否滚动回看，发新消息都强制自动滚到底，确保能看到 agent 的回答。
     setAutoScroll(true);
+    autoScrollRef.current = true;
     const scrollTimeline = timelineRef.current;
     if (scrollTimeline) scrollTimeline.scrollTo({ top: scrollTimeline.scrollHeight, behavior: "instant" });
     setPrompt("");
@@ -3840,6 +3865,7 @@ ${text}
     const message = prompt;
     const images = attachedImages.length > 0 ? attachedImages : undefined;
     setAutoScroll(true);
+    autoScrollRef.current = true;
     const scrollTimeline = timelineRef.current;
     if (scrollTimeline) scrollTimeline.scrollTo({ top: scrollTimeline.scrollHeight, behavior: "instant" });
     setPrompt("");
@@ -5591,6 +5617,24 @@ ${goalTextRef.current}
                       <div className="thinking-card-content">{activeThinking}</div>
                     </section>
                   )}
+                  {/* 工具执行中但消息尚未到达时，显示临时占位卡片，避免状态指示器亮了但页面空白。
+                      runtimeState 在工具消息到达前就已更新 isExecutingTool，存在时序间隙。 */}
+                  {activeRuntimeState?.isExecutingTool && !renderedRuns.some(r => r.kind === "agent-run" && r.items.some(i => i.kind === "tool-group")) && (
+                    <section className="tool-card tone-info" data-status="running">
+                      <div className="tool-card-header">
+                        <span className="tool-card-trigger">
+                          <span className="tool-card-icon">
+                            <Wrench size={14} />
+                          </span>
+                          <span className="tool-card-name">{t("tool.pending")}</span>
+                          <span className="tool-card-status">
+                            <span className="tool-card-spinner" aria-hidden="true" />
+                            {t("tool.statusRunning")}
+                          </span>
+                        </span>
+                      </div>
+                    </section>
+                  )}
                 </>
               )}
               {/* 状态指示器：agent 运行或流式期间始终与回复并行展示 */}
@@ -6025,9 +6069,9 @@ ${goalTextRef.current}
               onSelectTab={selectEditorTab}
               onCloseTab={closeEditorTab}
               onClose={() => { setActiveTabId(null); setEditorTabs([]); setDrawer(null); }}
-              readContent={(path) => api.files.readContent(path)}
-              readOriginalContent={(path) => api.git.originalContent(path)}
-              saveContent={(path, content) => api.files.writeContent(path, content)}
+              readContent={handleReadContent}
+              readOriginalContent={handleReadOriginalContent}
+              saveContent={handleSaveContent}
               theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
               maxFileSizeMB={settings.maxEditorFileSizeMB}
             />
@@ -6689,9 +6733,9 @@ ${goalTextRef.current}
           onSelectTab={selectEditorTab}
           onCloseTab={closeEditorTab}
           onClose={() => { setActiveTabId(null); setEditorTabs([]); }}
-          readContent={(path) => api.files.readContent(path)}
-          readOriginalContent={(path) => api.git.originalContent(path)}
-          saveContent={(path, content) => api.files.writeContent(path, content)}
+          readContent={handleReadContent}
+          readOriginalContent={handleReadOriginalContent}
+          saveContent={handleSaveContent}
           theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
           maxFileSizeMB={settings.maxEditorFileSizeMB}
         />

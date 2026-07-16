@@ -2461,6 +2461,12 @@ export const TurnRow = memo(function TurnRow(props: {
 		(i) => i.kind === "message" && i.message.role === "assistant",
 	).length;
 
+	// 最终回答文本，用于判断自然完成 vs 手动中断。
+	// 提前定义以在 useEffect 中使用（auto-collapse 逻辑需要判断是否有最终文本回答）。
+	const finalTxt = finalMessageItem
+		? stripThinkingTags(stripAnsi(finalMessageItem.message.text)).trim()
+		: "";
+
 	// 执行过程默认展开（agent 处理中），输出完毕后自动折叠。
 	// 使用 agentRunning 而非 isStreaming：后者在多步工具调用之间会短暂 flicker 为 false，
 	// 导致过早折叠工具输出；agentRunning 在整个 agent 处理生命周期内始终为 true。
@@ -2519,9 +2525,6 @@ export const TurnRow = memo(function TurnRow(props: {
 		return null;
 	};
 
-	const finalTxt = finalMessageItem
-		? stripThinkingTags(stripAnsi(finalMessageItem.message.text)).trim()
-		: "";
 	const finalThinking = finalMessageItem?.message.thinking?.trim()
 		? stripAnsi(finalMessageItem.message.thinking)
 		: null;
