@@ -199,7 +199,8 @@ const api =
 const COMPOSER_MIN_HEIGHT = 175;
 const COMPOSER_DEFAULT_TERMINAL_HEIGHT = 220;
 const COMPOSER_MIN_TIMELINE_HEIGHT = 160;
-const DRAWER_ANIMATION_MS = 300;
+const DRAWER_ANIMATION_MS = 180;
+const TERMINAL_DOCK_MOTION_MS = 180;
 const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
 const AGENT_CREATE_TIMEOUT_MS = 60_000;
 
@@ -1005,6 +1006,10 @@ export function App() {
   const [terminalHeightByAgent, setTerminalHeightByAgent] = useState<
     Record<string, number>
   >({});
+  const [terminalDockMounted, setTerminalDockMounted] = useState(false);
+  const [terminalDockClosing, setTerminalDockClosing] = useState(false);
+  const [terminalDockAgentId, setTerminalDockAgentId] = useState<string>();
+  const terminalDockCloseTimerRef = useRef<number | null>(null);
   const [listCollapsed, setListCollapsed] = useState(false);
   const [listHoverRevealSuppressed, setListHoverRevealSuppressed] =
     useState(false);
@@ -1120,6 +1125,44 @@ export function App() {
   // 终端打开/折叠状态按 agent 隔离,避免切换项目/agent 后丢失当前终端 UI 状态。
   const terminalOpen = Boolean(terminalDockState?.open);
   const terminalCollapsed = Boolean(terminalDockState?.collapsed);
+  const terminalDockVisible =
+    terminalDockMounted && terminalDockAgentId === activeAgentId;
+
+  // 轨道尺寸只在开关时变更一次，终端本身用 transform 完成合成动画。
+  // 关闭时保留组件至动画结束，避免同步销毁 xterm 阻塞第一帧。
+  useEffect(() => {
+    if (terminalOpen && activeAgentId) {
+      if (terminalDockCloseTimerRef.current != null) {
+        window.clearTimeout(terminalDockCloseTimerRef.current);
+        terminalDockCloseTimerRef.current = null;
+      }
+      setTerminalDockAgentId(activeAgentId);
+      setTerminalDockClosing(false);
+      setTerminalDockMounted(true);
+      return;
+    }
+    if (!terminalDockMounted) return;
+    if (terminalDockAgentId !== activeAgentId) {
+      setTerminalDockMounted(false);
+      return;
+    }
+
+    setTerminalDockClosing(true);
+    terminalDockCloseTimerRef.current = window.setTimeout(
+      () => {
+        setTerminalDockMounted(false);
+        setTerminalDockClosing(false);
+      },
+      TERMINAL_DOCK_MOTION_MS,
+    );
+    return () => {
+      if (terminalDockCloseTimerRef.current != null) {
+        window.clearTimeout(terminalDockCloseTimerRef.current);
+        terminalDockCloseTimerRef.current = null;
+      }
+    };
+  }, [activeAgentId, terminalDockAgentId, terminalDockMounted, terminalOpen]);
+
   const drawerPinnedPanel = activeAgentId
     ? drawerPinnedByAgent[activeAgentId]
     : undefined;
@@ -1250,10 +1293,13 @@ export function App() {
   const activeTerminalHeight = activeAgentId
     ? (terminalHeightByAgent[activeAgentId] ?? COMPOSER_DEFAULT_TERMINAL_HEIGHT)
     : COMPOSER_DEFAULT_TERMINAL_HEIGHT;
-  // 终端 grid 行高：关闭时 0，折叠时 34px，展开时 activeTerminalHeight。
-  // 由 App 层直接控制 --terminal-row-h，避免 TerminalDock 的 useLayoutEffect 在
-  // 滚动定位等操作导致父组件重渲染时引发 grid 布局抖动，把隐藏区域的终端拉到显示区域。
-  const terminalRowHeight = !terminalOpen ? 0 : terminalCollapsed ? 34 : activeTerminalHeight;
+  // 终端 Grid 只做 120ms 短过渡，面板表面仍由 transform 完成主要运动。
+  const terminalRowHeight =
+    !terminalDockVisible || terminalDockClosing
+      ? 0
+      : terminalCollapsed
+        ? 34
+        : activeTerminalHeight;
   const resolvedComposerHeight = Math.max(composerHeight, composerAutoHeight);
   const composerMode = prompt.startsWith("!!")
     ? "silent-shell"
@@ -1296,7 +1342,7 @@ export function App() {
     }
 
     if (!renderedDrawer) return;
-    // 抽屉收回时保留最后内容，等 grid 列宽动画结束后再卸载；否则文字会先消失，再空壳收回。
+    // 抽屉收回时保留最后内容，等 transform 动画结束后再卸载；否则文字会先消失，再空壳收回。
     drawerUnmountTimerRef.current = window.setTimeout(() => {
       setRenderedDrawer(null);
       drawerUnmountTimerRef.current = null;
@@ -4531,10 +4577,8 @@ ${goalTextRef.current}
           "--list-width": `${listCollapsed ? 0 : listWidth}px`,
           "--list-expanded-width": `${listWidth}px`,
           "--list-hover-width": `${Math.max(190, listWidth)}px`,
-          // 抽屉关闭/折叠时上限也必须归零，否则常驻第 5 列会留下右侧空白。
+          // 短布局过渡在面板滑动时同步收缩；内容仍由 renderedDrawer 保留到退出结束。
           "--drawer-width": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
-          // 抽屉列下限：展开且未折叠时 260px，否则 0；实际列宽由 CSS max(下限, min(drawer-width, 38vw)) 计算。
-          // 驱动 5 列恒定 grid 平滑开合（与终端 --terminal-row-h 同理）。
           "--drawer-col-w": `${drawer && !drawerCollapsed ? 260 : 0}px`,
           "--drawer-splitter-w": `${drawer && !drawerCollapsed ? 6 : 0}px`,
         } as React.CSSProperties
@@ -4956,10 +5000,6 @@ ${goalTextRef.current}
                             <div className="conversation-title">
                               {agent.status && (
                                 <span className={`agent-status-indicator status-${agent.status}`}>
-                                  {agent.status === 'running' && '●'}
-                                  {agent.status === 'idle' && '○'}
-                                  {agent.status === 'starting' && '◐'}
-                                  {' '}
                                   {t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}
                                 </span>
                               )}
@@ -5176,10 +5216,6 @@ ${goalTextRef.current}
                                 <div className="conversation-title">
                                   {agent.status && (
                                     <span className={`agent-status-indicator status-${agent.status}`}>
-                                      {agent.status === 'running' && '●'}
-                                      {agent.status === 'idle' && '○'}
-                                      {agent.status === 'starting' && '◐'}
-                                      {' '}
                                       {t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}
                                     </span>
                                   )}
@@ -5517,7 +5553,7 @@ ${goalTextRef.current}
             <div className="message-list">
               {/* 使用 groupToolMessages 渲染：user/error/system 独立条目，
                   assistant + tool 聚合为 agnet-run（TurnRow 自带操作栏） */}
-              {renderedRuns.map((item) => {
+              {renderedRuns.map((item, index) => {
                 if (item.kind === "agent-run") {
                   // 判断该 run 是否包含正在流式的消息
                   const isRunStreaming = Boolean(
@@ -5533,7 +5569,7 @@ ${goalTextRef.current}
                       onPreviewImage={setPreviewImage}
                       showThinking={settings.showThinking}
                       isStreaming={isRunStreaming}
-                      agentRunning={isAgentBusy}
+                      agentRunning={isAgentBusy && index === renderedRuns.length - 1}
                       onOpenExternal={(url) => api.app.openExternal(url)}
                       onOpenFile={openFilePath}
                       onDiffFile={diffFilePath}
@@ -5918,10 +5954,12 @@ ${goalTextRef.current}
         </footer>
         )}
 
-        {!isLanWeb && activeAgentId && !isPendingAgentId(activeAgentId) && !settingsOpen && !configOpen && !environmentDialog && terminalOpen && (
+        {!isLanWeb && activeAgentId && !isPendingAgentId(activeAgentId) && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
           <TerminalDock
+            key={terminalDockAgentId}
             agentId={activeAgentId}
-            open={terminalOpen}
+            open={terminalDockVisible}
+            closing={terminalDockClosing}
             collapsed={terminalCollapsed}
             height={terminalHeightByAgent[activeAgentId] ?? 220}
             terminal={api.terminal}

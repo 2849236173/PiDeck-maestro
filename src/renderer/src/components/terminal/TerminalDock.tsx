@@ -69,6 +69,8 @@ const TERMINAL_THEMES = {
 
 type TerminalThemeId = keyof typeof TERMINAL_THEMES;
 
+const TERMINAL_OPEN_ANIMATION_MS = 300;
+
 function stripReplayBuffer(tab: TerminalTab): TerminalTab {
 	const { buffer: _buffer, ...rest } = tab;
 	return rest;
@@ -77,6 +79,7 @@ function stripReplayBuffer(tab: TerminalTab): TerminalTab {
 export function TerminalDock(props: {
 	agentId: string;
 	open: boolean;
+	closing: boolean;
 	collapsed: boolean;
 	height: number;
 	terminal: PiDesktopApi["terminal"];
@@ -97,6 +100,8 @@ export function TerminalDock(props: {
 	const [confirmCloseAllOpen, setConfirmCloseAllOpen] = useState(false);
 	const [copyNotice, setCopyNotice] = useState(false);
 	const [loading, setLoading] = useState(false);
+	const [contentReady, setContentReady] = useState(false);
+	const [motionOpen, setMotionOpen] = useState(false);
 	const [appTheme, setAppTheme] = useState(
 		() => document.documentElement.dataset.theme ?? "light",
 	);
@@ -107,6 +112,26 @@ export function TerminalDock(props: {
 			? theme.xtermDark
 			: theme.xterm;
 	const { open, collapsed } = props;
+
+	useEffect(() => {
+		if (props.closing) return;
+		const frame = window.requestAnimationFrame(() => setMotionOpen(true));
+		return () => window.cancelAnimationFrame(frame);
+	}, [props.closing]);
+
+	// Grid 行高每帧变化时，xterm 的首次 fit 和缓冲区回放会抢占主线程。
+	// 先完成面板开场动画，再初始化终端，避免入口点击出现掉帧。
+	useEffect(() => {
+		if (!open) {
+			setContentReady(false);
+			return;
+		}
+		const timer = window.setTimeout(
+			() => setContentReady(true),
+			TERMINAL_OPEN_ANIMATION_MS,
+		);
+		return () => window.clearTimeout(timer);
+	}, [open]);
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -125,7 +150,7 @@ export function TerminalDock(props: {
 	}, [activeTab?.id]);
 
 	useEffect(() => {
-		if (!open) return;
+		if (!open || !contentReady) return;
 		let cancelled = false;
 		async function loadTabs() {
 			setLoading(true);
@@ -149,7 +174,7 @@ export function TerminalDock(props: {
 		return () => {
 			cancelled = true;
 		};
-	}, [props.agentId, props.terminal, open]);
+	}, [props.agentId, props.terminal, open, contentReady]);
 
 	useEffect(() => {
 		const offData = props.terminal.onData((payload) => {
@@ -181,7 +206,7 @@ export function TerminalDock(props: {
 	useEffect(() => {
 		xtermRef.current = null;
 		fitRef.current = null;
-		if (collapsed || !activeTab || !containerRef.current) return;
+		if (collapsed || !contentReady || !activeTab || !containerRef.current) return;
 
 		const terminal = new Terminal({
 			cursorBlink: true,
@@ -231,7 +256,7 @@ export function TerminalDock(props: {
 			dataDisposable.dispose();
 			terminal.dispose();
 		};
-	}, [activeTab, collapsed, props.terminal, xtermTheme]);
+	}, [activeTab, collapsed, contentReady, props.terminal, xtermTheme]);
 
 	useEffect(() => {
 		fitRef.current?.fit();
@@ -245,9 +270,9 @@ export function TerminalDock(props: {
 	}, [props.height, activeTab, props.terminal]);
 
 	useEffect(() => {
-		if (collapsed || !activeTab || activeTab.exited) return;
+		if (collapsed || !contentReady || !activeTab || activeTab.exited) return;
 		requestAnimationFrame(() => xtermRef.current?.focus());
-	}, [activeTab?.id, activeTab?.exited, collapsed]);
+	}, [activeTab?.id, activeTab?.exited, collapsed, contentReady]);
 
 	useEffect(
 		() => () => {
@@ -336,6 +361,7 @@ export function TerminalDock(props: {
 			className={`terminal-dock${collapsed ? " collapsed" : ""}`}
 			data-theme={themeId}
 			data-open={open}
+			data-motion-state={props.closing || !motionOpen ? "hidden" : "visible"}
 			style={{ height: collapsed ? 34 : props.height }}
 		>
 			<div
@@ -378,7 +404,7 @@ export function TerminalDock(props: {
 						className="terminal-icon-btn"
 						onClick={() => void addTab()}
 						title={t("terminal.new")}
-						disabled={loading}
+						disabled={loading || !contentReady}
 					>
 						<Plus size={14} />
 					</button>
@@ -444,7 +470,7 @@ export function TerminalDock(props: {
 					onPointerDownCapture={focusTerminalSoon}
 					onContextMenu={(event) => void copySelectionOnContextMenu(event)}
 				>
-					{loading && <div className="terminal-placeholder">{t("terminal.starting")}</div>}
+					{(loading || !contentReady) && <div className="terminal-placeholder">{t("terminal.starting")}</div>}
 					<div ref={containerRef} className="terminal-xterm" />
 					{copyNotice && <div className="terminal-copy-notice">{t("terminal.copied")}</div>}
 				</div>

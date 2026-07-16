@@ -2593,6 +2593,39 @@ export const TurnRow = memo(function TurnRow(props: {
 						<span className="turn-row-duration">{formatDuration(duration)}</span>
 					)}
 				</div>
+				{/* 执行过程概要（含工具/思考/中间回答），置于最终回答之前以保持调用顺序。 */}
+				{hasFoldableContent && summaryText && (
+					<div className="execution-summary">
+						<button
+							type="button"
+							className="execution-summary-toggle"
+							onClick={() => setExecutionExpanded((prev) => !prev)}
+							aria-expanded={executionExpanded}
+							title={executionExpanded ? t("common.collapse") : t("common.expand")}
+						>
+							{executionExpanded ? (
+								<ChevronDown size={14} aria-hidden="true" />
+							) : (
+								<ChevronRight size={14} aria-hidden="true" />
+							)}
+							<span>{summaryText}</span>
+						</button>
+						{executionExpanded && (
+							<div className="execution-summary-details">
+								{executionItems.map(renderExecutionItem)}
+								{/* 最终回答的思考也纳入折叠区 */}
+								{hasFinalThinking && (
+									<ThinkingBlock
+										text={finalThinking!}
+										startedAt={run.startedAt}
+										endedAt={finalMessageItem!.message.timestamp > run.startedAt ? finalMessageItem!.message.timestamp : run.endedAt}
+										showThinking={props.showThinking}
+									/>
+								)}
+							</div>
+						)}
+					</div>
+				)}
 				{/* 最终回答（始终可见）；其中的思考已归入执行过程折叠区 */}
 				{finalMessageItem && (
 					<Fragment key={finalMessageItem.message.id}>
@@ -2638,39 +2671,6 @@ export const TurnRow = memo(function TurnRow(props: {
 							/>
 						) : null}
 					</Fragment>
-				)}
-				{/* 执行过程概要（含工具/思考/中间回答），默认折叠，置于最终回答之后，避免抢占首屏 */}
-				{hasFoldableContent && summaryText && (
-					<div className="execution-summary">
-						<button
-							type="button"
-							className="execution-summary-toggle"
-							onClick={() => setExecutionExpanded((prev) => !prev)}
-							aria-expanded={executionExpanded}
-							title={executionExpanded ? t("common.collapse") : t("common.expand")}
-						>
-							{executionExpanded ? (
-								<ChevronDown size={14} aria-hidden="true" />
-							) : (
-								<ChevronRight size={14} aria-hidden="true" />
-							)}
-							<span>{summaryText}</span>
-						</button>
-						{executionExpanded && (
-							<div className="execution-summary-details">
-								{executionItems.map(renderExecutionItem)}
-								{/* 最终回答的思考也纳入折叠区 */}
-								{hasFinalThinking && (
-									<ThinkingBlock
-										text={finalThinking!}
-										startedAt={run.startedAt}
-										endedAt={finalMessageItem!.message.timestamp > run.startedAt ? finalMessageItem!.message.timestamp : run.endedAt}
-										showThinking={props.showThinking}
-									/>
-								)}
-							</div>
-						)}
-					</div>
 				)}
 				{/* 操作栏 */}
 				{mergedText && !editing && (
