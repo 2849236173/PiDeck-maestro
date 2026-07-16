@@ -6,7 +6,13 @@ import type { AppSettings } from "../../shared/types";
 
 type PiProcessSettings = Pick<
   AppSettings,
-  "piProxyEnabled" | "piProxyUrl" | "piProxyBypass" | "customPiPath"
+  | "piProxyEnabled"
+  | "piProxyUrl"
+  | "piProxyBypass"
+  | "customPiPath"
+  | "wslEnabled"
+  | "wslDistro"
+  | "wslUser"
 >;
 
 type PiProcessLocator = Pick<
@@ -76,8 +82,16 @@ export class PiProcess extends EventEmitter {
     else if (trustOverride === "no-approve") args.push("--no-approve");
 
     // 用户手动指定的 pi 路径优先于自动检测，解决 npm global、nvm 等路径未在 PATH 中的问题
-    const command = this.locator.resolveCommand(this.settings?.customPiPath);
+    const command = this.locator.resolveCommand(this.settings?.customPiPath, this.settings?.wslEnabled, this.settings?.wslDistro, this.settings?.wslUser);
     const invocation = this.locator.createInvocation(command, args);
+
+    // WSL 模式下需要把 Windows 路径转为 Linux 路径，否则 pi 在 WSL 中找不到项目目录和 session 文件。
+    const wslCwd = invocation.wsl ? PiLocator.windowsPathToWslPath(this.cwd) : this.cwd;
+    // 如果 args 中携带了 --session，也需要把 Windows 路径转为 WSL 路径。
+    const sessionIndex = invocation.args.indexOf("--session");
+    const finalArgs = sessionIndex >= 0 && invocation.wsl
+      ? invocation.args.map((a, i) => i === sessionIndex + 1 ? PiLocator.windowsPathToWslPath(a) : a)
+      : invocation.args;
 
     // 初始化诊断信息。versionCheck 只作为故障诊断字段，不能阻塞 RPC 启动；
     // 若缓存里已有成功结果立即填入，否则先标记 false，后台检查完成后再更新。
@@ -85,8 +99,8 @@ export class PiProcess extends EventEmitter {
     this.piMajorVersion = cachedVersion?.status === "done" ? cachedVersion.majorVersion : this.piMajorVersion;
     this.diagnostics = {
       command: command,
-      args,
-      cwd: this.cwd,
+      args: finalArgs,
+      cwd: wslCwd,
       stderr: [],
       exitCode: null,
       exitSignal: null,
@@ -98,11 +112,11 @@ export class PiProcess extends EventEmitter {
     // 每个 agent 绑定独立 cwd，确保 pi 自己发现项目级 AGENTS.md、settings 和 session 分组。
     // 打包后的 Electron 不一定继承用户终端 PATH；这里补齐跨平台 Node 工具链常见 bin 目录，尽量让已安装 pi 的用户开箱即用。
     // Windows 下通过 PiLocator.createInvocation 显式包裹含空格的 npm shim 路径，避免 cmd 拆分路径导致 agent 启动失败。
-    this.proc = spawn(invocation.command, invocation.args, {
-      cwd: this.cwd,
+    this.proc = spawn(invocation.command, finalArgs, {
+      cwd: wslCwd,
       stdio: ["pipe", "pipe", "pipe"],
       shell: invocation.shell,
-      env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix),
+      env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix, invocation.wsl),
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
 

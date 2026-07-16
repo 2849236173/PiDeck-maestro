@@ -159,43 +159,36 @@ export function SettingsModal(props: {
 	const tabs: Array<{
 		id: SettingsTabId;
 		label: string;
-		description: string;
 		icon: ReactNode;
 	}> = [
 		{
 			id: "base",
 			label: t("settings.tabs.base"),
-			description: t("settings.tabs.baseDesc"),
 			icon: <Settings2 size={16} />,
 		},
 		{
 			id: "proxy",
 			label: t("settings.tabs.proxy"),
-			description: t("settings.tabs.proxyDesc"),
 			icon: <Network size={16} />,
 		},
 		{
 			id: "web",
 			label: t("settings.tabs.web"),
-			description: t("settings.tabs.webDesc"),
 			icon: <Globe2 size={16} />,
 		},
 		{
 			id: "dev",
 			label: t("settings.tabs.dev"),
-			description: t("settings.tabs.devDesc"),
 			icon: <Wrench size={16} />,
 		},
 		{
 			id: "pet",
 			label: t("settings.tabs.pet"),
-			description: t("settings.tabs.petDesc"),
 			icon: <PawPrint size={16} />,
 		},
 		{
 			id: "storage",
 			label: t("settings.tabs.storage"),
-			description: t("settings.tabs.storageDesc"),
 			icon: <Trash2 size={16} />,
 		},
 	];
@@ -250,10 +243,7 @@ export function SettingsModal(props: {
 								onClick={() => setActiveTab(tab.id)}
 							>
 								<span className="settings-tab-icon">{tab.icon}</span>
-								<span>
-									<strong>{tab.label}</strong>
-									<small>{tab.description}</small>
-								</span>
+								<strong>{tab.label}</strong>
 							</button>
 						))}
 					</nav>
@@ -802,7 +792,51 @@ export function SettingsModal(props: {
 											</small>
 										)}
 									</div>
-									<div className="setting-row">
+								<div className="setting-pi-wsl-panel">
+									<SettingSwitch
+										title={t("settings.wsl.enable")}
+										description={t("settings.wsl.enableDesc")}
+										checked={props.settings.wslEnabled}
+										onChange={(value) => props.onChange({ wslEnabled: value })}
+									/>
+									{props.settings.wslEnabled && (
+										<>
+											<div className="setting-wsl-fields">
+												<TextField
+													className="setting-field"
+													label={t("settings.wsl.distro")}
+													value={props.settings.wslDistro}
+													onChange={(value) => props.onChange({ wslDistro: value })}
+													placeholder="Ubuntu"
+												/>
+												<TextField
+													className="setting-field"
+													label={t("settings.wsl.user")}
+													value={props.settings.wslUser}
+													onChange={(value) => props.onChange({ wslUser: value })}
+													placeholder="root"
+												/>
+											</div>
+											<small className="setting-status info">
+												{t("settings.wsl.detectHint")}
+											</small>
+											<div className="setting-wsl-hints">
+												<div className="setting-wsl-hint">
+													<strong>{t("settings.wsl.howToGetDistro")}</strong>
+													<code>wsl -l -v</code>
+												</div>
+												<div className="setting-wsl-hint">
+													<strong>{t("settings.wsl.howToGetUser")}</strong>
+													<code>wsl -d {props.settings.wslDistro || "Ubuntu"} -u {props.settings.wslUser || "root"} whoami</code>
+												</div>
+											</div>
+											<small className="setting-status warning">
+												{t("settings.wsl.warning")}
+											</small>
+										</>
+									)}
+								</div>
+								<div className="setting-row">
 										<div>
 											<strong>{t("settings.currentVersion")}</strong>
 											<small>v{props.appInfo.version}</small>

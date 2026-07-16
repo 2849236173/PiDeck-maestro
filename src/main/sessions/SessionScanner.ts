@@ -8,10 +8,30 @@ import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 export class SessionScanner {
   private readonly root = join(app.getPath("home"), ".pi", "agent", "sessions");
   private readonly codexRoot = join(app.getPath("home"), ".codex", "sessions");
+  /** WSL 会话目录（通过 UNC 路径访问），由 configureWsl 设置 */
+  private wslRoot = "";
+
+  /**
+   * 配置 WSL 会话目录。当启用 WSL 模式时，额外扫描 WSL 中的 pi 会话。
+   * wslDistro 和 wslUser 用于构造 UNC 路径：\\wsl$\<distro>\home\<user>\.pi\agent\sessions
+   */
+  configureWsl(wslDistro: string, wslUser: string) {
+    this.wslRoot = `\\\\wsl$\\${wslDistro}\\home\\${wslUser}\\.pi\\agent\\sessions`;
+  }
+
+  /** 清除 WSL 配置 */
+  clearWsl() {
+    this.wslRoot = "";
+  }
 
   async list(projectPath?: string): Promise<SessionSummary[]> {
     const files = await this.collectJsonl(this.root).catch(() => [] as string[]);
-    const summaries = await Promise.all(files.map(file => this.readSummary(file).catch(() => null)));
+    // 如果有 WSL 配置，也扫描 WSL 会话目录
+    const wslFiles = this.wslRoot
+      ? await this.collectJsonl(this.wslRoot).catch(() => [] as string[])
+      : [];
+    const allFiles = [...files, ...wslFiles];
+    const summaries = await Promise.all(allFiles.map(file => this.readSummary(file).catch(() => null)));
 
     return summaries
       .filter((summary): summary is SessionSummary => Boolean(summary))

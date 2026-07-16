@@ -319,6 +319,8 @@ export type AppSettings = {
 	desktopProxyBypass: string;
 	/** 用户手动指定的 pi CLI 命令路径，自动检测不到时用于兜底 */
 	customPiPath: string;
+	/** WSL 中检测到的 pi 命令路径（只读缓存，由 PiLocator.check 回填） */
+	wslPiCommand?: string;
 	/** 是否发送匿名、低频、最小字段的使用统计 */
 	telemetryEnabled: boolean;
 	/** 是否开启局域网 Web 服务 */
@@ -343,6 +345,12 @@ export type AppSettings = {
 	maxEditorFileSizeMB: number;
 	/** 外部编辑器配置：首次异步检测后保存，用户可在设置中手动覆盖路径。 */
 	externalEditors: ExternalEditorSettings;
+	/** 是否启用 WSL fallback：在 Windows 自动检测不到 pi 时，尝试从 WSL 启动 pi */
+	wslEnabled: boolean;
+	/** WSL 发行版名称，如 Debian、Ubuntu */
+	wslDistro: string;
+	/** WSL 用户名，如 piuser */
+	wslUser: string;
 
 	// ── 桌面宠物（全局聚合单宠，默认关闭，不破坏现状） ──
 	/** 是否启用桌面宠物悬浮窗，默认 false：关闭后应用与现状完全一致 */

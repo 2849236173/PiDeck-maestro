@@ -19,6 +19,15 @@ export type PiCommandInvocation = {
    * 必须禁止 Node 再次转义参数，否则路径中含空格会被 cmd 误解析为不存在的路径。
    */
   windowsVerbatimArguments?: boolean;
+  /**
+   * 当 pi 位于 WSL 中时，command 固定为 wsl.exe，args 会携带 distro/user/pi 参数。
+   * 下游 PiProcess 需要用此标志决定是否把 Windows cwd 转为 Linux 路径。
+   */
+  wsl?: {
+    distro: string;
+    user: string;
+    piCommand: string;
+  };
 };
 
 /** Resolves the pi CLI across packaged Electron environments where shell PATH is often incomplete. */
@@ -28,7 +37,7 @@ export class PiLocator {
    * When `customPath` is provided, it takes priority over auto-detection —
    * this is the user's manually specified path from settings.
    */
-  resolveCommand(customPath?: string) {
+  resolveCommand(customPath?: string, wslEnabled?: boolean, wslDistro?: string, wslUser?: string) {
     const normalizedCustomPath = this.normalizeCustomPath(customPath);
     // 用户手动指定路径优先，适用于 npm/pnpm/yarn 全局安装、nvm/volta/asdf/mise 等极端情况。
     // 旧版本可能已保存 pi.ps1；Windows 现在不再调用 PowerShell shim，遇到时忽略并回退自动检测。
@@ -36,7 +45,15 @@ export class PiLocator {
       return normalizedCustomPath;
     }
     const candidates = this.getCandidates();
-    return candidates.find(candidate => existsSync(candidate)) ?? "pi";
+    const found = candidates.find(candidate => existsSync(candidate));
+    if (found) return found;
+
+    // WSL 模式：直接尝试 WSL，不做 Windows fallback。
+    if (wslEnabled && process.platform === "win32" && wslDistro && wslUser) {
+      const wslCommand = this.resolveWslCommand(wslDistro, wslUser);
+      if (wslCommand) return wslCommand;
+    }
+    return "pi";
   }
 
   getSearchDirs() {
@@ -65,7 +82,16 @@ export class PiLocator {
     return [...new Set(dirs.filter(Boolean))];
   }
 
-  createProcessEnv(settings?: PiProxySettings, pathPrefix?: string) {
+  createProcessEnv(settings?: PiProxySettings, pathPrefix?: string, wsl?: PiCommandInvocation["wsl"]) {
+    if (wsl) {
+      // WSL 模式不需要把 Windows 工具链目录塞进 PATH；wsl.exe 会继承系统环境。
+      // 但仍需注入代理变量，因为 wsl.exe 子进程会通过 Windows 网络栈访问外网。
+      const base = {
+        ...process.env,
+        PATH: (pathPrefix ? [pathPrefix] : []).join(delimiter),
+      };
+      return this.applyPiProxyEnv(base, settings);
+    }
     const searchDirs = pathPrefix
       ? [pathPrefix, ...this.getSearchDirs().filter(dir => dir !== pathPrefix)]
       : this.getSearchDirs();
@@ -78,6 +104,20 @@ export class PiLocator {
   }
 
   createInvocation(command: string, args: string[]): PiCommandInvocation {
+    // WSL 模式：command 为 "wsl://<distro>/<user>/pi" 形式的标记
+    if (command.startsWith("wsl://")) {
+      const parts = command.split("/");
+      const distro = parts[1];
+      const user = parts[2];
+      const piCommand = parts[3] || "pi";
+      return {
+        command: "wsl.exe",
+        args: ["-d", distro, "-u", user, piCommand, ...args],
+        shell: false,
+        wsl: { distro, user, piCommand },
+      };
+    }
+
     if (process.platform !== "win32") {
       return { command, args, shell: false, pathPrefix: this.getCommandBinDir(command) };
     }
@@ -136,16 +176,37 @@ export class PiLocator {
       return { installed: false, searchedDirs: [], error: "请输入 pi.cmd 或 pi 路径。" };
     }
     if (this.isUnsupportedPowerShellShim(command)) return this.unsupportedPowerShellStatus(command);
+    if (command.startsWith("wsl://")) {
+      const parts = command.split("/");
+      const distro = parts[1];
+      const user = parts[2];
+      const piCommand = parts[3] || "pi";
+      return this.checkWslCommand(distro, user, piCommand);
+    }
     return this.runCheck(command, []);
   }
 
-  async check(customPath?: string): Promise<PiInstallStatus> {
+  async check(customPath?: string, wslEnabled?: boolean, wslDistro?: string, wslUser?: string): Promise<PiInstallStatus> {
     const normalizedCustomPath = this.normalizeCustomPath(customPath);
     if (normalizedCustomPath && this.isUnsupportedPowerShellShim(normalizedCustomPath)) {
       return this.unsupportedPowerShellStatus(normalizedCustomPath, this.getSearchDirs());
     }
-    const command = normalizedCustomPath || this.resolveCommand(customPath);
+    const command = normalizedCustomPath || this.resolveCommand(customPath, wslEnabled, wslDistro, wslUser);
     const searchedDirs = this.getSearchDirs();
+
+    if (command.startsWith("wsl://")) {
+      const parts = command.split("/");
+      const distro = parts[1];
+      const user = parts[2];
+      const piCommand = parts[3] || "pi";
+      const wslStatus = await this.checkWslCommand(distro, user, piCommand);
+      return {
+        ...wslStatus,
+        command: `wsl -d ${distro} -u ${user} ${piCommand}`,
+        searchedDirs: [],
+      };
+    }
+
     return this.runCheck(command, searchedDirs);
   }
 
@@ -216,7 +277,7 @@ export class PiLocator {
     return new Promise(resolve => {
       const invocation = this.createInvocation(command, ["--version"]);
       execFile(invocation.command, invocation.args, {
-        env: this.createProcessEnv(undefined, invocation.pathPrefix),
+        env: this.createProcessEnv(undefined, invocation.pathPrefix, invocation.wsl),
         shell: invocation.shell,
         windowsHide: true,
         timeout: 8_000,
@@ -238,9 +299,67 @@ export class PiLocator {
   }
 
   /**
-   * 解码子进程输出，兼容 Windows 中文环境下 cmd/powershell 的 GBK 输出。
-   * 优先 UTF-8，含乱码替换字符时尝试 GBK 解码。
+   * 尝试在 WSL 中检测 pi 是否可用。
+   * 返回 "wsl://<distro>/<user>/pi" 标记字符串，供 resolveCommand/createInvocation 识别。
    */
+  private resolveWslCommand(distro: string, user: string): string | undefined {
+    try {
+      const wslArgs = ["-d", distro, "-u", user, "which", "pi"];
+      const result = execFileSync("wsl.exe", wslArgs, {
+        encoding: "utf8",
+        timeout: 8_000,
+        windowsHide: true,
+      }).trim();
+      if (result && result.length > 0 && !result.includes("not found")) {
+        return `wsl://${distro}/${user}/pi`;
+      }
+    } catch {
+      // WSL 不可用或未安装 pi，静默忽略，回退到普通 "pi"
+    }
+    return undefined;
+  }
+
+  private checkWslCommand(distro: string, user: string, piCommand: string): Promise<PiInstallStatus> {
+    return new Promise(resolve => {
+      const wslArgs = ["-d", distro, "-u", user, piCommand, "--version"];
+      execFile("wsl.exe", wslArgs, {
+        env: this.createProcessEnv(undefined, undefined, { distro, user, piCommand }),
+        shell: false,
+        windowsHide: true,
+        timeout: 8_000,
+        encoding: "utf8",
+      }, (error, stdout, stderr) => {
+        if (error) {
+          const raw = stderr?.trim() || this.cleanExecError(error.message);
+          resolve({ installed: false, searchedDirs: [], error: raw });
+          return;
+        }
+        resolve({ installed: true, command: `wsl -d ${distro} -u ${user} ${piCommand}`, version: stdout.trim(), searchedDirs: [] });
+      });
+    });
+  }
+
+  /**
+   * 将 Windows 路径转换为 WSL/Linux 路径。
+   * - D:\project -> /mnt/d/project
+   * - \\wsl$\Debian\home\piuser\project -> /home/piuser/project
+   */
+  static windowsPathToWslPath(windowsPath: string): string {
+    if (!windowsPath) return windowsPath;
+    // WSL UNC 路径: \\wsl$\<distro>\... -> /home/<user>/...
+    if (windowsPath.startsWith("\\\\wsl$")) {
+      const parts = windowsPath.split(/[\\\/]/).filter(Boolean);
+      if (parts.length >= 3 && parts[0].toLowerCase() === "wsl$") {
+        return "/" + parts.slice(2).join("/");
+      }
+    }
+    // 盘符路径: C:\folder -> /mnt/c/folder
+    const driveMatch = windowsPath.match(/^([A-Za-z]):\\(.*)/);
+    if (driveMatch) {
+      return "/mnt/" + driveMatch[1].toLowerCase() + "/" + driveMatch[2].replace(/\\/g, "/");
+    }
+    return windowsPath;
+  }
   private decodeBuffer(buf: Buffer | null): string {
     if (!buf || buf.length === 0) return '';
     const utf8 = buf.toString('utf8');

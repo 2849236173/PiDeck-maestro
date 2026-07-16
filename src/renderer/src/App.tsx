@@ -943,6 +943,9 @@ export function App() {
     desktopProxyUrl: "http://127.0.0.1:7890",
     desktopProxyBypass: "localhost,127.0.0.1,::1",
     customPiPath: "",
+    wslEnabled: false,
+    wslDistro: "Ubuntu",
+    wslUser: "root",
     telemetryEnabled: true,
     webServiceEnabled: false,
     webServiceHost: "0.0.0.0",
@@ -6499,6 +6502,8 @@ ${goalTextRef.current}
             fontSize: "var(--font-size-caption)",
             gap: "8px",
             padding: "10px 16px",
+            width: "fit-content",
+            maxWidth: "fit-content",
           },
         }}
         duration={3500}

@@ -1573,7 +1573,7 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.piCheck, async () => {
 		// 用户手动指定的路径优先于自动检测
 		const settings = settingsStore.get();
-		const status = await piLocator.check(settings.customPiPath);
+		const status = await piLocator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
 		void appLogger.info("pi", "Pi check completed", {
 			installed: status.installed,
 			version: status.version,
@@ -1884,6 +1884,14 @@ function registerIpc() {
 						await settingsStore.update({ webServiceEnabled: false });
 					}
 					throw error;
+				}
+			}
+			// WSL 设置变更时同步更新会话扫描器
+			if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
+				if (settings.wslEnabled && settings.wslDistro && settings.wslUser) {
+					sessionScanner.configureWsl(settings.wslDistro, settings.wslUser);
+				} else {
+					sessionScanner.clearWsl();
 				}
 			}
 			return settings;
@@ -2715,6 +2723,16 @@ app.whenReady().then(async () => {
 	);
 
 	await settingsStore.load();
+
+	// 根据已加载的 WSL 设置配置会话扫描器，使其能同时扫描 WSL 中的 pi 会话目录
+	{
+		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
+		if (wslEnabled && wslDistro && wslUser) {
+			sessionScanner.configureWsl(wslDistro, wslUser);
+		} else {
+			sessionScanner.clearWsl();
+		}
+	}
 
 	// 自动部署 PiDeck 内置扩展：这些扩展提供桌面端差异预览、提问卡片和 Plan Mode。
 	// 放到 pi 自动发现目录后，新建/重启的 RPC Agent 会自动加载；只在内容变更时覆盖，避免用户目录产生无意义写入。
