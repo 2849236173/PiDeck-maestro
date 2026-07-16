@@ -77,6 +77,11 @@
   --color-info: #2563eb;
   --color-code-bg: #111418;
   --color-code-text: #d1d5db;
+  --color-chat-card-bg: #fafafa;
+  --color-chat-muted-bg: #f4f4f5;
+  --color-chat-control-bg: #ffffff;
+  --color-chat-table-bg: #ffffff;
+  --color-chat-link: #2762ea;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -339,6 +344,11 @@
   --color-info: #6aa4ff;
   --color-code-bg: #111418;
   --color-code-text: #d1d5db;
+  --color-chat-card-bg: #20242a;
+  --color-chat-muted-bg: #242932;
+  --color-chat-control-bg: #1d2024;
+  --color-chat-table-bg: #1d2024;
+  --color-chat-link: #93c5fd;
   --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.06);
   --shadow-popover: 0 14px 36px rgba(0, 0, 0, 0.38);
   --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.55);
@@ -2265,7 +2275,7 @@ body.is-terminal-resizing {
 }
 .chat-header {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px 18px;
@@ -2278,7 +2288,7 @@ body.is-terminal-resizing {
 .chat-title-block {
   display: flex;
   align-items: center;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -2286,16 +2296,18 @@ body.is-terminal-resizing {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   height: 30px;
 }
 .chat-title-row > strong {
+  min-width: 0;
   flex-shrink: 1;
 }
 .chat-header strong {
   display: block;
-  max-width: 260px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2311,7 +2323,7 @@ body.is-terminal-resizing {
   padding: 0 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   color: var(--color-text-primary);
   flex: 0 0 auto;
   font-family: var(--font-family-business);
@@ -2371,10 +2383,12 @@ body.is-terminal-resizing {
   gap: 8px;
   align-items: center;
   justify-content: flex-start;
+  justify-self: end;
   overflow: visible;
   max-width: 100%;
   min-width: 0;
   padding-bottom: 0;
+  flex: 0 0 auto;
   flex-wrap: nowrap;
   scrollbar-width: none;
 }
@@ -3466,7 +3480,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   padding: 0 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 500;
@@ -3774,7 +3788,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   min-width: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 14px;
-  background: #f4f4f5;
+  background: var(--color-chat-muted-bg);
   overflow: hidden;
 }
 
@@ -4414,7 +4428,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   width: fit-content;
   max-width: min(82%, 64ch);
   min-width: 0;
-  background: #FAFAFA;
+  background: var(--color-chat-card-bg);
   border: 1px solid var(--color-border-subtle);
   border-radius: 14px;
   padding: 9px 13px;
@@ -5136,7 +5150,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   padding: 0 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--color-chat-control-bg);
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 500;
@@ -5145,7 +5159,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 .ask-question-card-tool-inner .ask-question-card-option-item.selected {
   border-color: var(--color-accent);
-  background: #ffffff;
+  background: var(--color-chat-control-bg);
   color: var(--color-text-primary);
 }
 .ask-question-card-tool-inner .ask-question-card-option-selector {
@@ -5193,10 +5207,10 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   padding: 0 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
-  color: #2762EA;
+  color: var(--color-chat-link);
   font-weight: 700;
 }
 .ask-question-card-tool-inner .ask-question-card-answered svg {
@@ -5208,11 +5222,11 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 /* 内联提问卡片（实时会话中 system 消息形式） */
 .ask-question-card {
   border-radius: 14px;
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   border: 1px solid var(--color-border-strong);
 }
 .ask-question-card.pending {
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
 }
 .ask-question-card-header {
   display: flex;
@@ -5225,12 +5239,9 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 .ask-question-card-header .ask-question-card-title {
   flex: 1;
-  color: #2762EA;
+  color: var(--color-chat-link);
   font-family: var(--font-family-base);
   font-weight: 700;
-}
-:root[data-theme="dark"] .ask-question-card-header .ask-question-card-title {
-  color: #93c5fd;
 }
 .ask-question-card-status {
   font-size: var(--font-size-xs);
@@ -5271,7 +5282,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid var(--color-border-subtle);
-  background: #ffffff;
+  background: var(--color-chat-control-bg);
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 500;
@@ -5319,7 +5330,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   padding: var(--space-2) var(--space-3);
   border-radius: 14px;
   border: 1px solid var(--color-border-strong);
-  background: #ffffff;
+  background: var(--color-chat-control-bg);
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
   font-family: var(--font-family-base);
@@ -5469,7 +5480,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   padding: var(--space-3);
   border: 1px solid var(--color-border-subtle);
   border-radius: 14px;
-  background: #f4f4f5;
+  background: var(--color-chat-muted-bg);
 }
 .code-block-wrap {
   position: relative;
@@ -5478,7 +5489,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   margin: var(--space-3) 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 14px;
-  background: #f4f4f5;
+  background: var(--color-chat-muted-bg);
   overflow: hidden;
 }
 .code-block-wrap pre {
@@ -5497,7 +5508,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   height: 26px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--color-chat-control-bg);
   color: var(--color-text-secondary);
   padding: 0 12px;
   font-size: var(--font-size-caption);
@@ -5538,7 +5549,7 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   margin: var(--space-3) 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 14px;
-  background: #FFFFFF;
+  background: var(--color-chat-table-bg);
   overflow-x: auto;
 }
 .markdown-body .table-wrap > table {
@@ -5567,13 +5578,13 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   border-left: none;
 }
 .markdown-body .table-wrap thead {
-  background: #F4F4F5;
+  background: var(--color-chat-muted-bg);
 }
 .markdown-body .table-wrap tr td {
-  background: #FFFFFF;
+  background: var(--color-chat-table-bg);
 }
 .markdown-body .table-wrap tr:nth-child(even) td {
-  background: #FFFFFF;
+  background: var(--color-chat-table-bg);
 }
 .markdown-body thead {
   background: var(--color-bg-muted);
@@ -8229,7 +8240,7 @@ body.is-composer-resizing .composer-resize-handle::after {
   padding: 0 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   font-family: var(--font-family-business);
   line-height: var(--line-height-caption);
   font-size: var(--font-size-caption);
@@ -8239,14 +8250,14 @@ body.is-composer-resizing .composer-resize-handle::after {
   max-width: none;
   flex: 0 0 auto;
   color: var(--color-text-primary);
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   border-color: var(--color-border-subtle);
 }
 .session-status .cache-chip {
   max-width: none;
   flex: 0 0 auto;
   color: var(--color-text-primary);
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   border-color: var(--color-border-subtle);
 }
 
@@ -8272,7 +8283,7 @@ body.is-composer-resizing .composer-resize-handle::after {
 }
 
 .agent-status-badge.status-idle {
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   color: var(--color-text-secondary);
 }
 
@@ -8373,7 +8384,7 @@ body.is-composer-resizing .composer-resize-handle::after {
   height: 26px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
-  background: #fafafa;
+  background: var(--color-chat-card-bg);
   color: var(--color-text-secondary);
   padding: 0 12px;
   font-size: var(--font-size-caption);
@@ -16186,26 +16197,6 @@ a.config-btn {
   overflow-y: auto;
   padding: 14px 18px;
   color: var(--color-text-primary);
-}
-
-.scratch-pad-status {
-  height: 28px;
-  padding: 0 18px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-muted);
-  flex-shrink: 0;
-}
-
-.scratch-pad-status-text {
-  font-size: var(--font-size-caption, 11px);
-  color: var(--color-text-tertiary);
-}
-
-.scratch-pad-status.error .scratch-pad-status-text {
-  color: var(--color-danger);
 }
 
 /* ---------- Scratch Pad 头部按钮（统一 icon-only 方钮） ---------- */

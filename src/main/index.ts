@@ -155,6 +155,11 @@ let appLogger: AppLogger;
 let rpcLogger: RpcLogger;
 let feishuBridge: FeishuBridge | null = null;
 
+function applyNativeThemeSource(settings: AppSettings) {
+	// 原生标题栏不受 renderer CSS 影响；跟随应用主题，避免暗色界面顶部仍是系统浅色栏。
+	nativeTheme.themeSource = settings.theme === "system" ? "system" : settings.theme;
+}
+
 const RELEASES_URL = "https://github.com/ayuayue/pi-desktop/releases";
 const LATEST_RELEASE_API =
 	"https://api.github.com/repos/ayuayue/pi-desktop/releases/latest";
@@ -589,6 +594,7 @@ async function prepareMainPreloadPath() {
 }
 
 async function createWindow() {
+	applyNativeThemeSource(settingsStore.get());
 	const windowOptions = settingsStore.createWindowOptions();
 	const showMainWindowImmediately = shouldShowMainWindowImmediately();
 	const sourcePreloadPath = join(__dirname, "../preload/index.js");
@@ -1883,6 +1889,9 @@ function registerIpc() {
 				"desktopProxyBypass" in patch
 			) {
 				await applyDesktopProxy(settings);
+			}
+			if ("theme" in patch) {
+				applyNativeThemeSource(settings);
 			}
 			if ("useNativeTitleBar" in patch) {
 				settingsStore.notifyTitleBarChange(mainWindow);

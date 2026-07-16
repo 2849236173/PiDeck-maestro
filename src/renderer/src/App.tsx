@@ -778,6 +778,19 @@ export function App() {
     () => editorTabs.find((t) => t.id === activeTabId) ?? null,
     [editorTabs, activeTabId],
   );
+  // FileDiffViewer 会在读取函数变化时重载文件；这些 IO 入口必须保持引用稳定，避免 App 轮询/消息更新导致预览滚动回到顶部。
+  const readEditorFileContent = useCallback(
+    (path: string) => api.files.readContent(path),
+    [],
+  );
+  const readEditorOriginalContent = useCallback(
+    (path: string) => api.git.originalContent(path),
+    [],
+  );
+  const saveEditorFileContent = useCallback(
+    (path: string, content: string) => api.files.writeContent(path, content),
+    [],
+  );
   /** 打开（或切换到已存在的）编辑器 tab。已打开时跳转；未打开时新增，超过 5 个淘汰最早 tab。 */
   const openEditorTab = useCallback(
     (path: string, mode: "view" | "diff", originalContent?: string, modifiedContent?: string) => {
@@ -6074,9 +6087,9 @@ ${goalTextRef.current}
               onSelectTab={selectEditorTab}
               onCloseTab={closeEditorTab}
               onClose={() => { setActiveTabId(null); setEditorTabs([]); setDrawer(null); }}
-              readContent={(path) => api.files.readContent(path)}
-              readOriginalContent={(path) => api.git.originalContent(path)}
-              saveContent={(path, content) => api.files.writeContent(path, content)}
+              readContent={readEditorFileContent}
+              readOriginalContent={readEditorOriginalContent}
+              saveContent={saveEditorFileContent}
               theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
               maxFileSizeMB={settings.maxEditorFileSizeMB}
             />
@@ -6742,9 +6755,9 @@ ${goalTextRef.current}
           onSelectTab={selectEditorTab}
           onCloseTab={closeEditorTab}
           onClose={() => { setActiveTabId(null); setEditorTabs([]); }}
-          readContent={(path) => api.files.readContent(path)}
-          readOriginalContent={(path) => api.git.originalContent(path)}
-          saveContent={(path, content) => api.files.writeContent(path, content)}
+          readContent={readEditorFileContent}
+          readOriginalContent={readEditorOriginalContent}
+          saveContent={saveEditorFileContent}
           theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
           maxFileSizeMB={settings.maxEditorFileSizeMB}
         />

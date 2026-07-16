@@ -188,8 +188,6 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 		content,
 		mode,
 		isClosing,
-		isSaving,
-		hasError,
 		onChangeContent,
 		onSetMode,
 		onToggleCheckbox,
@@ -372,17 +370,6 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 				)}
 			</div>
 
-			<div className={`scratch-pad-status${hasError ? " error" : ""}`}>
-				<span className="scratch-pad-status-text">
-					{hasError
-						? t("scratchPad.saveError")
-						: isSaving
-							? t("scratchPad.saving")
-							: content
-								? t("scratchPad.saved")
-								: ""}
-				</span>
-			</div>
 		</div>
 	);
 });
