@@ -7243,6 +7243,29 @@ ${goalTextRef.current}
                 );
               })}
             </div>
+          ) : activeUiAsk.method === "confirm" ? (
+            <div className="ask-dialog-options ask-dialog-options-confirm">
+              <button
+                className="ask-dialog-option ask-dialog-option-yes"
+                onClick={() => {
+                  if (activeUiAsk.requestId && activeAgentId) {
+                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { confirmed: true });
+                  }
+                }}
+              >
+                {t("common.true")}
+              </button>
+              <button
+                className="ask-dialog-option ask-dialog-option-no"
+                onClick={() => {
+                  if (activeUiAsk.requestId && activeAgentId) {
+                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { confirmed: false });
+                  }
+                }}
+              >
+                {t("common.false")}
+              </button>
+            </div>
           ) : activeUiAsk.method === "input" || activeUiAsk.method === "editor" ? (
             <div className="ask-dialog-input-area">
               <input
