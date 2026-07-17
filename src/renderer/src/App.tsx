@@ -7270,30 +7270,40 @@ ${goalTextRef.current}
                   </button>
                 );
               })}
-              <form
-                className="ask-dialog-custom-input"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  const value = (formData.get("ask-custom") as string ?? "").trim();
-                  if (value && activeUiAsk.requestId && activeAgentId) {
-                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value });
-                  }
-                }}
-              >
+              <div className="ask-dialog-custom-input">
                 <input
-                  name="ask-custom"
+                  id="ask-dialog-custom-field"
                   className="ask-dialog-custom-field"
                   placeholder={t("ask.customPlaceholder")}
                   autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const el = document.getElementById("ask-dialog-custom-field") as HTMLInputElement | null;
+                      const val = el?.value?.trim() ?? "";
+                      if (val && activeUiAsk.requestId && activeAgentId) {
+                        api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: val });
+                      }
+                    }
+                  }}
                 />
                 <button
-                  type="submit"
+                  type="button"
                   className="ask-dialog-submit-btn"
+                  onClick={() => {
+                    /* 直接从 DOM 读取 input value，避免 React 18 批量更新导致 useState 未及时刷新 */
+                    const el = document.getElementById("ask-dialog-custom-field") as HTMLInputElement | null;
+                    console.log("[dialog] el =", el, "value =", el?.value);
+                    const val = el?.value?.trim() ?? "";
+                    if (val && activeUiAsk.requestId && activeAgentId) {
+                      console.log("[dialog] sending:", val);
+                      api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: val });
+                    }
+                  }}
                 >
                   {t("common.submit")}
                 </button>
-              </form>
+              </div>
             </div>
           ) : activeUiAsk.method === "input" || activeUiAsk.method === "editor" ? (
             <div className="ask-dialog-input-area">
