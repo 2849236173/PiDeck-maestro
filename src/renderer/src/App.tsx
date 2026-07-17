@@ -571,6 +571,8 @@ export function App() {
     Record<string, ImageContent[]>
   >({});
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
+  /** 存储用户在 select 弹框自定义输入框中键入的值，用于在后续 input 弹框中自动提交 */
+  const pendingCustomInputRef = useRef("");
   /** 外部编辑器列表 + 弹出气泡状态 */
   const [externalEditors, setExternalEditors] = useState<ExternalEditor[]>([]);
   const [editorsOpen, setEditorsOpen] = useState(false);
@@ -1899,6 +1901,15 @@ export function App() {
           delete next[request.requestId];
           if (Object.keys(next).length === 0) return null;
           return next;
+        }
+        /* 用户通过 select 弹框自定义输入框提交自定义值后，Pi 会收到 "✎ 自行输入..."
+           选项值并发送 input 弹框让用户输入。此处检测到 pending 值后自动提交 input
+           弹框，对用户表现为一次提交即完成，无需二次输入。 */
+        if (request.method === "input" && pendingCustomInputRef.current) {
+          const value = pendingCustomInputRef.current;
+          pendingCustomInputRef.current = "";
+          api.agents.sendUiResponse(activeAgentIdRef.current ?? "", request.requestId, { value });
+          return current; // 不显示 input 弹框
         }
         // 新增或更新 UI 请求
         return { ...(current ?? {}), [request.requestId]: request as UiRequest };
@@ -7282,7 +7293,9 @@ ${goalTextRef.current}
                       const el = document.getElementById("ask-dialog-custom-field") as HTMLInputElement | null;
                       const val = el?.value?.trim() ?? "";
                       if (val && activeUiAsk.requestId && activeAgentId) {
-                        api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: val });
+                        /* 保存自定义值到 ref，选择 "✎ 自行输入..." 让 Pi 走 input 流 */
+                        pendingCustomInputRef.current = val;
+                        api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: "✎ 自行输入..." });
                       }
                     }
                   }}
@@ -7291,13 +7304,12 @@ ${goalTextRef.current}
                   type="button"
                   className="ask-dialog-submit-btn"
                   onClick={() => {
-                    /* 直接从 DOM 读取 input value，避免 React 18 批量更新导致 useState 未及时刷新 */
                     const el = document.getElementById("ask-dialog-custom-field") as HTMLInputElement | null;
-                    console.log("[dialog] el =", el, "value =", el?.value);
                     const val = el?.value?.trim() ?? "";
                     if (val && activeUiAsk.requestId && activeAgentId) {
-                      console.log("[dialog] sending:", val);
-                      api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: val });
+                      /* 保存自定义值到 ref，选择 "✎ 自行输入..." 让 Pi 走 input 流 */
+                      pendingCustomInputRef.current = val;
+                      api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: "✎ 自行输入..." });
                     }
                   }}
                 >
