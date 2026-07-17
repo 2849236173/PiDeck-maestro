@@ -5989,7 +5989,8 @@ body.ask-dialog-open .ask-question-card.pending {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: min(8vh, 80px);
+  justify-content: center;
+  padding: min(6vh, 60px) var(--space-6);
   color: var(--color-text-tertiary);
 }
 .empty-logo {
@@ -6003,13 +6004,12 @@ body.ask-dialog-open .ask-question-card.pending {
     var(--color-accent-strong) 0%,
     var(--color-accent) 100%
   );
-  margin-bottom: var(--space-6);
-  margin-top: -40px;
+  margin-bottom: var(--space-8);
 }
 .empty-tagline {
   display: grid;
-  gap: var(--space-1);
-  margin: 0 0 var(--space-5);
+  gap: var(--space-3);
+  margin: 0 0 var(--space-8);
   color: var(--color-text-primary);
   font-family: var(--font-family-brand);
   font-size: clamp(28px, 3.8vw, 54px);
@@ -6023,11 +6023,11 @@ body.ask-dialog-open .ask-question-card.pending {
   font-style: italic;
 }
 .empty-state .empty-subtitle {
-  margin: var(--space-8) 0 var(--space-8);
+  margin: 0 0 var(--space-8);
   color: var(--color-text-secondary);
   font-family: var(--font-family-brand);
   font-size: clamp(24px, 3vw, 34px);
-  line-height: 1.45;
+  line-height: 1.55;
   text-align: center;
 }
 .empty-subtitle-line {
