@@ -5278,7 +5278,8 @@ body.is-terminal-resizing .terminal-resize-handle::before {
 }
 /* ask dialog 打开时隐藏内联卡片的全部内容，避免对话中重复显示提问 */
 body.ask-dialog-open .tool-card--ask,
-body.ask-dialog-open .ask-card-preview {
+body.ask-dialog-open .ask-card-preview,
+body.ask-dialog-open .ask-question-card.pending {
   display: none;
 }
 .tool-card--ask .tool-card-icon {
