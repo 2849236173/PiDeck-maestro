@@ -7270,34 +7270,30 @@ ${goalTextRef.current}
                   </button>
                 );
               })}
-              <div className="ask-dialog-custom-input">
+              <form
+                className="ask-dialog-custom-input"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const value = (formData.get("ask-custom") as string ?? "").trim();
+                  if (value && activeUiAsk.requestId && activeAgentId) {
+                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value });
+                  }
+                }}
+              >
                 <input
-                  id="ask-dialog-custom-field"
+                  name="ask-custom"
                   className="ask-dialog-custom-field"
                   placeholder={t("ask.customPlaceholder")}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const value = (e.target as HTMLInputElement).value.trim();
-                      if (value && activeUiAsk.requestId && activeAgentId) {
-                        api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value });
-                      }
-                    }
-                  }}
+                  autoFocus
                 />
                 <button
-                  type="button"
+                  type="submit"
                   className="ask-dialog-submit-btn"
-                  onClick={() => {
-                    const value = (document.getElementById("ask-dialog-custom-field") as HTMLInputElement)?.value?.trim() ?? "";
-                    if (value && activeUiAsk.requestId && activeAgentId) {
-                      api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value });
-                    }
-                  }}
                 >
                   {t("common.submit")}
                 </button>
-              </div>
+              </form>
             </div>
           ) : activeUiAsk.method === "input" || activeUiAsk.method === "editor" ? (
             <div className="ask-dialog-input-area">
