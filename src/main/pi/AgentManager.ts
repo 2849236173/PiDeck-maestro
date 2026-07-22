@@ -2721,8 +2721,38 @@ export class AgentManager {
 	 * 对话类请求写入消息流等待用户回答；fire-and-forget 请求只转发给渲染进程或忽略。
 	 */
 	private handleUIRequest(agentId: string, typed: Record<string, any>) {
-		const method = String(typed.method ?? "");
-		const requestId = String(typed.id ?? "");
+		// 一些第三方扩展（包括 pi-maestro）把自定义提问放在 params 中，
+		// 或使用 ask_userquestion/custom 作为 method。RPC 响应仍使用同一个 id，
+		// 因此这里把明确的交互请求归一化为桌面端可处理的标准 UI 方法。
+		const nested = typed.params && typeof typed.params === "object" ? typed.params : undefined;
+		const payload = nested ? { ...nested, ...typed } : typed;
+		const firstQuestion = Array.isArray(payload.questions) && payload.questions[0] && typeof payload.questions[0] === "object"
+			? payload.questions[0] as Record<string, unknown>
+			: undefined;
+		// 批量请求优先取第一个问题的字段；顶层仍保留 id/timeout 等 RPC 元数据。
+		const questionPayload = firstQuestion ? { ...payload, ...firstQuestion } : payload;
+		const rawMethod = String(typed.method ?? payload.method ?? "");
+		const customType = String(payload.customType ?? payload.uiType ?? payload.component ?? "").toLowerCase();
+		const isAskQuestionRequest = ["ask_question", "ask_userquestion", "askuserquestion", "question"].includes(rawMethod.toLowerCase())
+			|| (rawMethod.toLowerCase() === "custom" && Boolean(questionPayload.question ?? questionPayload.prompt ?? questionPayload.questions))
+			|| customType.includes("ask_question")
+			|| customType.includes("ask-userquestion")
+			|| customType.includes("askuserquestion");
+		const hintedMethod = String(
+			questionPayload.uiMethod ?? questionPayload.questionType ?? questionPayload.inputType ?? questionPayload.requestType ?? questionPayload.kind ?? questionPayload.type ?? "",
+		).toLowerCase();
+		const hasQuestionShape = Boolean(
+			questionPayload.question ?? questionPayload.prompt ?? questionPayload.placeholder ?? questionPayload.options ?? payload.questions ??
+			questionPayload.allowOther !== undefined,
+		);
+		const method = ["select", "confirm", "input", "editor"].includes(rawMethod)
+			? rawMethod
+			: ["select", "confirm", "input", "editor"].includes(hintedMethod)
+				? hintedMethod
+				: isAskQuestionRequest && hasQuestionShape
+					? (Array.isArray(questionPayload.options) ? "select" : "input")
+					: rawMethod;
+		const requestId = String(payload.id ?? typed.id ?? "");
 		// pi RPC 协议将 setWidget / dialog 字段放在顶层，不嵌套 params
 		if (method === "notify") {
 			this.emit(ipcChannels.agentsUiRequest, {
@@ -2730,8 +2760,8 @@ export class AgentManager {
 				requestId,
 				method,
 				title: "",
-				message: String(typed.message ?? ""),
-				notifyType: typed.notifyType,
+				message: String(payload.message ?? ""),
+				notifyType: payload.notifyType,
 			});
 			return;
 		}
@@ -2742,7 +2772,7 @@ export class AgentManager {
 				requestId,
 				method,
 				title: "",
-				text: String(typed.text ?? ""),
+				text: String(payload.text ?? ""),
 			});
 			return;
 		}
@@ -2754,9 +2784,9 @@ export class AgentManager {
 				requestId,
 				method,
 				title: "",
-				widgetKey: String(typed.widgetKey ?? requestId),
-				widgetLines: Array.isArray(typed.widgetLines) ? typed.widgetLines : undefined,
-				widgetPlacement: typed.widgetPlacement,
+				widgetKey: String(payload.widgetKey ?? requestId),
+				widgetLines: Array.isArray(payload.widgetLines) ? payload.widgetLines : undefined,
+				widgetPlacement: payload.widgetPlacement,
 			});
 			return;
 		}
@@ -2765,7 +2795,7 @@ export class AgentManager {
 		if (!["select", "confirm", "input", "editor"].includes(method)) return;
 
 		// select 无选项时自动取消，不等用户响应
-		if (method === "select" && (!Array.isArray(typed.options) || typed.options.length === 0)) {
+		if (method === "select" && (!Array.isArray(questionPayload.options) || questionPayload.options.length === 0)) {
 			this.sendUIResponse(agentId, requestId, { cancelled: true });
 			return;
 		}
@@ -2774,11 +2804,11 @@ export class AgentManager {
 			agentId,
 			requestId,
 			method,
-			title: String(typed.title ?? typed.question ?? ""),
-			options: typed.options as string[] | undefined,
-			placeholder: typed.placeholder as string | undefined,
-			prefill: typed.prefill as string | undefined,
-			allowOther: typed.allowOther === true,
+			title: String(questionPayload.title ?? questionPayload.question ?? questionPayload.prompt ?? questionPayload.message ?? questionPayload.label ?? ""),
+			options: questionPayload.options as string[] | undefined,
+			placeholder: questionPayload.placeholder as string | undefined,
+			prefill: questionPayload.prefill as string | undefined,
+			allowOther: questionPayload.allowOther === true,
 		};
 
 		// 记录 pending UI 请求，用于 abort 时自动 cancel
@@ -2796,7 +2826,7 @@ export class AgentManager {
 
 		// 通知渲染进程显示交互卡片
 		this.emit(ipcChannels.agentsUiRequest, request);
-		this.scheduleUIRequestTimeout(agentId, requestId, typed.timeout);
+		this.scheduleUIRequestTimeout(agentId, requestId, payload.timeout);
 	}
 
 	/**
