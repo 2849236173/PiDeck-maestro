@@ -1149,7 +1149,7 @@ export function App() {
   const [webServiceChanging, setWebServiceChanging] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo>({
     version: "-",
-    releasesUrl: "https://github.com/ayuayue/pi-desktop/releases",
+    releasesUrl: "https://github.com/2849236173/PiDeck-maestro/releases",
     platform: "win32",
   });
   const [piChecking, setPiChecking] = useState(false);
@@ -8307,7 +8307,7 @@ function FeedbackModal({
   const issueTitle = descriptionSummary
     ? `${t("feedback.issueTitle")}${descriptionSummary}`
     : t("feedback.issueTitle") + t("feedback.issueTitleEmpty");
-  const issueUrl = `https://github.com/ayuayue/pi-desktop/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(report)}`;
+  const issueUrl = `https://github.com/2849236173/PiDeck-maestro/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(report)}`;
   const authorUrl = "https://github.com/ayuayue";
 
   async function copyReport() {

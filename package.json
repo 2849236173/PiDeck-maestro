@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop",
-  "version": "0.6.5",
+  "version": "0.6.5-1",
   "description": "PiDeck is an open-source desktop workbench to manage multiple pi AI coding agents across local project folders with session history, Git integration, terminal, and config management.",
   "private": true,
   "license": "MIT",
@@ -14,13 +14,13 @@
       "url": "https://github.com/1900EasonJin"
     }
   ],
-  "homepage": "https://github.com/ayuayue/PiDeck#readme",
+  "homepage": "https://github.com/2849236173/PiDeck-maestro#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ayuayue/PiDeck.git"
+    "url": "git+https://github.com/2849236173/PiDeck-maestro.git"
   },
   "bugs": {
-    "url": "https://github.com/ayuayue/PiDeck/issues"
+    "url": "https://github.com/2849236173/PiDeck-maestro/issues"
   },
   "keywords": [
     "pi",

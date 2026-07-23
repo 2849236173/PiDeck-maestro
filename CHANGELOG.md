@@ -4,6 +4,18 @@
 
 All notable changes to PiDeck are documented here.
 
+## v0.6.5-1 - 2026-07-23
+
+Compatibility release based on upstream `ayuayue/PiDeck v0.6.5` for `pi-maestro-flow`.
+
+### Maestro desktop compatibility
+
+- Fixed `ask_userquestion` desktop dialogs in Pi RPC mode.
+- Forwarded Maestro `setStatus` and `setTitle` to the chat header and status area.
+- Added live elapsed time, recent tool, and sub-agent progress to `delegate` and `explore` cards.
+- Added Plan RPC fallbacks for environments that cannot transport custom TUI components.
+- Switched in-app update checks to `2849236173/PiDeck-maestro` so compatible builds do not update to upstream-only releases.
+
 ## v0.6.5 - 2026-07-13
 
 ### 🚀 New Features

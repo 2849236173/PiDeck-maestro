@@ -4,6 +4,18 @@
 
 这里记录 PiDeck 各版本的重要变化。
 
+## v0.6.5-1 - 2026-07-23
+
+这是基于上游 `ayuayue/PiDeck v0.6.5` 的 `pi-maestro-flow` 兼容修复版。
+
+### 🐛 Maestro 桌面兼容
+
+- 修复 `ask_userquestion` 在 PiDeck RPC 模式下无法进入桌面问答的问题。
+- 转发 Maestro 的 `setStatus` / `setTitle`，在聊天标题和状态区域显示工作阶段。
+- 在 `delegate` / `explore` 工具卡片中显示实时耗时、最近工具和子 Agent 进度。
+- 兼容 Maestro 的 Plan RPC 交互，避免桌面端调用不可传输的自定义 TUI。
+- 兼容版应用更新检查切换到 `2849236173/PiDeck-maestro`，避免更新回未适配 Maestro 的上游版本。
+
 ## v0.6.5 - 2026-07-13
 
 ### 🚀 新功能

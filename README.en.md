@@ -1,4 +1,4 @@
-# PiDeck
+# PiDeck Maestro Compatibility Edition
 
 [中文文档](README.md) · [English](README.en.md) · [LinuxDO 友链](https://linux.do)
 
@@ -8,7 +8,13 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5-green)
+![Version](https://img.shields.io/badge/version-0.6.5--1-green)
+
+> This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
+>
+> - Upstream project: [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)
+> - Compatibility repository: [2849236173/PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro)
+> - Versioning: follow the upstream version and append a compatibility fix suffix, such as `0.6.5-1` or `0.6.5-2`. Suffix releases are maintained compatibility fixes, not upstream releases.
 
 **PiDeck** is an open-source pi desktop workbench for managing pi Agent sessions across local project folders, with import support for local Codex and Claude sessions so you can browse and restore them in one place. Built with Electron + TypeScript, it provides multi-project workspace management, AI session history, Git integration, built-in terminal, visual config management, and plugin extensions—so local AI coding assistants stay consistent, traceable, and configurable across projects.
 
@@ -20,7 +26,16 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.6.5** (2026-07-13)
+> **Latest compatibility release: v0.6.5-1** (2026-07-23)
+
+### v0.6.5-1 Maestro compatibility release
+
+- 🐛 Fixed missing desktop UI for `ask_userquestion` in RPC mode.
+- ✨ Shows live Maestro `delegate` / `explore` status, elapsed time, and sub-agent progress.
+- ✨ Added desktop select/editor fallbacks for Maestro Plan interactions in RPC mode.
+- 🔧 In-app update checks use this compatibility repository and do not fall back to upstream releases.
+
+The following section records the upstream baseline features for `v0.6.5`:
 
 ### v0.6.5 Updates
 - 🚀 **Prompt Templates System**: Full template management, built-in templates,
@@ -155,7 +170,9 @@ pi --mode rpc
 
 Prebuilt packages for **Windows**, **macOS**, and **Linux** are published from tagged releases:
 
-👉 **[GitHub Releases](https://github.com/ayuayue/PiDeck/releases)**
+👉 **[Compatibility GitHub Releases](https://github.com/2849236173/PiDeck-maestro/releases)**
+
+The upstream release page remains available at [ayuayue/PiDeck Releases](https://github.com/ayuayue/PiDeck/releases). Use [PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro) for Maestro-compatible builds; in-app update checks also use this repository only.
 
 > PiDeck requires the `pi` CLI to be installed separately and available in your system `PATH`.
 
@@ -164,7 +181,7 @@ Prebuilt packages for **Windows**, **macOS**, and **Linux** are published from t
 ## Quick Start (from Source)
 
 ```bash
-git clone https://github.com/ayuayue/PiDeck.git
+git clone https://github.com/2849236173/PiDeck-maestro.git
 cd pi-desktop
 npm install
 npm run make-icon

@@ -2,19 +2,19 @@
 layout: home
 lang: en
 hero:
-  name: PiDeck
-  text: Desktop Workbench for pi AI Coding Agents
-  tagline: Manage local pi coding assistant sessions, configs, Git, and terminal in a unified desktop workspace for Windows, macOS, and Linux.
+  name: PiDeck Maestro Compatibility Edition
+  text: A multi-project desktop workbench for pi-maestro-flow
+  tagline: Based on PiDeck and focused on Maestro RPC questionnaires, Plan, delegate, and explore compatibility across Windows, macOS, and Linux.
   actions:
     - theme: brand
       text: Download Latest
-      link: https://github.com/ayuayue/PiDeck/releases
+      link: https://github.com/2849236173/PiDeck-maestro/releases
     - theme: alt
       text: Get Started
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/ayuayue/PiDeck
+      link: https://github.com/2849236173/PiDeck-maestro
 ---
 
 ## Features

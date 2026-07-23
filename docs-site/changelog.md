@@ -2,8 +2,10 @@
 
 完整更新日志仍维护在仓库根目录：
 
-- [中文 CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md)
-- [English CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.md)
+当前兼容发行线为 `v0.6.5-1`，基于上游 `ayuayue/PiDeck v0.6.5`，专门修复 `pi-maestro-flow` 的桌面 RPC 兼容问题。
+
+- [中文 CHANGELOG](https://github.com/2849236173/PiDeck-maestro/blob/main/CHANGELOG.zh-CN.md)
+- [English CHANGELOG](https://github.com/2849236173/PiDeck-maestro/blob/main/CHANGELOG.md)
 
 ## v0.6.5
 

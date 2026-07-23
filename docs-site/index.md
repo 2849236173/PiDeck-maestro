@@ -8,13 +8,13 @@ hero:
   actions:
     - theme: brand
       text: 下载最新版本
-      link: https://github.com/ayuayue/PiDeck/releases
+      link: https://github.com/2849236173/PiDeck-maestro/releases
     - theme: alt
       text: 快速开始
       link: /guide/getting-started
     - theme: alt
       text: 查看 GitHub
-      link: https://github.com/ayuayue/PiDeck
+      link: https://github.com/2849236173/PiDeck-maestro
 
 features:
   - title: 多项目工作区
@@ -39,6 +39,8 @@ features:
 ## 面向本地开发的桌面控制台
 
 `PiDeck` 不是 pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，把项目管理、会话管理、配置管理和桌面交互整合起来，Agent 能力仍由 pi 原生提供。
+
+这是 `2849236173/PiDeck-maestro` 的 Maestro 兼容发行线，基于上游 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)。版本号在上游版本后追加兼容修复号，例如 `0.6.5-1`、`0.6.5-2`。
 
 <div class="info-strip">
   <div>

@@ -1,4 +1,4 @@
-# PiDeck
+# PiDeck Maestro 兼容版
 
 [English](README.en.md) · [LinuxDO 友链](https://linux.do)
 
@@ -8,7 +8,13 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5-green)
+![Version](https://img.shields.io/badge/version-0.6.5--1-green)
+
+> 这是面向 `pi-maestro-flow` 的 PiDeck 兼容发行版。它基于原作者 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)，专门修复桌面 RPC 与 Maestro 工作流之间的兼容问题。
+>
+> - 上游原仓库：[ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)
+> - 本兼容仓库：[2849236173/PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro)
+> - 版本规则：跟随上游版本，在后面追加兼容修复号，例如 `0.6.5-1`、`0.6.5-2`。后缀版本只包含兼容修复和桌面端增强，不代表上游官方版本。
 
 **PiDeck** 是一个开源的Pi桌面工作台，用于在本地项目目录中统一管理 pi Agent 会话，并支持导入 Codex、Claude 本地会话以便统一浏览和恢复。基于 Electron + TypeScript 构建，提供多项目工作区、AI 会话管理、Git 集成、内置终端、模型配置和插件扩展能力，让本地 AI 编码助手在多项目环境中保持统一、可追溯、可配置。
 
@@ -20,7 +26,16 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.6.5**（2026-07-13）
+> **兼容版最新版本 v0.6.5-1**（2026-07-23）
+
+### v0.6.5-1 Maestro 兼容版
+
+- 🐛 修复 `ask_userquestion` 在桌面 RPC 模式下没有可用问答 UI 的问题。
+- ✨ 显示 Maestro `delegate` / `explore` 的实时运行状态、耗时和子 Agent 进度。
+- ✨ 支持 Maestro Plan 在 RPC 模式下使用桌面选择和编辑对话框。
+- 🔧 应用内更新只检查本兼容仓库，避免更新回未适配 Maestro 的上游版本。
+
+以下是本兼容版对应的上游基线 `v0.6.5` 功能记录：
 
 ### v0.6.5 更新
 - 🚀 **Prompt 模板系统**：全新模板管理、内置模板、`/` picker 快速插入、变量占位符
@@ -153,7 +168,9 @@ pi --mode rpc
 
 **Windows**、**macOS**、**Linux** 平台的预构建安装包在 GitHub Release 中发布：
 
-👉 **[GitHub Releases](https://github.com/ayuayue/PiDeck/releases)**
+👉 **[兼容版 GitHub Releases](https://github.com/2849236173/PiDeck-maestro/releases)**
+
+原版 PiDeck 的发行页仍在：[ayuayue/PiDeck Releases](https://github.com/ayuayue/PiDeck/releases)。兼容版请从 [PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro) 下载，应用内更新检查也只指向本仓库。
 
 > PiDeck 需要单独安装 `pi` CLI 并确保其加入系统 `PATH`。
 
@@ -162,7 +179,7 @@ pi --mode rpc
 ## 快速开始（从源码运行）
 
 ```bash
-git clone https://github.com/ayuayue/PiDeck.git
+git clone https://github.com/2849236173/PiDeck-maestro.git
 cd pi-desktop
 npm install
 npm run make-icon

@@ -159,9 +159,10 @@ function applyNativeThemeSource(settings: AppSettings) {
 	nativeTheme.themeSource = settings.theme === "system" ? "system" : settings.theme;
 }
 
-const RELEASES_URL = "https://github.com/ayuayue/pi-desktop/releases";
+// 兼容发行线必须独立检查自己的 Release，避免用户被更新到未适配 Maestro 的原版。
+const RELEASES_URL = "https://github.com/2849236173/PiDeck-maestro/releases";
 const LATEST_RELEASE_API =
-	"https://api.github.com/repos/ayuayue/pi-desktop/releases/latest";
+	"https://api.github.com/repos/2849236173/PiDeck-maestro/releases/latest";
 const POSTHOG_PROJECT_KEY =
 	process.env.POSTHOG_PROJECT_KEY ??
 	"phc_xgJ8gFUMgExZEEPzZ7VRa7698ENcaDRquWZVGYb2dCFK";
@@ -558,7 +559,7 @@ function printStartupInfo() {
 		console.log("%c  Persistent installationType: %c${persistentInstallationType}", "color: #6b7280;", "color: #8b5cf6; font-weight: bold;");
 		console.log("");
 		console.log("%c🐛 Found a bug? Report at:", "color: #6b7280;");
-		console.log("%c  https://github.com/ayuayue/PiDeck/issues", "color: #3b82f6; text-decoration: underline;");
+		console.log("%c  https://github.com/2849236173/PiDeck-maestro/issues", "color: #3b82f6; text-decoration: underline;");
 		console.log("");
 		console.log("%c🎉 Easter egg: You found it! Thanks for exploring.", "color: #ec4899; font-weight: bold;");
 		console.log("");
