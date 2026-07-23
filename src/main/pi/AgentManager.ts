@@ -2790,8 +2790,25 @@ export class AgentManager {
 			});
 			return;
 		}
-		// 其他非对话 UI 方法暂不占用桌面 UI 空间。
-		if (["setStatus", "setTitle"].includes(method)) return;
+		if (method === "setStatus") {
+			this.emit(ipcChannels.agentsUiRequest, {
+				agentId,
+				requestId,
+				method,
+				statusKey: String(payload.statusKey ?? "maestro"),
+				statusText: typeof payload.statusText === "string" ? payload.statusText : undefined,
+			});
+			return;
+		}
+		if (method === "setTitle") {
+			this.emit(ipcChannels.agentsUiRequest, {
+				agentId,
+				requestId,
+				method,
+				title: String(payload.title ?? ""),
+			});
+			return;
+		}
 		if (!["select", "confirm", "input", "editor"].includes(method)) return;
 
 		// select 无选项时自动取消，不等用户响应

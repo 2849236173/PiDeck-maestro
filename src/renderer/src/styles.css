@@ -2401,6 +2401,18 @@ body.is-terminal-resizing {
   min-width: 0;
   flex-shrink: 1;
 }
+
+.chat-extension-status {
+	display: inline-block;
+	max-width: min(42vw, 420px);
+	margin-left: 8px;
+	color: var(--color-text-tertiary);
+	font-size: var(--font-size-xs);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: middle;
+}
 .chat-header strong {
   display: block;
   max-width: 100%;

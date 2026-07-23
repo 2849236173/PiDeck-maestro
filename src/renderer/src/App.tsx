@@ -424,6 +424,8 @@ interface UiRequest {
 	widgetKey?: string;
 	widgetLines?: string[];
 	widgetPlacement?: "aboveEditor" | "belowEditor";
+	statusKey?: string;
+	statusText?: string;
 }
 
 function migrateAgentRecord<T>(
@@ -594,6 +596,12 @@ export function App() {
   const [extensionWidgetsByAgent, setExtensionWidgetsByAgent] = useState<
     Record<string, Record<string, string[]>>
   >({});
+  /** Extension setStatus 状态；Maestro 用它报告审批模式和工作阶段。 */
+  const [extensionStatusByAgent, setExtensionStatusByAgent] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  /** Extension setTitle 覆盖标题；按 agent 隔离，避免子会话状态串台。 */
+  const [extensionTitleByAgent, setExtensionTitleByAgent] = useState<Record<string, string>>({});
   /** Extension widget 容器折叠状态（全局持久化，不按 agentId 隔离，重启后恢复） */
   const [widgetsCollapsed, setWidgetsCollapsed] = useState(() => {
     try {
@@ -2101,6 +2109,29 @@ export function App() {
           setComposerCursor(text.length);
           pendingComposerCaretRef.current = text.length;
         }
+        return;
+      }
+
+      if (request.method === "setStatus") {
+        const statusRequest = request as UiRequest;
+        const statusKey = statusRequest.statusKey || "extension";
+        setExtensionStatusByAgent((current) => {
+          const nextAgent = { ...(current[request.agentId] ?? {}) };
+          if (statusRequest.statusText) nextAgent[statusKey] = statusRequest.statusText;
+          else delete nextAgent[statusKey];
+          return { ...current, [request.agentId]: nextAgent };
+        });
+        return;
+      }
+
+      if (request.method === "setTitle") {
+        const title = (request as UiRequest).title?.trim() ?? "";
+        setExtensionTitleByAgent((current) => {
+          const next = { ...current };
+          if (title) next[request.agentId] = title;
+          else delete next[request.agentId];
+          return next;
+        });
         return;
       }
 
@@ -6125,11 +6156,11 @@ export function App() {
               <strong
                 title={activeAgent?.title ?? activeProject?.name ?? "PiDeck"}
               >
-                {activeAgent?.title ??
+                {extensionTitleByAgent[activeAgentId ?? ""] || (activeAgent?.title ??
                   (isChatProject(activeProject)
                     ? t("app.chatProject")
                     : activeProject?.name) ??
-                  "PiDeck"}
+                  "PiDeck")}
               </strong>
               {activeAgent?.compactionCount ? (
                 <span
@@ -6139,6 +6170,11 @@ export function App() {
                   {activeAgent.compactionCount}
                 </span>
               ) : null}
+              {activeAgentId && Object.values(extensionStatusByAgent[activeAgentId] ?? {}).filter(Boolean).length > 0 && (
+                <span className="chat-extension-status" role="status">
+                  {Object.values(extensionStatusByAgent[activeAgentId] ?? {}).filter(Boolean).join(" · ")}
+                </span>
+              )}
             </div>
           </div>
           <div

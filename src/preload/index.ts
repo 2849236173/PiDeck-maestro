@@ -782,7 +782,7 @@ const api = {
 		sendUiResponse: (agentId: string, requestId: string, response: { value?: string | boolean; cancelled?: boolean; confirmed?: boolean }) =>
 			ipcRenderer.invoke(ipcChannels.agentsUiResponse, agentId, requestId, response) as Promise<void>,
 		/** 监听 Agent 扩展 UI 请求（模型通过扩展调用了 ctx.ui.select/confirm/input/editor） */
-		onUiRequest: (callback: (request: { agentId: string; requestId: string; method: string; title: string; options?: string[]; placeholder?: string; prefill?: string; allowOther?: boolean; completed?: boolean; value?: string; cancelled?: boolean; message?: string; notifyType?: "info" | "warning" | "error"; text?: string; widgetKey?: string; widgetLines?: string[]; widgetPlacement?: "aboveEditor" | "belowEditor" }) => void) =>
+		onUiRequest: (callback: (request: { agentId: string; requestId: string; method: string; title: string; options?: string[]; placeholder?: string; prefill?: string; allowOther?: boolean; completed?: boolean; value?: string; cancelled?: boolean; message?: string; notifyType?: "info" | "warning" | "error"; text?: string; statusKey?: string; statusText?: string; widgetKey?: string; widgetLines?: string[]; widgetPlacement?: "aboveEditor" | "belowEditor" }) => void) =>
 			subscribe(ipcChannels.agentsUiRequest, callback),
 		/** 监听项目信任确认请求（主进程在启动 Agent 前对含 .pi 资源的项目发起） */
 		onTrustRequest: (callback: (request: { requestId: string; cwd: string; projectName: string }) => void) =>

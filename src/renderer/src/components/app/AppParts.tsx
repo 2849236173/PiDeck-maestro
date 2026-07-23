@@ -1587,6 +1587,17 @@ function toolIcon(toolName: string): ReactNode {
 function getToolSubtitle(message: ChatMessage): string {
 	const meta = message.meta;
 	if (!meta) return "";
+	// Maestro 的 delegate/explore 通过 tool_execution_update 把进度写入 result；
+	// 这些扩展工具通常没有 command/path 参数，必须把最新进度显示在折叠行，
+	// 否则用户只能看到“maestro”而无法判断子 Agent 是否仍在运行。
+	const toolName = typeof meta.toolName === "string" ? meta.toolName.toLowerCase() : "";
+	if (meta.status === "running" && (toolName === "maestro" || toolName === "delegate" || toolName === "explore")) {
+		const progress = typeof meta.result === "string" ? meta.result.trim() : "";
+		if (progress) {
+			const firstLine = progress.split(/\r?\n/, 1)[0]?.trim() ?? "";
+			if (firstLine) return firstLine.slice(0, 140);
+		}
+	}
 	// 优先从 args 取参数（pi 工具事件的标准结构）
 	const args = parseToolArgs(meta.args);
 	if (args) {
