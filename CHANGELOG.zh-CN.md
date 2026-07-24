@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.6.5-3 - 2025-01-XX
+
+适配 `pi-maestro-flow` teammate 工具：为新的 `teammate` 子代理派发引擎添加 Network 图标和实时进度显示。
+
+### 🐛 Maestro 桌面兼容
+
+- 将 `teammate` 加入工具图标匹配规则（所有 teammate-* 工具显示 Network 图标）
+- 将 `teammate` 加入运行进度白名单，确保子代理执行期间状态持续可见
+
 ## v0.6.5-2 - 2026-07-24
 
 适配最新版 `pi-maestro-flow` RPC：Plan 确认和编辑在桌面端改用原生 RPC UI，不再因缺少 `custom()` TUI 卡住；delegate/explore 运行期间继续显示实时进度。

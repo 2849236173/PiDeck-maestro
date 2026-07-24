@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.5-3 - 2025-01-XX
+
+Compatibility update for `pi-maestro-flow` teammate tool: added Network icon and real-time progress display for the new `teammate` sub-agent dispatcher.
+
+### Maestro desktop compatibility
+
+- Added `teammate` to tool icon matcher (Network icon for all teammate-* tools)
+- Added `teammate` to running progress whitelist so sub-agent status remains visible during execution
+
 ## v0.6.5-2 - 2026-07-24
 
 Compatibility update for the latest `pi-maestro-flow` RPC implementation: desktop Plan confirmation/editor dialogs now complete through native RPC UI, and delegate/explore progress remains visible while work is running.

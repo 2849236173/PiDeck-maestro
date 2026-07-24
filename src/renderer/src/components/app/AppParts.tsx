@@ -1574,7 +1574,7 @@ function toolIcon(toolName: string): ReactNode {
 	if (key.includes("bash") || key.includes("shell") || key.includes("terminal")) return <Terminal size={14} />;
 	if (key.includes("grep") || key.includes("search")) return <Search size={14} />;
 	if (key.includes("glob") || key.includes("list") || key.includes("ls")) return <Folder size={14} />;
-	if (key.includes("task") || key.includes("subagent") || key.includes("agent")) return <Network size={14} />;
+	if (key.includes("task") || key.includes("subagent") || key.includes("agent") || key.includes("teammate")) return <Network size={14} />;
 	if (key.includes("web") || key.includes("fetch")) return <Globe2 size={14} />;
 	if (key.includes("todo")) return <Check size={14} />;
 	return <Wrench size={14} />;
@@ -1587,11 +1587,13 @@ function toolIcon(toolName: string): ReactNode {
 function getToolSubtitle(message: ChatMessage): string {
 	const meta = message.meta;
 	if (!meta) return "";
-	// Maestro 的 delegate/explore 通过 tool_execution_update 把进度写入 result；
+	// Maestro 的 delegate/explore/teammate 通过 tool_execution_update 把进度写入 result；
 	// 这些扩展工具通常没有 command/path 参数，必须把最新进度显示在折叠行，
 	// 否则用户只能看到“maestro”而无法判断子 Agent 是否仍在运行。
+	// teammate 是新的子代理派发引擎（delegate/explore 底层亦走它），子代理运行时
+	// 同样通过 update 事件推送进度，需纳入白名单，否则派发多个子代理时进度不可见。
 	const toolName = typeof meta.toolName === "string" ? meta.toolName.toLowerCase() : "";
-	if (meta.status === "running" && (toolName === "maestro" || toolName === "delegate" || toolName === "explore")) {
+	if (meta.status === "running" && (toolName === "maestro" || toolName === "delegate" || toolName === "explore" || toolName === "teammate")) {
 		const progress = typeof meta.result === "string" ? meta.result.trim() : "";
 		if (progress) {
 			const firstLine = progress.split(/\r?\n/, 1)[0]?.trim() ?? "";
