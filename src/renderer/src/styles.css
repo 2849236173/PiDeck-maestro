@@ -4296,6 +4296,101 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   line-height: 1.6;
   color: var(--color-text-tertiary);
 }
+
+/* Agent progress list - 显示工具调用的子代理进度 */
+.agent-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-progress-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+}
+
+.agent-progress-item.running {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-secondary));
+  border-left: 2px solid var(--color-accent);
+}
+
+.agent-progress-item.error {
+  background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface-secondary));
+  border-left: 2px solid var(--color-error);
+}
+
+.agent-progress-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-caption);
+}
+
+.agent-progress-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border-subtle);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-progress-name {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.agent-progress-agent,
+.agent-progress-status {
+  color: var(--color-text-secondary);
+}
+
+.agent-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-tertiary);
+}
+
+.agent-progress-tool {
+  color: var(--color-text-secondary);
+}
+
+.agent-progress-message {
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-primary);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.agent-progress-error {
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
+  font-size: var(--font-size-micro);
+  font-family: var(--font-family-mono);
+}
 .tool-card-diff-chip {
   display: inline-flex;
   align-items: center;
@@ -6148,6 +6243,49 @@ body.ask-dialog-open .ask-question-card.pending {
 .ask-question-card-option:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 多选模式样式 */
+.ask-question-card-multiselect {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.ask-question-card-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.ask-question-card-checkbox-label:hover {
+  background: var(--color-bg-hover);
+}
+.ask-question-card-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border-strong);
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+.ask-question-card-checkbox:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+.ask-question-card-checkbox-text {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-md);
+}
+.ask-question-card-multiselect-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  justify-content: flex-end;
 }
 
 /* 收起状态工具组里的 skill chip */

@@ -2826,6 +2826,7 @@ export class AgentManager {
 			placeholder: questionPayload.placeholder as string | undefined,
 			prefill: questionPayload.prefill as string | undefined,
 			allowOther: questionPayload.allowOther === true,
+			multiSelect: questionPayload.multiSelect === true,
 		};
 
 		// 记录 pending UI 请求，用于 abort 时自动 cancel
@@ -3246,6 +3247,8 @@ export class AgentManager {
 			}
 			return undefined;
 		})();
+		// 提取结构化进度信息（子代理进度、子调用）
+		const agentProgress = status === "running" ? this.extractAgentProgress(result) : undefined;
 		const meta = {
 			status,
 			toolName,
@@ -3260,6 +3263,7 @@ export class AgentManager {
 			// diff 使用工具参数（oldText/newText 等）展示变动区域，无需完整文件快照。
 			
 			...(askCard ? { _askCard: askCard } : {}),
+			...(agentProgress ? { _agentProgress: agentProgress } : {}),
 		};
 
 		if (existing) {
@@ -3802,6 +3806,73 @@ export class AgentManager {
 			.map((item) => (typeof item?.text === "string" ? item.text : ""))
 			.filter(Boolean)
 			.join("\n");
+	}
+
+	/**
+	 * 从 partialResult.details 中提取结构化进度信息（子代理进度、子调用）。
+	 * 返回精简的进度快照数组，用于渲染器显示实时执行状态。
+	 * 限制条数避免撑大 ChatMessage.meta（最多 12 条）。
+	 */
+	private extractAgentProgress(result: unknown): Array<{
+		agent?: string;
+		name?: string;
+		status?: string;
+		recentTools?: Array<{ name: string; status?: string }>;
+		toolCount?: number;
+		tokens?: number;
+		lastMessage?: string;
+		error?: string;
+	}> | undefined {
+		if (!result || typeof result !== "object") return undefined;
+		const details = (result as any).details;
+		if (!details || typeof details !== "object") return undefined;
+
+		const progress: Array<any> = [];
+
+		// 提取 details.progress[] (AgentProgressSnapshot[])
+		if (Array.isArray(details.progress)) {
+			for (const p of details.progress) {
+				if (!p || typeof p !== "object") continue;
+				progress.push({
+					agent: p.agent,
+					name: p.name,
+					status: p.status,
+					recentTools: Array.isArray(p.recentTools)
+						? p.recentTools.slice(0, 3).map((t: any) => ({
+								name: t?.name ?? "tool",
+								status: t?.status,
+						  }))
+						: undefined,
+					toolCount: typeof p.toolCount === "number" ? p.toolCount : undefined,
+					tokens: typeof p.tokens === "number" ? p.tokens : undefined,
+					lastMessage: typeof p.lastMessage === "string" ? p.lastMessage.slice(0, 120) : undefined,
+					error: typeof p.error === "string" ? p.error.slice(0, 200) : undefined,
+				});
+			}
+		}
+
+		// 提取 details.childCalls[] (ChildAgentCallSnapshot[])
+		if (Array.isArray(details.childCalls)) {
+			for (const c of details.childCalls) {
+				if (!c || typeof c !== "object") continue;
+				progress.push({
+					agent: c.agent,
+					name: c.name,
+					status: c.status,
+					recentTools: Array.isArray(c.recentTools)
+						? c.recentTools.slice(0, 3).map((t: any) => ({
+								name: typeof t === "string" ? t : (t?.name ?? "tool"),
+								status: typeof t === "object" ? t?.status : undefined,
+						  }))
+						: undefined,
+					lastMessage: typeof c.lastMessage === "string" ? c.lastMessage.slice(0, 120) : undefined,
+				});
+			}
+		}
+
+		if (progress.length === 0) return undefined;
+		// 限制最多 12 条，避免 meta 过大
+		return progress.slice(0, 12);
 	}
 
 	private safeJson(value: unknown) {

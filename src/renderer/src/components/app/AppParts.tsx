@@ -1742,12 +1742,94 @@ function getToolKindLabel(toolName: string): string {
 }
 
 /** 单个工具调用卡片：trigger 行（图标+工具名+副标题+状态+耗时）+ 展开后详情。 */
+/** 运行中工具的活动计时器，每秒 tick 显示已运行时长 */
+const LiveDuration = memo(function LiveDuration(props: { startedAt: number }) {
+	const [elapsed, setElapsed] = useState(() => Math.max(0, Date.now() - props.startedAt));
+	useEffect(() => {
+		const timer = setInterval(() => {
+			setElapsed(Math.max(0, Date.now() - props.startedAt));
+		}, 1000);
+		return () => clearInterval(timer);
+	}, [props.startedAt]);
+	return <span className="tool-card-duration" title={t("tool.durationTitle")}>{formatDuration(elapsed)}</span>;
+});
+
+/** 子代理进度列表，渲染 meta._agentProgress 中的结构化进度信息 */
+const AgentProgressList = memo(function AgentProgressList(props: {
+	progress: Array<{
+		agent?: string;
+		name?: string;
+		status?: string;
+		recentTools?: Array<{ name: string; status?: string }>;
+		toolCount?: number;
+		tokens?: number;
+		lastMessage?: string;
+		error?: string;
+	}>;
+	t: (key: TranslationKey) => string;
+}) {
+	if (props.progress.length === 0) return null;
+
+	return (
+		<div className="agent-progress-list">
+			{props.progress.map((item, idx) => {
+				const isRunning = item.status === "running" || item.status === "active";
+				const hasError = item.status === "error" || item.status === "failed";
+				const lastTool = item.recentTools && item.recentTools.length > 0
+					? item.recentTools[item.recentTools.length - 1]
+					: undefined;
+
+				return (
+					<div
+						key={idx}
+						className={`agent-progress-item${isRunning ? " running" : ""}${hasError ? " error" : ""}`}
+					>
+						<div className="agent-progress-header">
+							{isRunning && <span className="agent-progress-spinner" aria-hidden="true" />}
+							<span className="agent-progress-name">
+								{item.name || item.agent || "agent"}
+							</span>
+							{item.agent && item.name && (
+								<span className="agent-progress-agent">· {item.agent}</span>
+							)}
+							{item.status && (
+								<span className="agent-progress-status">· {item.status}</span>
+							)}
+						</div>
+						<div className="agent-progress-meta">
+							{lastTool && (
+								<span className="agent-progress-tool">
+									{lastTool.name}
+									{lastTool.status && ` (${lastTool.status})`}
+								</span>
+							)}
+							{typeof item.toolCount === "number" && (
+								<span className="agent-progress-count">· {item.toolCount}{props.t("tool.countSuffix")}</span>
+							)}
+							{typeof item.tokens === "number" && (
+								<span className="agent-progress-tokens">· {item.tokens.toLocaleString()}{props.t("tool.tokensSuffix")}</span>
+							)}
+						</div>
+						{item.lastMessage && (
+							<div className="agent-progress-message">{item.lastMessage}</div>
+						)}
+						{item.error && (
+							<div className="agent-progress-error">{item.error}</div>
+						)}
+					</div>
+				);
+			})}
+		</div>
+	);
+});
+
 export const ToolCard = memo(function ToolCard(props: {
 	message: ChatMessage;
 	defaultOpen?: boolean;
 	onDiffFile?: DiffFileHandler;
 }) {
 	const [expanded, setExpanded] = useState(props.defaultOpen ?? false);
+	const userToggledRef = useRef(false);
 	const status = getToolStatus(props.message);
 	const toolName = getToolName(props.message);
 	const detailText = getToolDetailText(props.message);
@@ -1759,7 +1841,12 @@ export const ToolCard = memo(function ToolCard(props: {
 		typeof props.message.meta?.durationMs === "number"
 			? props.message.meta.durationMs
 			: undefined;
+	const startedAt =
+		typeof props.message.meta?.startedAt === "number"
+			? props.message.meta.startedAt
+			: undefined;
 	const showDuration = status !== "running" && durationMs !== undefined;
+	const showLiveDuration = status === "running" && startedAt !== undefined;
 	// 模型用 read 工具读取 SKILL.md 来加载 skill：识别后以 skill 徽标样式渲染
 	const skillName = getReadSkillName(props.message);
 	const isSkillRead = Boolean(skillName);
@@ -1768,6 +1855,16 @@ export const ToolCard = memo(function ToolCard(props: {
 		| { question?: string; type?: string; answered?: boolean; answer?: unknown; answerLabel?: string; options?: string[] }
 		| undefined;
 	const isAskCard = Boolean(askCard?.question);
+	const agentProgress = props.message.meta?._agentProgress as Array<{
+		agent?: string;
+		name?: string;
+		status?: string;
+		recentTools?: Array<{ name: string; status?: string }>;
+		toolCount?: number;
+		tokens?: number;
+		lastMessage?: string;
+		error?: string;
+	}> | undefined;
 	// 运行中显示 "运行中"，出错显示 "错误"，完成后不显示状态文本
 const statusLabel =
 	status === "running"
@@ -1775,6 +1872,23 @@ const statusLabel =
 		: status === "error"
 			? t("tool.statusError")
 			: "";
+
+	// 自动展开逻辑：仅对 agent 类工具（teammate/delegate/explorer/maestro）运行中自动展开
+	const isAgentTool = /^(teammate|delegate|explorer|maestro)/.test(toolName);
+	useEffect(() => {
+		if (!isAgentTool) return;
+		if (userToggledRef.current) return;
+		if (status === "running") {
+			setExpanded(true);
+		} else if (status === "done" || status === "error") {
+			setExpanded(false);
+		}
+	}, [status, isAgentTool]);
+
+	const handleToggle = () => {
+		userToggledRef.current = true;
+		setExpanded((prev) => !prev);
+	};
 	const [copied, setCopied] = useState(false);
 	const handleCopy = () => {
 		navigator.clipboard.writeText(detailText);
@@ -1792,7 +1906,7 @@ const statusLabel =
 			<div className={`tool-card-header${diffTarget ? " has-diff" : ""}`}>
 				<button
 					className="tool-card-trigger"
-					onClick={() => setExpanded((v) => !v)}
+					onClick={handleToggle}
 					aria-expanded={expanded}
 				>
 					<span className="tool-card-icon">
@@ -1812,6 +1926,7 @@ const statusLabel =
 						{status === "running" && <span className="tool-card-spinner" aria-hidden="true" />}
 						{askCard?.answered ? t("ask.answered") : (statusLabel)}
 					</span>
+					{showLiveDuration && <LiveDuration startedAt={startedAt!} />}
 					{showDuration && (
 						<span className="tool-card-duration" title={t("tool.durationTitle")}>
 							{formatDuration(durationMs)}
@@ -1891,7 +2006,12 @@ const statusLabel =
 							)}
 						</div>
 					) : (
-						<pre className="tool-card-detail">{detailText}</pre>
+						<>
+							{agentProgress && agentProgress.length > 0 && (
+								<AgentProgressList progress={agentProgress} t={t} />
+							)}
+							<pre className="tool-card-detail">{detailText}</pre>
+						</>
 					)}
 					<button
 						className="tool-card-copy"
@@ -2066,6 +2186,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 
 	const [inputValue, setInputValue] = useState("");
 	const [cancelling, setCancelling] = useState(false);
+	const [selectedValues, setSelectedValues] = useState<string[]>([]);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 
 	// 编辑器输入 ref
@@ -2078,6 +2199,22 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 
 	const handleSelect = (value: string) => {
 		props.onRespond?.({ value });
+	};
+
+	const handleMultiSelectToggle = (value: string) => {
+		setSelectedValues((prev) => {
+			if (prev.includes(value)) {
+				return prev.filter((v) => v !== value);
+			} else {
+				return [...prev, value];
+			}
+		});
+	};
+
+	const handleMultiSelectSubmit = () => {
+		if (selectedValues.length > 0) {
+			props.onRespond?.({ value: JSON.stringify(selectedValues) });
+		}
 	};
 
 	const handleConfirm = (value: boolean) => {
@@ -2106,6 +2243,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 	const title = String(uiRequest?.title ?? "");
 	const placeholder = String(uiRequest?.placeholder ?? "");
 	const options = uiRequest?.options as string[] | undefined;
+	const multiSelect = uiRequest?.multiSelect === true;
 
 	return (
 		<article className="ask-question-card pending" data-message-id={props.message.id}>
@@ -2117,17 +2255,55 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 			<div className="ask-question-card-body">
 				{method === "select" && options && options.length > 0 && (
 					<div className="ask-question-card-options">
-						{/* 过滤掉 Pi 自带的 "✎ 自行输入..." 选项，用下方内联输入框替代 */}
-						{options.filter((opt) => !opt.startsWith("✎")).map((opt, i) => (
-							<button
-								key={i}
-								className="ask-question-card-option"
-								onClick={() => handleSelect(opt)}
-								disabled={cancelling}
-							>
-								{opt}
-							</button>
-						))}
+						{multiSelect ? (
+							<>
+								{/* 多选模式：checkbox 列表 */}
+								<div className="ask-question-card-multiselect">
+									{options.filter((opt) => !opt.startsWith("✎")).map((opt, i) => (
+										<label key={i} className="ask-question-card-checkbox-label">
+											<input
+												type="checkbox"
+												checked={selectedValues.includes(opt)}
+												onChange={() => handleMultiSelectToggle(opt)}
+												disabled={cancelling}
+												className="ask-question-card-checkbox"
+											/>
+											<span className="ask-question-card-checkbox-text">{opt}</span>
+										</label>
+									))}
+								</div>
+								<div className="ask-question-card-multiselect-actions">
+									<button
+										className="ask-question-card-submit"
+										onClick={handleMultiSelectSubmit}
+										disabled={selectedValues.length === 0 || cancelling}
+									>
+										{t("ask.submit")}
+									</button>
+									<button
+										className="ask-question-card-cancel"
+										onClick={handleCancel}
+										disabled={cancelling}
+										title={t("common.cancel")}
+										aria-label={t("common.cancel")}
+									>
+										<X size={14} />
+									</button>
+								</div>
+							</>
+						) : (
+							/* 单选模式：按钮列表 */
+							options.filter((opt) => !opt.startsWith("✎")).map((opt, i) => (
+								<button
+									key={i}
+									className="ask-question-card-option"
+									onClick={() => handleSelect(opt)}
+									disabled={cancelling}
+								>
+									{opt}
+								</button>
+							))
+						)}
 					</div>
 				)}
 				{method === "confirm" && (
