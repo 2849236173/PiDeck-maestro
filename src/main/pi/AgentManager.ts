@@ -3011,6 +3011,8 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_update") {
 			this.upsertToolMessage(agentId, typed, "running");
+			// 立即 flush 工具更新事件，让用户能看到 bash 等长时间工具的实时进度
+			this.flushMessageEmit(agentId);
 		}
 
 		if (typed.type === "extension_ui_request") {
