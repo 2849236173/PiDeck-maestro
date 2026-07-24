@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5--1-green)
+![Version](https://img.shields.io/badge/version-0.6.5--2-green)
 
 > 这是面向 `pi-maestro-flow` 的 PiDeck 兼容发行版。它基于原作者 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)，专门修复桌面 RPC 与 Maestro 工作流之间的兼容问题。
 >
@@ -26,7 +26,11 @@
 
 ## 📋 更新日志
 
-> **兼容版最新版本 v0.6.5-1**（2026-07-23）
+> **兼容版最新版本 v0.6.5-2**（2026-07-24）
+
+### v0.6.5-2 Maestro 兼容版
+
+基于最新版 `pi-maestro-flow` RPC 协议，修复 Plan 确认/编辑在桌面端无界面等待，并恢复 delegate/explore 实时进度显示。
 
 ### v0.6.5-1 Maestro 兼容版
 

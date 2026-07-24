@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5--1-green)
+![Version](https://img.shields.io/badge/version-0.6.5--2-green)
 
 > This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
 >
@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.5-1** (2026-07-23)
+> **Latest compatibility release: v0.6.5-2** (2026-07-24)
+
+### v0.6.5-2 Maestro compatibility release
+
+Updated for the latest `pi-maestro-flow` RPC protocol, including desktop Plan confirmation/editor fallbacks and live delegate/explore progress.
 
 ### v0.6.5-1 Maestro compatibility release
 

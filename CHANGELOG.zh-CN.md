@@ -1,5 +1,9 @@
 # 更新日志
 
+## v0.6.5-2 - 2026-07-24
+
+适配最新版 `pi-maestro-flow` RPC：Plan 确认和编辑在桌面端改用原生 RPC UI，不再因缺少 `custom()` TUI 卡住；delegate/explore 运行期间继续显示实时进度。
+
 [English](CHANGELOG.md)
 
 这里记录 PiDeck 各版本的重要变化。

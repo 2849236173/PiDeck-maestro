@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.5-2 - 2026-07-24
+
+Compatibility update for the latest `pi-maestro-flow` RPC implementation: desktop Plan confirmation/editor dialogs now complete through native RPC UI, and delegate/explore progress remains visible while work is running.
+
 [中文](CHANGELOG.zh-CN.md)
 
 All notable changes to PiDeck are documented here.
