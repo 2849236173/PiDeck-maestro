@@ -132,6 +132,7 @@ import {
   type DrawerPanel,
   type SessionModifiedFile,
 } from "./components/app/AppParts";
+import { SubAgentPanel } from "./components/app/SubAgentPanel";
 import { GitPanel } from "./components/app/GitPanel";
 import { BrowserPanel, navigateTo } from "./components/app/BrowserPanel";
 import {
@@ -974,6 +975,7 @@ export function App() {
   const [savedPrompt, setSavedPrompt] = useState("");
   const [compacting, setCompacting] = useState(false);
   const [drawer, setDrawer] = useState<DrawerPanel | null>(null);
+  const [subAgentPanelVisible, setSubAgentPanelVisible] = useState(true);
 
   // ── 按项目目录持久化抽屉面板状态和展开目录（localStorage） ──
   // 文件侧边栏属于项目目录，所有在该项目下运行的 agent 共享同一套展开与面板状态。
@@ -5425,6 +5427,7 @@ export function App() {
           "--drawer-width": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
           "--drawer-col-w": `${drawer && !drawerCollapsed ? 260 : 0}px`,
           "--drawer-splitter-w": `${drawer && !drawerCollapsed ? 6 : 0}px`,
+          "--subagent-panel-col-w": `${subAgentPanelVisible ? 280 : 0}px`,
         } as React.CSSProperties
       }
     >
@@ -7088,6 +7091,11 @@ export function App() {
             }}
           />
         )}
+
+      {/* 子代理面板 */}
+      {activeAgentId && (
+        <SubAgentPanel agentId={activeAgentId} />
+      )}
 
       {/* 右侧分隔条常驻 grid 列 4，宽度由 --drawer-splitter-w 驱动（0/6px）；
           关闭/折叠时宽度 0 且 pointer-events:none，避免遮挡会话区。 */}

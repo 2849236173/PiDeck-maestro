@@ -107,6 +107,31 @@ export type ChatMessage = {
 	thinking?: string;
 };
 
+/** 子代理状态 */
+export type SubAgentStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+
+/** 子代理信息 */
+export type SubAgent = {
+	id: string;              // correlationId 或子目录名
+	sessionFile: string;     // .jsonl 文件路径
+	name?: string;           // 从会话中提取的名字（如 teammate name）
+	agent?: string;          // 代理角色（如 delegate、explorer）
+	status: SubAgentStatus;
+	startTime: number;
+	endTime?: number;
+	lastUpdate: number;
+	messageCount?: number;   // 消息数量
+	toolCount?: number;      // 工具调用数量
+	lastMessage?: string;    // 最后一条消息摘要
+	cached: boolean;         // 是否已缓存完整数据（completed 后设为 true）
+};
+
+/** 子代理状态更新事件 */
+export type SubAgentStateUpdate = {
+	running: SubAgent[];
+	completed: SubAgent[];
+};
+
 export type FileTreeNode = {
 	name: string;
 	path: string;

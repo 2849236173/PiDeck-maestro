@@ -293,4 +293,10 @@ export const ipcChannels = {
 
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",
+
+	// ===== 子代理监控 =====
+	/** 主进程 → 渲染进程：推送子代理状态更新 */
+	subAgentsStateUpdate: "sub-agents:state-update",
+	/** 渲染进程 → 主进程：请求加载子代理详细数据（点击已完成的子代理） */
+	subAgentsLoadDetail: "sub-agents:load-detail",
 } as const;

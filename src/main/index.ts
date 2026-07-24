@@ -2879,6 +2879,11 @@ function registerIpc() {
 		await agentManager.sendUIResponse(agentId, requestId, response);
 	});
 
+	// ===== 子代理监控 =====
+	ipcMain.handle(ipcChannels.subAgentsLoadDetail, async (_event, agentId: string, subAgentId: string) => {
+		return await agentManager.loadSubAgentDetail(agentId, subAgentId);
+	});
+
 	ipcMain.handle(ipcChannels.terminalList, (_event, agentId: string) =>
 		terminalManager.list(agentId),
 	);
