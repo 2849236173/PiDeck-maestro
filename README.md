@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5--2-green)
+![Version](https://img.shields.io/badge/version-0.6.5--5-green)
 
 > 这是面向 `pi-maestro-flow` 的 PiDeck 兼容发行版。它基于原作者 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)，专门修复桌面 RPC 与 Maestro 工作流之间的兼容问题。
 >
@@ -26,7 +26,14 @@
 
 ## 📋 更新日志
 
-> **兼容版最新版本 v0.6.5-2**（2026-07-24）
+> **兼容版最新版本 v0.6.5-5**（2026-07-25）
+
+### v0.6.5-5 Maestro 兼容版
+
+- 子代理面板接通 teammate 实时状态，展示运行中和已完成的子代理。
+- 支持查看子代理角色、耗时、工具调用、最近输出和会话详情。
+- 支持新建会话后延迟创建及多层 run 目录中的子会话。
+- 工具完成后继续保留最终子代理进度。
 
 ### v0.6.5-2 Maestro 兼容版
 

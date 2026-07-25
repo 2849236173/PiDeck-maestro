@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5--2-green)
+![Version](https://img.shields.io/badge/version-0.6.5--5-green)
 
 > This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
 >
@@ -26,7 +26,14 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.5-2** (2026-07-24)
+> **Latest compatibility release: v0.6.5-5** (2026-07-25)
+
+### v0.6.5-5 Maestro compatibility release
+
+- Connected the sub-agent panel to live teammate state for running and completed agents.
+- Added role, duration, tool activity, recent output, and expandable session details.
+- Detects delayed and nested sub-agent session directories created after a new session starts.
+- Keeps the final sub-agent progress visible after the parent tool completes.
 
 ### v0.6.5-2 Maestro compatibility release
 

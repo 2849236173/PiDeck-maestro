@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.5-5 - 2026-07-25
+
+Completed the sub-agent monitoring experience introduced in v0.6.5-4 and connected it to live teammate session data.
+
+### Sub-agent visibility
+
+- Connected main-process sub-agent state updates through preload to the renderer panel
+- Display running and completed sub-agents with role, duration, message count, tool count, and recent output
+- Added expandable sub-agent session details and a header toggle for the dedicated panel
+- Detect sub-agent directories created after a new parent session starts
+- Support nested teammate session layouts such as multi-level run directories
+- Preserve the final structured child-agent progress snapshot after the parent tool completes
+- Added regression coverage for IPC wiring, nested session discovery, and panel grid placement
+
 ## v0.6.5-4 - 2026-07-24
 
 Enhanced tool execution visibility: all running tools now display live elapsed time and structured progress details, replacing static collapsed subtitles.

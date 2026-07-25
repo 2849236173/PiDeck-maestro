@@ -21,6 +21,7 @@ hero:
 
 - **Multi-Project Workspace** — Add, search, drag-sort, and switch local project folders. Run multiple pi agents simultaneously with per-project isolation.
 - **Session History & Restore** — Restore previous conversations, browse tool calls and answers by timeline, and review file changes in past sessions. Import local Codex and Claude sessions.
+- **Live Sub-Agent Panel** — Monitor running and completed teammate agents, inspect recent output and tool activity, and expand persisted child-session details.
 - **Git Integration** — Real-time branch display and switching, file tree with Git status, local and remote branch management, Git worktree support.
 - **Built-in Terminal Dock** — Agent-scoped terminal tabs with PowerShell/cmd/sh fallback, multiple tabs, theme switching, height resizing, and right-click copy.
 - **Visual Config Management** — Graphical editors for Models, Auth, and Settings. Global and project-level Skills and Extension management.
