@@ -111,10 +111,14 @@ test("App keeps native typing responsive with a live draft ref", () => {
 
 test("abort clears queued intent and blocks delivery until Pi confirms cancellation", () => {
   assert.match(appSource, /abortBarrierByAgentRef = useRef<Set<string>>/);
+  assert.match(appSource, /abortPromiseByAgentRef = useRef<Map<string, Promise<void>>>/);
   assert.match(appSource, /abortBarrierByAgentRef\.current\.add\(agentId\)/);
   assert.match(appSource, /delete next\[agentId\]/);
   assert.match(appSource, /await api\.agents\.abort\(agentId\)/);
   assert.match(appSource, /!abortBarrierByAgentRef\.current\.has\(agentId\)/);
+  // 用户在 abort 完成前点发送也必须等待共享 abort Promise，不能只挡自动 drain。
+  assert.match(appSource, /const pendingAbort = abortPromiseByAgentRef\.current\.get\(targetAgentId\)/);
+  assert.match(appSource, /if \(pendingAbort\) await pendingAbort/);
   assert.match(agentManagerSource, /await runtime\.process\.client[\s\S]*?request\(\{ type: "abort" \}/);
 });
 

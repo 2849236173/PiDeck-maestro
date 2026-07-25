@@ -2771,12 +2771,14 @@ export class AgentManager {
 			);
 			const id = existing?.id ?? correlationId ?? `tool:${toolCallId}:${taskIndex}`;
 			const runtimeStatus = String(item.status ?? "").toLowerCase();
+			// parent tool 已结束且没有结构化进度时，宁可将占位标 finalizing，
+			// 再由下方收敛逻辑给出终态，避免无 snapshots 时误标 completed。
 			const status: import('../../shared/types').SubAgentStatus =
 				runtimeStatus === "completed" ? "completed" :
 				runtimeStatus === "failed" || toolStatus === "error" ? "failed" :
 				runtimeStatus === "cancelled" ? "cancelled" :
 				runtimeStatus === "finalizing" || item.resultReadyAt ? "finalizing" :
-				toolStatus === "done" && snapshots.length === 0 ? "completed" :
+				toolStatus === "done" && snapshots.length === 0 ? "finalizing" :
 				runtimeStatus === "running" || runtimeStatus === "active" ? "running" :
 				"pending";
 			const lastTool = Array.isArray(item.recentTools) && item.recentTools.length > 0
@@ -2807,6 +2809,30 @@ export class AgentManager {
 					: {}),
 			};
 			subAgents.set(id, next);
+		}
+
+		// parent tool 进入终态后，收敛仍挂在同一 toolCallId 上的 active/finalizing 子项，
+		// 避免 agent_end 丢失时面板长期显示“正在收尾”。
+		if (toolCallId && (toolStatus === "done" || toolStatus === "error")) {
+			const terminalStatus: import('../../shared/types').SubAgentStatus =
+				toolStatus === "error" ? "failed" : "completed";
+			for (const [id, subAgent] of subAgents.entries()) {
+				if (subAgent.parentToolCallId !== toolCallId) continue;
+				if (
+					subAgent.status === "completed" ||
+					subAgent.status === "failed" ||
+					subAgent.status === "cancelled"
+				) {
+					continue;
+				}
+				subAgents.set(id, {
+					...subAgent,
+					status: terminalStatus,
+					cached: true,
+					endTime: subAgent.endTime ?? now,
+					lastUpdate: now,
+				});
+			}
 		}
 
 		this.emitSubAgentState(agentId);

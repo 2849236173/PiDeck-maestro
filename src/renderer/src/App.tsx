@@ -697,6 +697,8 @@ export function App() {
   const queueFlushByAgentRef = useRef<Set<string>>(new Set());
   /** abort RPC 完成前保持投递屏障，防止新 prompt 与旧 teammate 生命周期交叉。 */
   const abortBarrierByAgentRef = useRef<Set<string>>(new Set());
+  /** 与 barrier 同步的 abort Promise，sendPrompt 在 barrier 期间必须 await 它。 */
+  const abortPromiseByAgentRef = useRef<Map<string, Promise<void>>>(new Map());
   const [queuedPrompts, setQueuedPrompts] = useState<Record<string, QueuedPrompt[]>>({});
   const queuedPromptsRef = useRef<Record<string, QueuedPrompt[]>>({});
   const activeQueuedPrompts = activeAgentId ? (queuedPrompts[activeAgentId] ?? []) : [];
@@ -4403,11 +4405,22 @@ export function App() {
     if (previous) {
       applyAgentRuntimeState(agentId, { ...previous, isStreaming: false });
     }
-    try {
-      await api.agents.abort(agentId);
-    } finally {
-      abortBarrierByAgentRef.current.delete(agentId);
+    // 共享同一 Promise，使 stop 后立刻发送的新 prompt 也等待 abort 传播完成。
+    const existingAbort = abortPromiseByAgentRef.current.get(agentId);
+    if (existingAbort) {
+      await existingAbort;
+      return;
     }
+    const abortPromise = (async () => {
+      try {
+        await api.agents.abort(agentId);
+      } finally {
+        abortBarrierByAgentRef.current.delete(agentId);
+        abortPromiseByAgentRef.current.delete(agentId);
+      }
+    })();
+    abortPromiseByAgentRef.current.set(agentId, abortPromise);
+    await abortPromise;
     // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态。
   }
 
@@ -4912,6 +4925,12 @@ export function App() {
     agentMode: ComposerAgentMode;
   }) {
     const targetAgentId = override?.agentId ?? activeAgentId;
+    // abort 传播完成前不发送新意图，避免与旧 teammate/旧 push 生命周期交叉。
+    if (targetAgentId) {
+      const pendingAbort = abortPromiseByAgentRef.current.get(targetAgentId);
+      if (pendingAbort) await pendingAbort;
+      if (abortBarrierByAgentRef.current.has(targetAgentId)) return;
+    }
     // 发送前从 DOM 直读文本，避免 contentEditable 的 IME 组合期间 handleInput 被锁导致 ref 落后于 DOM
     if (!override && targetAgentId) {
       const domText = (composerTextareaRef.current?.textContent ?? "").replace(/\u200B/g, "");

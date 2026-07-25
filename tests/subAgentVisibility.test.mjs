@@ -26,6 +26,14 @@ test("sub-agent monitoring handles new sessions and nested teammate session file
   assert.match(manager, /watch\(subAgentDir, \{ recursive: process\.platform === "win32" \}/);
 });
 
+test("parent tool end finalizes remaining active teammate placeholders", () => {
+  const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+  assert.match(manager, /toolStatus === "done" && snapshots\.length === 0 \? "finalizing"/);
+  assert.match(manager, /parent tool 进入终态后，收敛仍挂在同一 toolCallId/);
+  assert.match(manager, /subAgent\.parentToolCallId !== toolCallId/);
+  assert.match(manager, /toolStatus === "error" \? "failed" : "completed"/);
+});
+
 test("teammate lifecycle creates immediate placeholders and does not complete on assistant stop", () => {
   const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
   const types = readFileSync("src/shared/types.ts", "utf8");
