@@ -53,6 +53,9 @@ Maestro compatibility release based on upstream `ayuayue/PiDeck v0.6.6-beta.2`.
 ### Maestro desktop compatibility
 
 - Kept the live sub-agent / teammate panel, nested session monitoring, and final tool progress.
+- Teammate lifecycle now tracks `pending` / `running` / `finalizing` / terminal states from tool events instead of waiting only on delayed JSONL files.
+- Sub-agent details reuse main-chat rich text rendering; header shows active count and completed agents live under collapsible history.
+- Abort clears queued prompts and waits for Pi abort delivery so stale teammate/push intent cannot resume.
 - Kept Maestro `ask_userquestion`, Plan RPC fallbacks, and update checks against `2849236173/PiDeck-maestro`.
 - Synced upstream 0.6.6-beta.2 features while preserving the personal compatibility release line.
 

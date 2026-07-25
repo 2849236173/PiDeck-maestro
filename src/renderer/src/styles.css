@@ -7968,6 +7968,13 @@ body.is-composer-resizing .composer-resize-handle::after {
   font-weight: 600;
 }
 
+.subagent-active-count {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-small);
+}
+
 .subagent-panel-close,
 .subagent-panel-toggle {
   display: inline-flex;
@@ -8014,6 +8021,31 @@ body.is-composer-resizing .composer-resize-handle::after {
   padding: 0 var(--space-2);
 }
 
+.subagent-history-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  text-align: left;
+}
+
+.subagent-history-toggle:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.subagent-history-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .subagent-item {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-subtle);
@@ -8050,6 +8082,11 @@ body.is-composer-resizing .composer-resize-handle::after {
 .subagent-item-trigger:focus-visible {
   outline: none;
   box-shadow: inset var(--focus-ring);
+}
+
+.subagent-item-trigger:disabled {
+  cursor: default;
+  opacity: 1;
 }
 
 .subagent-item-main {
@@ -8089,7 +8126,9 @@ body.is-composer-resizing .composer-resize-handle::after {
   margin-top: 2px;
 }
 
-.subagent-item-status.running {
+.subagent-item-status.pending,
+.subagent-item-status.running,
+.subagent-item-status.finalizing {
   color: var(--color-info);
 }
 
@@ -8105,6 +8144,21 @@ body.is-composer-resizing .composer-resize-handle::after {
 
 .subagent-status-spinner {
   animation: spin 0.8s linear infinite;
+}
+
+.subagent-status-label {
+  color: var(--color-text-secondary);
+}
+
+.subagent-status-label.pending,
+.subagent-status-label.running,
+.subagent-status-label.finalizing {
+  color: var(--color-info);
+}
+
+.subagent-status-label.failed,
+.subagent-status-label.cancelled {
+  color: var(--color-danger);
 }
 
 .subagent-item-meta {
@@ -8156,32 +8210,48 @@ body.is-composer-resizing .composer-resize-handle::after {
 .subagent-message-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  max-height: 320px;
+  gap: var(--space-3);
+  max-height: min(520px, 58vh);
   overflow-y: auto;
+  padding-right: var(--space-1);
 }
 
 .subagent-message {
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
+  min-width: 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--color-border-emphasis);
   background: var(--color-bg-secondary);
   font-size: var(--font-size-small);
 }
 
-.subagent-message > span {
-  display: inline-block;
+.subagent-message.assistant {
+  border-left-color: var(--color-accent);
+  background: var(--color-bg-panel);
+}
+
+.subagent-message > header {
+  margin-bottom: var(--space-2);
   color: var(--color-text-tertiary);
   font-family: var(--font-family-business);
   font-size: var(--font-size-micro);
-  margin-bottom: var(--space-1);
+  text-transform: uppercase;
 }
 
-.subagent-message p {
-  margin: 0;
+.subagent-message .assistant-text {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
 }
 
-.subagent-message p {
-  margin: var(--space-1) 0 0;
+.subagent-message .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.subagent-message .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.subagent-message-plain {
   color: var(--color-text-secondary);
   line-height: var(--line-height-body);
   white-space: pre-wrap;

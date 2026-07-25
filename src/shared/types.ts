@@ -110,12 +110,15 @@ export type ChatMessage = {
 };
 
 /** 子代理状态 */
-export type SubAgentStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type SubAgentStatus = 'pending' | 'running' | 'finalizing' | 'completed' | 'failed' | 'cancelled';
 
 /** 子代理信息 */
 export type SubAgent = {
-	id: string;              // correlationId 或子目录名
-	sessionFile: string;     // .jsonl 文件路径
+	id: string;              // 面板中的稳定 id；实时占位创建后不随会话文件变化
+	sessionFile?: string;    // .jsonl 文件路径；子进程尚未落盘时为空
+	correlationId?: string;  // teammate 运行时关联 id，用于将实时进度与落盘会话合并
+	parentToolCallId?: string; // 创建该子代理的父 teammate 工具调用
+	taskIndex?: number;      // 多任务派发中的任务序号
 	name?: string;           // 从会话中提取的名字（如 teammate name）
 	agent?: string;          // 代理角色（如 delegate、explorer）
 	status: SubAgentStatus;

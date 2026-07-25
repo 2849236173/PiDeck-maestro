@@ -1274,10 +1274,12 @@ export class AgentManager {
 			}
 		}
 
-		runtime.process.client
+		// 等待 Pi 确认 abort 已被处理，确保扩展工具的 AbortSignal 已传播到 teammate
+		// 共享控制器后再允许 renderer 发送下一条指令，避免旧子代理结果与新意图交叉。
+		await runtime.process.client
 			.request({ type: "abort" }, 10_000)
 			.catch(() => {
-				// abort 超时或失败不影响前端状态切换
+				// 超时后仍执行本地清理；renderer 的屏障至少覆盖了完整等待窗口。
 			});
 
 		// 立即清理 pending UI 记录并移除 ask_question 卡片，不等待 abort 返回
@@ -2726,6 +2728,90 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 将 teammate 工具的实时生命周期同步到右侧面板。
+	 * 文件监控只能在子会话落盘后工作；此状态源负责派发瞬间的占位和权威终态。
+	 */
+	private syncSubAgentsFromToolEvent(
+		agentId: string,
+		event: Record<string, any>,
+		toolStatus: "running" | "done" | "error",
+	) {
+		const toolName = String(event.toolName ?? "").toLowerCase();
+		if (toolName !== "teammate" && toolName !== "delegate" && toolName !== "explorer") return;
+
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+
+		const toolCallId = String(event.toolCallId ?? "");
+		let args: any = event.args;
+		if (typeof args === "string") {
+			try { args = JSON.parse(args); } catch { args = undefined; }
+		}
+		const result = event.result ?? event.partialResult ?? event.output;
+		const details = result && typeof result === "object" ? (result as any).details : undefined;
+		const snapshots = [
+			...(Array.isArray(details?.progress) ? details.progress : []),
+			...(Array.isArray(details?.childCalls) ? details.childCalls : []),
+		].filter((item) => item && typeof item === "object");
+
+		const taskArgs = Array.isArray(args?.tasks)
+			? args.tasks
+			: [{ agent: args?.agent ?? (toolName === "teammate" ? undefined : toolName), name: args?.name }];
+		const entries = snapshots.length > 0 ? snapshots : taskArgs;
+		const now = Date.now();
+
+		for (let index = 0; index < entries.length; index++) {
+			const item = entries[index] ?? {};
+			const taskIndex = typeof item.taskIndex === "number" ? item.taskIndex : index;
+			const correlationId = typeof item.correlationId === "string" ? item.correlationId : undefined;
+			const existing = [...subAgents.values()].find((candidate) =>
+				(correlationId && candidate.correlationId === correlationId) ||
+				(candidate.parentToolCallId === toolCallId && candidate.taskIndex === taskIndex),
+			);
+			const id = existing?.id ?? correlationId ?? `tool:${toolCallId}:${taskIndex}`;
+			const runtimeStatus = String(item.status ?? "").toLowerCase();
+			const status: import('../../shared/types').SubAgentStatus =
+				runtimeStatus === "completed" ? "completed" :
+				runtimeStatus === "failed" || toolStatus === "error" ? "failed" :
+				runtimeStatus === "cancelled" ? "cancelled" :
+				runtimeStatus === "finalizing" || item.resultReadyAt ? "finalizing" :
+				toolStatus === "done" && snapshots.length === 0 ? "completed" :
+				runtimeStatus === "running" || runtimeStatus === "active" ? "running" :
+				"pending";
+			const lastTool = Array.isArray(item.recentTools) && item.recentTools.length > 0
+				? item.recentTools[item.recentTools.length - 1]
+				: undefined;
+			const next: import('../../shared/types').SubAgent = {
+				...(existing ?? {
+					id,
+					status: "pending" as const,
+					startTime: now,
+					lastUpdate: now,
+					cached: false,
+				}),
+				correlationId: correlationId ?? existing?.correlationId,
+				parentToolCallId: toolCallId || existing?.parentToolCallId,
+				taskIndex,
+				name: item.name ?? taskArgs[taskIndex]?.name ?? existing?.name,
+				agent: item.agent ?? taskArgs[taskIndex]?.agent ?? existing?.agent,
+				status,
+				lastUpdate: now,
+				toolCount: typeof item.toolCount === "number" ? item.toolCount : existing?.toolCount,
+				lastMessage: typeof item.lastMessage === "string"
+					? item.lastMessage.slice(0, 100)
+					: typeof lastTool?.name === "string" ? lastTool.name : existing?.lastMessage,
+				cached: status === "completed" || status === "failed" || status === "cancelled",
+				...(status === "completed" || status === "failed" || status === "cancelled"
+					? { endTime: existing?.endTime ?? now }
+					: {}),
+			};
+			subAgents.set(id, next);
+		}
+
+		this.emitSubAgentState(agentId);
+	}
+
 	/** 开始监控子代理目录 */
 	private startSubAgentMonitoring(agentId: string, sessionPath: string) {
 		// 如果没有会话路径，无法监控子代理
@@ -2745,10 +2831,9 @@ export class AgentManager {
 		const attachWatcher = () => {
 			if (this.subAgentWatchers.has(agentId) || !existsSync(subAgentDir)) return;
 			try {
-				const watcher = watch(subAgentDir, (_eventType: string, filename: string | null) => {
-					if (filename && filename.endsWith('.jsonl')) {
-						void this.scanSubAgents(agentId, subAgentDir);
-					}
+				const watcher = watch(subAgentDir, { recursive: process.platform === "win32" }, () => {
+					// teammate 先创建多层目录，再创建 JSONL；目录事件也必须立即触发递归扫描。
+					void this.scanSubAgents(agentId, subAgentDir);
 				});
 				this.subAgentWatchers.set(agentId, watcher);
 			} catch {
@@ -2814,20 +2899,27 @@ export class AgentManager {
 					? relativePath.replace(/\.jsonl$/i, '')
 					: basename(relativePath, '.jsonl');
 
-				if (subAgents.has(subAgentId)) continue;
+				const fileEntry = [...subAgents.values()].find((candidate) => candidate.sessionFile === sessionFile);
+				if (fileEntry) continue;
 
 				const stat = statSync(sessionFile);
-				const subAgent: import('../../shared/types').SubAgent = {
+				const pathSegments = relativePath.split('/');
+				const runtimeEntry = [...subAgents.values()].find((candidate) =>
+					!candidate.sessionFile && candidate.correlationId && pathSegments.includes(candidate.correlationId),
+				);
+				const subAgent: import('../../shared/types').SubAgent = runtimeEntry ?? {
 					id: subAgentId,
-					sessionFile,
 					status: 'running',
 					startTime: stat.birthtimeMs,
 					lastUpdate: stat.mtimeMs,
 					cached: false,
 				};
+				subAgent.sessionFile = sessionFile;
+				subAgent.startTime = Math.min(subAgent.startTime, stat.birthtimeMs);
+				subAgent.lastUpdate = stat.mtimeMs;
 
 				await this.extractSubAgentInfo(subAgent);
-				subAgents.set(subAgentId, subAgent);
+				subAgents.set(subAgent.id, subAgent);
 			}
 
 			this.emitSubAgentState(agentId);
@@ -2842,8 +2934,8 @@ export class AgentManager {
 		if (!subAgents) return;
 
 		for (const [subAgentId, subAgent] of subAgents.entries()) {
-			// 跳过已完成且已缓存的
-			if (subAgent.cached) continue;
+			// 尚未落盘的实时占位只由工具进度更新；已完成记录也无需重复读取。
+			if (!subAgent.sessionFile || subAgent.cached) continue;
 
 			try {
 				const stat = statSync(subAgent.sessionFile);
@@ -2873,8 +2965,10 @@ export class AgentManager {
 
 	/** 从会话文件中提取子代理信息（名称、状态、最后消息等） */
 	private async extractSubAgentInfo(subAgent: import('../../shared/types').SubAgent) {
+		const sessionFile = subAgent.sessionFile;
+		if (!sessionFile) return;
 		try {
-			const content = await readFile(subAgent.sessionFile, 'utf-8');
+			const content = await readFile(sessionFile, 'utf-8');
 			const lines = content.trim().split('\n').filter(line => line.trim());
 
 			if (lines.length === 0) return;
@@ -2935,7 +3029,9 @@ export class AgentManager {
 			subAgent.toolCount = toolCount;
 			subAgent.lastMessage = lastMessage;
 
-			// 判断是否完成：最后一条是 assistant 且没有 tool_use
+			// assistant stop 只表示模型结果已经可用；teammate 仍可能等待 agent_end、
+			// 结构化输出或 handoff barrier。实时追踪的记录必须保留 finalizing，
+			// 只有工具结构化进度才能给出权威终态；历史孤立文件则沿用 completed。
 			const lastLine = lines[lines.length - 1];
 			try {
 				const lastRecord = JSON.parse(lastLine);
@@ -2944,7 +3040,9 @@ export class AgentManager {
 					: lastRecord;
 				if (lastEntry.role === 'assistant') {
 					const hasToolUse = Array.isArray(lastEntry.content) && lastEntry.content.some((b: any) => b.type === 'tool_use');
-					if (!hasToolUse) subAgent.status = hasError ? 'failed' : 'completed';
+					if (!hasToolUse && subAgent.status !== 'completed' && subAgent.status !== 'failed' && subAgent.status !== 'cancelled') {
+						subAgent.status = subAgent.parentToolCallId ? 'finalizing' : (hasError ? 'failed' : 'completed');
+					}
 				}
 			} catch {
 				// 忽略
@@ -2963,7 +3061,7 @@ export class AgentManager {
 		const completed: import('../../shared/types').SubAgent[] = [];
 
 		for (const subAgent of subAgents.values()) {
-			if (subAgent.status === 'running') {
+			if (subAgent.status === 'pending' || subAgent.status === 'running' || subAgent.status === 'finalizing') {
 				running.push(subAgent);
 			} else {
 				completed.push(subAgent);
@@ -2984,7 +3082,7 @@ export class AgentManager {
 		if (!subAgents) return [];
 
 		const subAgent = subAgents.get(subAgentId);
-		if (!subAgent) return [];
+		if (!subAgent?.sessionFile) return [];
 
 		try {
 			const content = await readFile(subAgent.sessionFile, 'utf-8');
@@ -3266,6 +3364,7 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_start") {
 			this.upsertToolMessage(agentId, typed, "running");
+			this.syncSubAgentsFromToolEvent(agentId, typed, "running");
 			// 并行工具会先连续发多个 start；按 toolCallId 追踪，只有最后一个 end 才能表示工具阶段完成。
 			const toolName = typed.toolName ?? "tool";
 			const toolCallId = String(typed.toolCallId ?? `${toolName}-${Date.now()}`);
@@ -3289,6 +3388,7 @@ export class AgentManager {
 				typed,
 				typed.isError ? "error" : "done",
 			);
+			this.syncSubAgentsFromToolEvent(agentId, typed, typed.isError ? "error" : "done");
 			// 工具执行结束是终态，立即 flush 把最终结果推给渲染进程，避免节流窗口内用户看不到完成状态。
 			this.flushMessageEmit(agentId);
 			// 清除本次 toolCall；并行批次仅在最后一个工具结束时发布 false，
@@ -3311,6 +3411,7 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_update") {
 			this.upsertToolMessage(agentId, typed, "running");
+			this.syncSubAgentsFromToolEvent(agentId, typed, "running");
 			// 立即 flush 工具更新事件，让用户能看到 bash 等长时间工具的实时进度
 			this.flushMessageEmit(agentId);
 		}

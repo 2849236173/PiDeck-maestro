@@ -695,6 +695,8 @@ export function App() {
   const prevIsAgentBusyRef = useRef(false);
   /** 客户端队列按 agent 记录 flush 锁，避免 tool-end 与 idle 并发投递。 */
   const queueFlushByAgentRef = useRef<Set<string>>(new Set());
+  /** abort RPC 完成前保持投递屏障，防止新 prompt 与旧 teammate 生命周期交叉。 */
+  const abortBarrierByAgentRef = useRef<Set<string>>(new Set());
   const [queuedPrompts, setQueuedPrompts] = useState<Record<string, QueuedPrompt[]>>({});
   const queuedPromptsRef = useRef<Record<string, QueuedPrompt[]>>({});
   const activeQueuedPrompts = activeAgentId ? (queuedPrompts[activeAgentId] ?? []) : [];
@@ -4389,14 +4391,24 @@ export function App() {
 
   async function abortAgent(agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
-    // 立即清除流式状态，让思考气泡和 loading 立刻消失，不等后端 RPC 返回
+    // 终止代表用户撤销当前意图：本地尚未发送的旧队列必须一起丢弃，否则 idle 后会重新执行。
+    abortBarrierByAgentRef.current.add(agentId);
+    queueFlushByAgentRef.current.delete(agentId);
+    updateQueuedPrompts((current) => {
+      const next = { ...current };
+      delete next[agentId];
+      return next;
+    });
     const previous = runtimeStateByAgentRef.current[agentId];
     if (previous) {
       applyAgentRuntimeState(agentId, { ...previous, isStreaming: false });
     }
-    await api.agents.abort(agentId);
-    // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态，
-    // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
+    try {
+      await api.agents.abort(agentId);
+    } finally {
+      abortBarrierByAgentRef.current.delete(agentId);
+    }
+    // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态。
   }
 
   /**
@@ -4504,11 +4516,11 @@ export function App() {
 
   function canFlushQueuedPrompt(agentId: string) {
     const agent = displayAgentsRef.current.find((item) => item.id === agentId);
-    return agent?.status === "idle" && !isAgentCurrentlyBusy(agentId);
+    return !abortBarrierByAgentRef.current.has(agentId) && agent?.status === "idle" && !isAgentCurrentlyBusy(agentId);
   }
 
   async function flushQueuedSteerPrompts(agentId: string) {
-    if (queueFlushByAgentRef.current.has(agentId) || !isAgentCurrentlyBusy(agentId)) return;
+    if (abortBarrierByAgentRef.current.has(agentId) || queueFlushByAgentRef.current.has(agentId) || !isAgentCurrentlyBusy(agentId)) return;
     queueFlushByAgentRef.current.add(agentId);
     try {
       // Keep one lock for the whole ordered batch. Releasing it between items would let a second
@@ -6822,16 +6834,6 @@ export function App() {
                 >
                   <Network size={16} aria-hidden="true" />
                 </button>
-                <div className="header-action-group branch-group">
-                  {!isLanWeb && (
-                    <BranchSelector
-                      gitInfo={gitInfo}
-                      switchingBranch={switchingBranch}
-                      onSwitch={switchBranch}
-                      onCreateBranch={createBranch}
-                    />
-                  )}
-                </div>
                 <div className="header-action-group session-group">
                   <div className="session-combo" ref={sessionComboRef}>
                     <button
@@ -8030,7 +8032,12 @@ export function App() {
 
       {/* 子代理面板：显隐同时控制 grid 第 4 列，关闭后不保留可聚焦内容。 */}
       {activeAgentId && subAgentPanelVisible && (
-        <SubAgentPanel agentId={activeAgentId} api={api} onClose={() => setSubAgentPanelVisible(false)} />
+        <SubAgentPanel
+          agentId={activeAgentId}
+          api={api}
+          onClose={() => setSubAgentPanelVisible(false)}
+          onOpenFile={openFilePath}
+        />
       )}
 
       {/* 右侧分隔条常驻 grid 列 4，宽度由 --drawer-splitter-w 驱动（0/6px）；

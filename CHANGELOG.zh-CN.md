@@ -53,6 +53,9 @@
 ### Maestro 桌面兼容
 
 - 保留子代理 / teammate 实时面板、嵌套会话监控和工具完成后的最终进度。
+- teammate 生命周期改为从工具事件跟踪 `pending` / `running` / `finalizing` / 终态，不再只等延迟出现的 JSONL。
+- 子代理详情复用主对话富文本渲染；顶部显示活跃数，已完成归入可折叠历史记录。
+- 终止会清空本地排队消息并等待 Pi abort 传播，避免旧 teammate / push 意图继续执行。
 - 保留 Maestro `ask_userquestion`、Plan RPC 回退，以及指向 `2849236173/PiDeck-maestro` 的应用内更新检查。
 - 同步上游 0.6.6-beta.2 能力，同时保持 personal 兼容发行线。
 
