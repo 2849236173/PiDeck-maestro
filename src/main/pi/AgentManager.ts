@@ -2,7 +2,7 @@ import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, statSync, watch, type FSWatcher } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { join, dirname, basename, relative } from "node:path";
 import { homedir } from "node:os";
 import type {
 	AgentRuntimeState,
@@ -824,9 +824,10 @@ export class AgentManager {
 				totalMs: Date.now() - t0,
 				historyLoading: "background",
 			});
-			// 启动子代理监控
-			if (input.sessionPath) {
-				this.startSubAgentMonitoring(id, input.sessionPath);
+			// 新建会话的路径只有 get_state 完成后才可用，必须使用最终 sessionPath。
+			// 子代理目录通常又会晚于父会话创建，因此监控器需要先启动并等待目录出现。
+			if (tab.sessionPath) {
+				this.startSubAgentMonitoring(id, tab.sessionPath);
 			}
 		} catch (error) {
 			tab.status = "error";
@@ -913,6 +914,9 @@ export class AgentManager {
 		runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
 		runtime.tab.sessionPath = data?.sessionFile ?? runtime.tab.sessionPath;
 		runtime.tab.title = data?.sessionName || runtime.tab.title;
+		if (runtime.tab.sessionPath) {
+			this.startSubAgentMonitoring(agentId, runtime.tab.sessionPath);
+		}
 		this.emitState();
 		return runtime.tab;
 	}
@@ -1381,6 +1385,9 @@ export class AgentManager {
 			runtime.tab.sessionPath = data?.sessionFile ?? sessionPath;
 			runtime.tab.title = data?.sessionName ?? runtime.tab.title;
 			runtime.tab.status = "idle";
+			if (runtime.tab.sessionPath) {
+				this.startSubAgentMonitoring(agentId, runtime.tab.sessionPath);
+			}
 			// 进程退出型压缩可能来不及发 compaction_end；重连成功即表示 Pi 已可继续接收消息。
 			this.rpcCompactingAgents.delete(agentId);
 
@@ -2449,28 +2456,34 @@ export class AgentManager {
 		const sessionId = basename(sessionPath, '.jsonl');
 		const subAgentDir = join(sessionDir, sessionId);
 
-		// 检查子代理目录是否存在
-		if (!existsSync(subAgentDir)) return;
-
 		// 停止旧的监听器
 		this.stopSubAgentMonitoring(agentId);
 
-		// 初始化子代理映射
+		// 即使目录尚不存在也先初始化。teammate 通常在首次派发时才创建子目录，
+		// 若此处直接返回，新建会话在整个生命周期内都不会再获得监控机会。
 		this.subAgentsByAgent.set(agentId, new Map());
 
-		// 初始扫描
+		const attachWatcher = () => {
+			if (this.subAgentWatchers.has(agentId) || !existsSync(subAgentDir)) return;
+			try {
+				const watcher = watch(subAgentDir, (_eventType: string, filename: string | null) => {
+					if (filename && filename.endsWith('.jsonl')) {
+						void this.scanSubAgents(agentId, subAgentDir);
+					}
+				});
+				this.subAgentWatchers.set(agentId, watcher);
+			} catch {
+				// 网络盘等环境可能不支持 fs.watch；下方轮询仍能保证状态可见。
+			}
+		};
+
+		attachWatcher();
 		void this.scanSubAgents(agentId, subAgentDir);
 
-		// 监听目录变化（新子代理创建）
-		const watcher = watch(subAgentDir, (eventType: string, filename: string | null) => {
-			if (filename && filename.endsWith('.jsonl')) {
-				void this.scanSubAgents(agentId, subAgentDir);
-			}
-		});
-		this.subAgentWatchers.set(agentId, watcher);
-
-		// 启动轮询器（每秒更新运行中的子代理）
+		// 每秒同时发现延迟创建的目录/文件，并刷新运行状态。
 		const poller = setInterval(() => {
+			attachWatcher();
+			void this.scanSubAgents(agentId, subAgentDir);
 			void this.updateRunningSubAgents(agentId, subAgentDir);
 		}, 1000);
 		this.subAgentPollers.set(agentId, poller);
@@ -2493,23 +2506,37 @@ export class AgentManager {
 		this.subAgentsByAgent.delete(agentId);
 	}
 
+	/** 收集子代理会话文件；兼容旧版直属 .jsonl 与 teammate 的多层 run 目录 session.jsonl。 */
+	private collectSubAgentSessionFiles(rootDir: string, currentDir = rootDir, depth = 0): string[] {
+		if (depth > 4 || !existsSync(currentDir)) return [];
+		const files: string[] = [];
+		for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
+			const entryPath = join(currentDir, entry.name);
+			if (entry.isDirectory()) {
+				files.push(...this.collectSubAgentSessionFiles(rootDir, entryPath, depth + 1));
+			} else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+				files.push(entryPath);
+			}
+		}
+		return files;
+	}
+
 	/** 扫描子代理目录 */
 	private async scanSubAgents(agentId: string, subAgentDir: string) {
 		const subAgents = this.subAgentsByAgent.get(agentId);
 		if (!subAgents) return;
 
 		try {
-			const files = readdirSync(subAgentDir);
-			for (const file of files) {
-				if (!file.endsWith('.jsonl')) continue;
+			const sessionFiles = this.collectSubAgentSessionFiles(subAgentDir);
+			for (const sessionFile of sessionFiles) {
+				const relativePath = relative(subAgentDir, sessionFile).replace(/\\/g, '/');
+				// 嵌套 teammate 会话通常都叫 session.jsonl，必须使用相对路径区分并稳定寻址。
+				const subAgentId = relativePath.includes('/')
+					? relativePath.replace(/\.jsonl$/i, '')
+					: basename(relativePath, '.jsonl');
 
-				const subAgentId = basename(file, '.jsonl');
-				const sessionFile = join(subAgentDir, file);
-
-				// 如果已经存在，跳过
 				if (subAgents.has(subAgentId)) continue;
 
-				// 读取第一行获取基本信息
 				const stat = statSync(sessionFile);
 				const subAgent: import('../../shared/types').SubAgent = {
 					id: subAgentId,
@@ -2520,15 +2547,13 @@ export class AgentManager {
 					cached: false,
 				};
 
-				// 尝试提取名称和代理类型
 				await this.extractSubAgentInfo(subAgent);
-
 				subAgents.set(subAgentId, subAgent);
 			}
 
 			this.emitSubAgentState(agentId);
-		} catch (error) {
-			// 忽略扫描错误
+		} catch {
+			// 目录可能正由 teammate 创建或移动；下一次轮询会重试。
 		}
 	}
 
@@ -2585,47 +2610,41 @@ export class AgentManager {
 
 			for (const line of recentLines) {
 				try {
-					const entry = JSON.parse(line);
+					const record = JSON.parse(line);
+					// Pi 原生 JSONL 将消息包在 { type: "message", message } 中；旧格式则直接存 role/content。
+					const entry = record?.message && typeof record.message === 'object' ? record.message : record;
+					if (!subAgent.name && typeof record?.sessionName === 'string') subAgent.name = record.sessionName;
+					if (!subAgent.name && record?.type === 'session_info' && typeof record.name === 'string') {
+						subAgent.name = record.name;
+					}
 
-					// 提取名称（第一次出现时）
-					if (!subAgent.name && entry.role === 'user' && entry.content) {
-						const text = typeof entry.content === 'string' ? entry.content : '';
-						// 尝试从 teammate 调用中提取名称
-						const nameMatch = text.match(/name["']?\s*:\s*["']([^"']+)["']/);
-						if (nameMatch) {
-							subAgent.name = nameMatch[1];
+					if (entry.role === 'user' && entry.content) {
+						const text = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content);
+						if (!subAgent.name) {
+							const nameMatch = text.match(/name["']?\s*:\s*["']([^"']+)["']/);
+							if (nameMatch) subAgent.name = nameMatch[1];
+						}
+						if (!subAgent.agent) {
+							const agentMatch = text.match(/agent["']?\s*:\s*["']([^"']+)["']/);
+							if (agentMatch) subAgent.agent = agentMatch[1];
 						}
 					}
 
-					// 提取代理类型
-					if (!subAgent.agent && entry.role === 'user' && entry.content) {
-						const text = typeof entry.content === 'string' ? entry.content : '';
-						const agentMatch = text.match(/agent["']?\s*:\s*["']([^"']+)["']/);
-						if (agentMatch) {
-							subAgent.agent = agentMatch[1];
-						}
-					}
-
-					// 统计消息和工具
 					if (entry.role === 'assistant' || entry.role === 'user') {
 						messageCount++;
-						// 提取最后一条文本消息
 						if (entry.content) {
 							const text = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content);
 							lastMessage = text.slice(0, 100);
 						}
 					}
 
-					if (entry.role === 'assistant' && entry.content && Array.isArray(entry.content)) {
+					if (entry.role === 'assistant' && Array.isArray(entry.content)) {
 						for (const block of entry.content) {
-							if (block.type === 'tool_use') {
-								toolCount++;
-							}
+							if (block.type === 'tool_use') toolCount++;
 						}
 					}
 
-					// 检查错误
-					if (entry.role === 'assistant' && entry.stop_reason === 'error') {
+					if (entry.role === 'assistant' && (entry.stop_reason === 'error' || entry.stopReason === 'error')) {
 						hasError = true;
 					}
 				} catch {
@@ -2640,12 +2659,13 @@ export class AgentManager {
 			// 判断是否完成：最后一条是 assistant 且没有 tool_use
 			const lastLine = lines[lines.length - 1];
 			try {
-				const lastEntry = JSON.parse(lastLine);
+				const lastRecord = JSON.parse(lastLine);
+				const lastEntry = lastRecord?.message && typeof lastRecord.message === 'object'
+					? lastRecord.message
+					: lastRecord;
 				if (lastEntry.role === 'assistant') {
 					const hasToolUse = Array.isArray(lastEntry.content) && lastEntry.content.some((b: any) => b.type === 'tool_use');
-					if (!hasToolUse) {
-						subAgent.status = hasError ? 'failed' : 'completed';
-					}
+					if (!hasToolUse) subAgent.status = hasError ? 'failed' : 'completed';
 				}
 			} catch {
 				// 忽略
@@ -2695,7 +2715,8 @@ export class AgentManager {
 
 			for (const line of lines) {
 				try {
-					const entry = JSON.parse(line);
+					const record = JSON.parse(line);
+					const entry = record?.message && typeof record.message === 'object' ? record.message : record;
 
 					// 转换为 ChatMessage 格式
 					if (entry.role === 'user' || entry.role === 'assistant') {
@@ -3559,8 +3580,13 @@ export class AgentManager {
 			}
 			return undefined;
 		})();
-		// 提取结构化进度信息（子代理进度、子调用）
-		const agentProgress = status === "running" ? this.extractAgentProgress(result) : undefined;
+		// 提取结构化进度信息（子代理进度、子调用）。终态事件常只返回汇总文本，
+		// 因此没有新快照时保留运行期最后一份数据，避免工具完成后 UI 突然清空。
+		const extractedAgentProgress = this.extractAgentProgress(result);
+		const previousAgentProgress = existing?.meta?._agentProgress;
+		const agentProgress = extractedAgentProgress ?? (
+			Array.isArray(previousAgentProgress) ? previousAgentProgress : undefined
+		);
 		// DEBUG: 输出进度提取日志
 		if (status === "running" && (toolName === "teammate" || toolName === "delegate" || toolName === "explorer")) {
 			console.log(`[AgentManager] Tool update: ${toolName}, hasResult: ${!!result}, agentProgress items: ${agentProgress?.length ?? 0}`);

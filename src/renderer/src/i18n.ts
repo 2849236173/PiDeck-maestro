@@ -1517,6 +1517,7 @@ const zhCN = {
   "tool.diff": "diff",
   "tool.viewDiff": "查看本次 diff",
 
+  "subAgent.title": "子代理",
   "subAgent.running": "运行中的子代理",
   "subAgent.completed": "已完成的子代理",
   "subAgent.noRunning": "暂无运行中的子代理",
@@ -1528,6 +1529,8 @@ const zhCN = {
   "subAgent.messages": "消息数",
   "subAgent.toolCalls": "工具调用",
   "subAgent.tokens": "Tokens",
+  "subAgent.loading": "正在加载子代理会话…",
+  "subAgent.loadFailed": "子代理会话加载失败",
   "diagnostic.errorTitle": "错误诊断",
   "diagnostic.systemTitle": "系统状态",
   "update.availableTitle": "发现新版本 v{version}",
@@ -3084,6 +3087,7 @@ const enUS: Record<TranslationKey, string> = {
   "tool.diff": "diff",
   "tool.viewDiff": "View this diff",
 
+  "subAgent.title": "Sub-Agents",
   "subAgent.running": "Running Sub-Agents",
   "subAgent.completed": "Completed Sub-Agents",
   "subAgent.noRunning": "No running sub-agents",
@@ -3095,6 +3099,8 @@ const enUS: Record<TranslationKey, string> = {
   "subAgent.messages": "Messages",
   "subAgent.toolCalls": "Tool Calls",
   "subAgent.tokens": "Tokens",
+  "subAgent.loading": "Loading sub-agent session…",
+  "subAgent.loadFailed": "Failed to load sub-agent session",
   "diagnostic.errorTitle": "Error diagnostics",
   "diagnostic.systemTitle": "System status",
   "update.availableTitle": "New version v{version} available",

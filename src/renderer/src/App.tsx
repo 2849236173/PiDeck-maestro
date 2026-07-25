@@ -44,6 +44,7 @@ import {
   Filter,
   GitBranch,
   GitGraph,
+  Network,
   Minimize2,
   RefreshCw,
   X,
@@ -6198,6 +6199,16 @@ export function App() {
                 }
               />
               <div className="header-actions-right">
+                <button
+                  type="button"
+                  className={`subagent-panel-toggle${subAgentPanelVisible ? " active" : ""}`}
+                  onClick={() => setSubAgentPanelVisible((visible) => !visible)}
+                  title={t("subAgent.title")}
+                  aria-label={t("subAgent.title")}
+                  aria-pressed={subAgentPanelVisible}
+                >
+                  <Network size={16} aria-hidden="true" />
+                </button>
                 <div className="header-action-group branch-group">
                   {!isLanWeb && (
                     <BranchSelector
@@ -7092,9 +7103,9 @@ export function App() {
           />
         )}
 
-      {/* 子代理面板 */}
-      {activeAgentId && (
-        <SubAgentPanel agentId={activeAgentId} />
+      {/* 子代理面板：显隐同时控制 grid 第 4 列，关闭后不保留可聚焦内容。 */}
+      {activeAgentId && subAgentPanelVisible && (
+        <SubAgentPanel agentId={activeAgentId} api={api} onClose={() => setSubAgentPanelVisible(false)} />
       )}
 
       {/* 右侧分隔条常驻 grid 列 4，宽度由 --drawer-splitter-w 驱动（0/6px）；
