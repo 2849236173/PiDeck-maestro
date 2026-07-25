@@ -231,6 +231,8 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 
 	// 暂存区：已 flush 但无 assistant 消息的 run（如 ask_question 场景），等待后续消息合并
 	let pendingRun: (MessageItem | ToolGroupItem | ThinkingGroupItem)[] | null = null;
+	// 追踪当前 run 中最后一个 assistant 消息的时间戳，用于判断后续工具是否属于新的调用周期
+	let lastAssistantTimestamp = 0;
 
 	for (const message of messages) {
 		if (isThinkingOnly(message)) {
@@ -247,8 +249,18 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 				pendingRun = null;
 			}
 			appendRunMessage(message);
+			lastAssistantTimestamp = message.timestamp;
 		} else if (message.role === "tool") {
 			flushThinking();
+			// 如果当前 run 已有 assistant 消息，且工具消息时间戳晚于最后一个 assistant 消息超过 200ms，
+			// 说明这是 assistant 完成文字输出后才调用的工具，应该开启新的 run
+			const hasAssistantInRun = currentRun.some(
+				(item) => item.kind === "message" && item.message.role === "assistant"
+			);
+			if (hasAssistantInRun && lastAssistantTimestamp > 0 && message.timestamp - lastAssistantTimestamp > 200) {
+				flushRun();
+				lastAssistantTimestamp = 0;
+			}
 			if (currentRun.length === 0) runStartedAt = message.timestamp;
 			currentTools.push(message);
 		} else if (message.role === "system") {

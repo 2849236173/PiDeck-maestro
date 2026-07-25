@@ -899,12 +899,15 @@ select:focus-visible {
   /* 抽屉列宽由 JS 按实际展开状态注入，短过渡与面板滑动同步。 */
   --drawer-col-w: 0px;
   --drawer-splitter-w: 0px;
+  --subagent-panel-width: 280px;
+  --subagent-panel-col-w: 0px;
   --window-drag-height: 0px;
   height: 100vh;
   min-height: 0;
   display: grid;
   grid-template-columns:
     var(--list-width) 6px minmax(0, 1fr)
+    var(--subagent-panel-col-w)
     var(--drawer-splitter-w) max(
       var(--drawer-col-w),
       min(var(--drawer-width), 38vw)
@@ -1005,6 +1008,7 @@ body.is-resizing .wechat-shell {
 .wechat-shell.list-collapsed {
   grid-template-columns:
     0 0 minmax(0, 1fr)
+    var(--subagent-panel-col-w)
     var(--drawer-splitter-w) max(
       var(--drawer-col-w),
       min(var(--drawer-width), 38vw)
@@ -2291,7 +2295,7 @@ body:not(.is-list-resizing)
   background: var(--color-bg-sidebar);
 }
 .splitter-right {
-  grid-column: 4;
+  grid-column: 5;
 }
 /* 右侧分隔条宽度由 --drawer-splitter-w 驱动；关闭/折叠时宽度 0 且不响应交互。 */
 .splitter-right:not([data-active="true"]) {
@@ -4296,6 +4300,225 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   line-height: 1.6;
   color: var(--color-text-tertiary);
 }
+
+/* Agent progress list - 显示工具调用的子代理进度 */
+.agent-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-progress-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+}
+
+.agent-progress-item.running {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-secondary));
+  border-left: 2px solid var(--color-accent);
+}
+
+.agent-progress-item.error {
+  background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface-secondary));
+  border-left: 2px solid var(--color-error);
+}
+
+.agent-progress-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-caption);
+}
+
+.agent-progress-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border-subtle);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-progress-name {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.agent-progress-agent,
+.agent-progress-status {
+  color: var(--color-text-secondary);
+}
+
+.agent-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-tertiary);
+}
+
+.agent-progress-tool {
+  color: var(--color-text-secondary);
+}
+
+.agent-progress-message {
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-primary);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.agent-progress-error {
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
+  font-size: var(--font-size-micro);
+  font-family: var(--font-family-mono);
+}
+
+/* ===== 子代理面板 ===== */
+.sub-agent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-panel);
+}
+
+.sub-agent-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sub-agent-section-header {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sub-agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sub-agent-item {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+
+.sub-agent-item:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.sub-agent-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sub-agent-status-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--color-accent);
+}
+
+.sub-agent-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sub-agent-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-agent-meta {
+  font-size: var(--font-size-micro);
+  font-family: var(--font-family-business);
+  color: var(--color-text-tertiary);
+}
+
+.sub-agent-preview {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-agent-details {
+  padding: var(--space-3);
+  padding-top: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sub-agent-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+.sub-agent-detail-label {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.sub-agent-detail-value {
+  color: var(--color-text);
+  font-family: var(--font-family-business);
+  text-align: right;
+  word-break: break-all;
+}
 .tool-card-diff-chip {
   display: inline-flex;
   align-items: center;
@@ -6150,6 +6373,49 @@ body.ask-dialog-open .ask-question-card.pending {
   cursor: not-allowed;
 }
 
+/* 多选模式样式 */
+.ask-question-card-multiselect {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.ask-question-card-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.ask-question-card-checkbox-label:hover {
+  background: var(--color-bg-hover);
+}
+.ask-question-card-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border-strong);
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+.ask-question-card-checkbox:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+.ask-question-card-checkbox-text {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-md);
+}
+.ask-question-card-multiselect-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  justify-content: flex-end;
+}
+
 /* 收起状态工具组里的 skill chip */
 .tool-group-card-chip.skill {
   border-color: color-mix(
@@ -7357,9 +7623,285 @@ body.is-composer-resizing .composer-resize-handle::after {
   font-size: var(--font-size-micro);
 }
 
+/* ==================== 子代理面板 ==================== */
+.subagent-panel {
+  position: relative;
+  grid-column: 4;
+  background: var(--color-bg-panel);
+  border-left: 1px solid var(--color-border-subtle);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.subagent-panel-header {
+  height: 55px;
+  flex: 0 0 55px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) 0 18px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-panel);
+}
+
+.subagent-panel-header strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
+  font-weight: 600;
+}
+
+.subagent-panel-close,
+.subagent-panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.subagent-panel-close:hover,
+.subagent-panel-toggle:hover,
+.subagent-panel-toggle.active {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.subagent-panel-close:focus-visible,
+.subagent-panel-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.subagent-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.subagent-section {
+  margin-bottom: var(--space-4);
+}
+
+.subagent-section-title {
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-2);
+}
+
+.subagent-item {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.subagent-item:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-emphasis);
+}
+
+.subagent-item-trigger {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subagent-item-trigger > svg {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.subagent-item-trigger:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+
+.subagent-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 20px;
+}
+
+.subagent-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.subagent-item-name {
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-item-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.subagent-item-status.running {
+  color: var(--color-info);
+}
+
+.subagent-item-status.completed {
+  color: var(--color-success);
+}
+
+.subagent-item-status.failed,
+.subagent-item-status.cancelled,
+.subagent-item-status.error {
+  color: var(--color-danger);
+}
+
+.subagent-status-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.subagent-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+}
+
+.subagent-item-meta span {
+  display: flex;
+  align-items: center;
+}
+
+.subagent-item-meta span:not(:last-child)::after {
+  content: "•";
+  margin-left: var(--space-2);
+  color: var(--color-border-strong);
+}
+
+.subagent-item-preview {
+  font-size: var(--font-size-micro);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: var(--space-1);
+}
+
+.subagent-item-details {
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-primary);
+}
+
+.subagent-detail-state {
+  padding: var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-small);
+}
+
+.subagent-detail-state.error {
+  color: var(--color-danger);
+}
+
+.subagent-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.subagent-message {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  font-size: var(--font-size-small);
+}
+
+.subagent-message > span {
+  display: inline-block;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  margin-bottom: var(--space-1);
+}
+
+.subagent-message p {
+  margin: 0;
+}
+
+.subagent-message p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.subagent-item-tools {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.subagent-item-tool {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  padding: var(--space-1) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.subagent-empty {
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-small);
+}
+
 .detail-drawer {
   position: relative;
-  grid-column: 5;
+  grid-column: 6;
   background: var(--color-bg-panel);
   min-width: 0;
   /* Grid item 默认 min-height:auto 会被深层文件树内容撑开，导致内部 .files-panel 的 overflow 无法形成滚动区。 */

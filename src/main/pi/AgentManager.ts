@@ -1,8 +1,8 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { existsSync, readdirSync, statSync, watch, type FSWatcher } from "node:fs";
+import { join, dirname, basename, relative } from "node:path";
 import { homedir } from "node:os";
 import type {
 	AgentRuntimeState,
@@ -117,6 +117,13 @@ export class AgentManager {
 	private readonly abortedDuringAsk = new Set<string>();
 	/** 待处理的项目信任确认请求。key 为 requestId，用于在 Agent 启动前等待用户的信任决策。 */
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
+
+	/** 子代理状态追踪：key 为主会话 agentId，value 为子代理列表 */
+	private readonly subAgentsByAgent = new Map<string, Map<string, import('../../shared/types').SubAgent>>();
+	/** 子代理目录监听器：key 为主会话 agentId */
+	private readonly subAgentWatchers = new Map<string, import('fs').FSWatcher>();
+	/** 运行中子代理的轮询定时器：key 为主会话 agentId */
+	private readonly subAgentPollers = new Map<string, NodeJS.Timeout>();
 
 	constructor(
 		private readonly getProject: (id: string) => Project | undefined,
@@ -817,6 +824,11 @@ export class AgentManager {
 				totalMs: Date.now() - t0,
 				historyLoading: "background",
 			});
+			// 新建会话的路径只有 get_state 完成后才可用，必须使用最终 sessionPath。
+			// 子代理目录通常又会晚于父会话创建，因此监控器需要先启动并等待目录出现。
+			if (tab.sessionPath) {
+				this.startSubAgentMonitoring(id, tab.sessionPath);
+			}
 		} catch (error) {
 			tab.status = "error";
 			const rawMessage = error instanceof Error ? error.message : String(error);
@@ -902,6 +914,9 @@ export class AgentManager {
 		runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
 		runtime.tab.sessionPath = data?.sessionFile ?? runtime.tab.sessionPath;
 		runtime.tab.title = data?.sessionName || runtime.tab.title;
+		if (runtime.tab.sessionPath) {
+			this.startSubAgentMonitoring(agentId, runtime.tab.sessionPath);
+		}
 		this.emitState();
 		return runtime.tab;
 	}
@@ -1370,6 +1385,9 @@ export class AgentManager {
 			runtime.tab.sessionPath = data?.sessionFile ?? sessionPath;
 			runtime.tab.title = data?.sessionName ?? runtime.tab.title;
 			runtime.tab.status = "idle";
+			if (runtime.tab.sessionPath) {
+				this.startSubAgentMonitoring(agentId, runtime.tab.sessionPath);
+			}
 			// 进程退出型压缩可能来不及发 compaction_end；重连成功即表示 Pi 已可继续接收消息。
 			this.rpcCompactingAgents.delete(agentId);
 
@@ -2405,6 +2423,8 @@ export class AgentManager {
 		this.toolStateSequenceByAgent.delete(agentId);
 		// agent 关闭时自动关闭 RPC 日志记录
 		this.rpcLoggingAgents.delete(agentId);
+		// 停止子代理监控
+		this.stopSubAgentMonitoring(agentId);
 		process.stop();
 		this.emitState();
 	}
@@ -2427,10 +2447,321 @@ export class AgentManager {
 		}
 	}
 
+	/** 开始监控子代理目录 */
+	private startSubAgentMonitoring(agentId: string, sessionPath: string) {
+		// 如果没有会话路径，无法监控子代理
+		if (!sessionPath) return;
+
+		const sessionDir = dirname(sessionPath);
+		const sessionId = basename(sessionPath, '.jsonl');
+		const subAgentDir = join(sessionDir, sessionId);
+
+		// 停止旧的监听器
+		this.stopSubAgentMonitoring(agentId);
+
+		// 即使目录尚不存在也先初始化。teammate 通常在首次派发时才创建子目录，
+		// 若此处直接返回，新建会话在整个生命周期内都不会再获得监控机会。
+		this.subAgentsByAgent.set(agentId, new Map());
+
+		const attachWatcher = () => {
+			if (this.subAgentWatchers.has(agentId) || !existsSync(subAgentDir)) return;
+			try {
+				const watcher = watch(subAgentDir, (_eventType: string, filename: string | null) => {
+					if (filename && filename.endsWith('.jsonl')) {
+						void this.scanSubAgents(agentId, subAgentDir);
+					}
+				});
+				this.subAgentWatchers.set(agentId, watcher);
+			} catch {
+				// 网络盘等环境可能不支持 fs.watch；下方轮询仍能保证状态可见。
+			}
+		};
+
+		attachWatcher();
+		void this.scanSubAgents(agentId, subAgentDir);
+
+		// 每秒同时发现延迟创建的目录/文件，并刷新运行状态。
+		const poller = setInterval(() => {
+			attachWatcher();
+			void this.scanSubAgents(agentId, subAgentDir);
+			void this.updateRunningSubAgents(agentId, subAgentDir);
+		}, 1000);
+		this.subAgentPollers.set(agentId, poller);
+	}
+
+	/** 停止监控子代理 */
+	private stopSubAgentMonitoring(agentId: string) {
+		const watcher = this.subAgentWatchers.get(agentId);
+		if (watcher) {
+			watcher.close();
+			this.subAgentWatchers.delete(agentId);
+		}
+
+		const poller = this.subAgentPollers.get(agentId);
+		if (poller) {
+			clearInterval(poller);
+			this.subAgentPollers.delete(agentId);
+		}
+
+		this.subAgentsByAgent.delete(agentId);
+	}
+
+	/** 收集子代理会话文件；兼容旧版直属 .jsonl 与 teammate 的多层 run 目录 session.jsonl。 */
+	private collectSubAgentSessionFiles(rootDir: string, currentDir = rootDir, depth = 0): string[] {
+		if (depth > 4 || !existsSync(currentDir)) return [];
+		const files: string[] = [];
+		for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
+			const entryPath = join(currentDir, entry.name);
+			if (entry.isDirectory()) {
+				files.push(...this.collectSubAgentSessionFiles(rootDir, entryPath, depth + 1));
+			} else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+				files.push(entryPath);
+			}
+		}
+		return files;
+	}
+
+	/** 扫描子代理目录 */
+	private async scanSubAgents(agentId: string, subAgentDir: string) {
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+
+		try {
+			const sessionFiles = this.collectSubAgentSessionFiles(subAgentDir);
+			for (const sessionFile of sessionFiles) {
+				const relativePath = relative(subAgentDir, sessionFile).replace(/\\/g, '/');
+				// 嵌套 teammate 会话通常都叫 session.jsonl，必须使用相对路径区分并稳定寻址。
+				const subAgentId = relativePath.includes('/')
+					? relativePath.replace(/\.jsonl$/i, '')
+					: basename(relativePath, '.jsonl');
+
+				if (subAgents.has(subAgentId)) continue;
+
+				const stat = statSync(sessionFile);
+				const subAgent: import('../../shared/types').SubAgent = {
+					id: subAgentId,
+					sessionFile,
+					status: 'running',
+					startTime: stat.birthtimeMs,
+					lastUpdate: stat.mtimeMs,
+					cached: false,
+				};
+
+				await this.extractSubAgentInfo(subAgent);
+				subAgents.set(subAgentId, subAgent);
+			}
+
+			this.emitSubAgentState(agentId);
+		} catch {
+			// 目录可能正由 teammate 创建或移动；下一次轮询会重试。
+		}
+	}
+
+	/** 更新运行中的子代理状态 */
+	private async updateRunningSubAgents(agentId: string, subAgentDir: string) {
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+
+		for (const [subAgentId, subAgent] of subAgents.entries()) {
+			// 跳过已完成且已缓存的
+			if (subAgent.cached) continue;
+
+			try {
+				const stat = statSync(subAgent.sessionFile);
+				const lastModified = stat.mtimeMs;
+
+				// 如果文件没有变化，跳过
+				if (lastModified === subAgent.lastUpdate) continue;
+
+				subAgent.lastUpdate = lastModified;
+
+				// 读取最新状态
+				await this.extractSubAgentInfo(subAgent);
+
+				// 检查是否完成
+				if (subAgent.status === 'completed' || subAgent.status === 'failed' || subAgent.status === 'cancelled') {
+					subAgent.cached = true;
+					subAgent.endTime = lastModified;
+				}
+			} catch (error) {
+				// 文件可能被删除
+				subAgents.delete(subAgentId);
+			}
+		}
+
+		this.emitSubAgentState(agentId);
+	}
+
+	/** 从会话文件中提取子代理信息（名称、状态、最后消息等） */
+	private async extractSubAgentInfo(subAgent: import('../../shared/types').SubAgent) {
+		try {
+			const content = await readFile(subAgent.sessionFile, 'utf-8');
+			const lines = content.trim().split('\n').filter(line => line.trim());
+
+			if (lines.length === 0) return;
+
+			let messageCount = 0;
+			let toolCount = 0;
+			let lastMessage: string | undefined;
+			let hasError = false;
+
+			// 只读取最近几行（避免大文件全读）
+			const recentLines = lines.slice(-20);
+
+			for (const line of recentLines) {
+				try {
+					const record = JSON.parse(line);
+					// Pi 原生 JSONL 将消息包在 { type: "message", message } 中；旧格式则直接存 role/content。
+					const entry = record?.message && typeof record.message === 'object' ? record.message : record;
+					if (!subAgent.name && typeof record?.sessionName === 'string') subAgent.name = record.sessionName;
+					if (!subAgent.name && record?.type === 'session_info' && typeof record.name === 'string') {
+						subAgent.name = record.name;
+					}
+
+					if (entry.role === 'user' && entry.content) {
+						const text = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content);
+						if (!subAgent.name) {
+							const nameMatch = text.match(/name["']?\s*:\s*["']([^"']+)["']/);
+							if (nameMatch) subAgent.name = nameMatch[1];
+						}
+						if (!subAgent.agent) {
+							const agentMatch = text.match(/agent["']?\s*:\s*["']([^"']+)["']/);
+							if (agentMatch) subAgent.agent = agentMatch[1];
+						}
+					}
+
+					if (entry.role === 'assistant' || entry.role === 'user') {
+						messageCount++;
+						if (entry.content) {
+							const text = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content);
+							lastMessage = text.slice(0, 100);
+						}
+					}
+
+					if (entry.role === 'assistant' && Array.isArray(entry.content)) {
+						for (const block of entry.content) {
+							if (block.type === 'tool_use') toolCount++;
+						}
+					}
+
+					if (entry.role === 'assistant' && (entry.stop_reason === 'error' || entry.stopReason === 'error')) {
+						hasError = true;
+					}
+				} catch {
+					// 跳过无效行
+				}
+			}
+
+			subAgent.messageCount = messageCount;
+			subAgent.toolCount = toolCount;
+			subAgent.lastMessage = lastMessage;
+
+			// 判断是否完成：最后一条是 assistant 且没有 tool_use
+			const lastLine = lines[lines.length - 1];
+			try {
+				const lastRecord = JSON.parse(lastLine);
+				const lastEntry = lastRecord?.message && typeof lastRecord.message === 'object'
+					? lastRecord.message
+					: lastRecord;
+				if (lastEntry.role === 'assistant') {
+					const hasToolUse = Array.isArray(lastEntry.content) && lastEntry.content.some((b: any) => b.type === 'tool_use');
+					if (!hasToolUse) subAgent.status = hasError ? 'failed' : 'completed';
+				}
+			} catch {
+				// 忽略
+			}
+		} catch (error) {
+			// 读取失败，保持原状态
+		}
+	}
+
+	/** 发送子代理状态更新到前端 */
+	private emitSubAgentState(agentId: string) {
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+
+		const running: import('../../shared/types').SubAgent[] = [];
+		const completed: import('../../shared/types').SubAgent[] = [];
+
+		for (const subAgent of subAgents.values()) {
+			if (subAgent.status === 'running') {
+				running.push(subAgent);
+			} else {
+				completed.push(subAgent);
+			}
+		}
+
+		const update: import('../../shared/types').SubAgentStateUpdate = {
+			running: running.sort((a, b) => b.startTime - a.startTime),
+			completed: completed.sort((a, b) => (b.endTime || b.lastUpdate) - (a.endTime || a.lastUpdate)),
+		};
+
+		this.emit(ipcChannels.subAgentsStateUpdate, { agentId, update });
+	}
+
+	/** 加载子代理的完整消息历史（用户点击查看详情时调用） */
+	async loadSubAgentDetail(agentId: string, subAgentId: string): Promise<ChatMessage[]> {
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return [];
+
+		const subAgent = subAgents.get(subAgentId);
+		if (!subAgent) return [];
+
+		try {
+			const content = await readFile(subAgent.sessionFile, 'utf-8');
+			const lines = content.trim().split('\n').filter(line => line.trim());
+
+			const messages: ChatMessage[] = [];
+
+			for (const line of lines) {
+				try {
+					const record = JSON.parse(line);
+					const entry = record?.message && typeof record.message === 'object' ? record.message : record;
+
+					// 转换为 ChatMessage 格式
+					if (entry.role === 'user' || entry.role === 'assistant') {
+						const message: ChatMessage = {
+							id: `${subAgentId}-${messages.length}`,
+							agentId: subAgentId,
+							role: entry.role,
+							text: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content),
+							timestamp: Date.now(), // 无法从 .jsonl 获取精确时间戳
+						};
+
+						// 如果是 assistant 消息且有 tool_use，提取工具调用
+						if (entry.role === 'assistant' && Array.isArray(entry.content)) {
+							for (const block of entry.content) {
+								if (block.type === 'tool_use') {
+									if (!message.meta) message.meta = {};
+									if (!message.meta.toolCalls) message.meta.toolCalls = [];
+									(message.meta.toolCalls as Array<{id: string; name: string; input: unknown}>).push({
+										id: block.id,
+										name: block.name,
+										input: block.input,
+									});
+								}
+							}
+						}
+
+						messages.push(message);
+					}
+				} catch {
+					// 跳过无效行
+				}
+			}
+
+			return messages;
+		} catch (error) {
+			return [];
+		}
+	}
+
 	stopAll() {
 		// 应用退出时统一清理所有 pi 子进程，避免后台 agent 残留占用模型或文件句柄。
 		for (const runtime of this.agents.values()) {
 			this.userInitiatedStop.add(runtime.tab.id);
+			// 停止子代理监控
+			this.stopSubAgentMonitoring(runtime.tab.id);
 			runtime.process.stop();
 		}
 		this.agents.clear();
@@ -2701,6 +3032,8 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_update") {
 			this.upsertToolMessage(agentId, typed, "running");
+			// 立即 flush 工具更新事件，让用户能看到 bash 等长时间工具的实时进度
+			this.flushMessageEmit(agentId);
 		}
 
 		if (typed.type === "extension_ui_request") {
@@ -2826,6 +3159,7 @@ export class AgentManager {
 			placeholder: questionPayload.placeholder as string | undefined,
 			prefill: questionPayload.prefill as string | undefined,
 			allowOther: questionPayload.allowOther === true,
+			multiSelect: questionPayload.multiSelect === true,
 		};
 
 		// 记录 pending UI 请求，用于 abort 时自动 cancel
@@ -3246,6 +3580,21 @@ export class AgentManager {
 			}
 			return undefined;
 		})();
+		// 提取结构化进度信息（子代理进度、子调用）。终态事件常只返回汇总文本，
+		// 因此没有新快照时保留运行期最后一份数据，避免工具完成后 UI 突然清空。
+		const extractedAgentProgress = this.extractAgentProgress(result);
+		const previousAgentProgress = existing?.meta?._agentProgress;
+		const agentProgress = extractedAgentProgress ?? (
+			Array.isArray(previousAgentProgress) ? previousAgentProgress : undefined
+		);
+		// DEBUG: 输出进度提取日志
+		if (status === "running" && (toolName === "teammate" || toolName === "delegate" || toolName === "explorer")) {
+			console.log(`[AgentManager] Tool update: ${toolName}, hasResult: ${!!result}, agentProgress items: ${agentProgress?.length ?? 0}`);
+			if (result && typeof result === "object") {
+				const details = (result as any).details;
+				console.log(`[AgentManager] details.progress: ${Array.isArray(details?.progress) ? details.progress.length : 'N/A'}, details.childCalls: ${Array.isArray(details?.childCalls) ? details.childCalls.length : 'N/A'}`);
+			}
+		}
 		const meta = {
 			status,
 			toolName,
@@ -3260,6 +3609,7 @@ export class AgentManager {
 			// diff 使用工具参数（oldText/newText 等）展示变动区域，无需完整文件快照。
 			
 			...(askCard ? { _askCard: askCard } : {}),
+			...(agentProgress ? { _agentProgress: agentProgress } : {}),
 		};
 
 		if (existing) {
@@ -3802,6 +4152,73 @@ export class AgentManager {
 			.map((item) => (typeof item?.text === "string" ? item.text : ""))
 			.filter(Boolean)
 			.join("\n");
+	}
+
+	/**
+	 * 从 partialResult.details 中提取结构化进度信息（子代理进度、子调用）。
+	 * 返回精简的进度快照数组，用于渲染器显示实时执行状态。
+	 * 限制条数避免撑大 ChatMessage.meta（最多 12 条）。
+	 */
+	private extractAgentProgress(result: unknown): Array<{
+		agent?: string;
+		name?: string;
+		status?: string;
+		recentTools?: Array<{ name: string; status?: string }>;
+		toolCount?: number;
+		tokens?: number;
+		lastMessage?: string;
+		error?: string;
+	}> | undefined {
+		if (!result || typeof result !== "object") return undefined;
+		const details = (result as any).details;
+		if (!details || typeof details !== "object") return undefined;
+
+		const progress: Array<any> = [];
+
+		// 提取 details.progress[] (AgentProgressSnapshot[])
+		if (Array.isArray(details.progress)) {
+			for (const p of details.progress) {
+				if (!p || typeof p !== "object") continue;
+				progress.push({
+					agent: p.agent,
+					name: p.name,
+					status: p.status,
+					recentTools: Array.isArray(p.recentTools)
+						? p.recentTools.slice(0, 3).map((t: any) => ({
+								name: t?.name ?? "tool",
+								status: t?.status,
+						  }))
+						: undefined,
+					toolCount: typeof p.toolCount === "number" ? p.toolCount : undefined,
+					tokens: typeof p.tokens === "number" ? p.tokens : undefined,
+					lastMessage: typeof p.lastMessage === "string" ? p.lastMessage.slice(0, 120) : undefined,
+					error: typeof p.error === "string" ? p.error.slice(0, 200) : undefined,
+				});
+			}
+		}
+
+		// 提取 details.childCalls[] (ChildAgentCallSnapshot[])
+		if (Array.isArray(details.childCalls)) {
+			for (const c of details.childCalls) {
+				if (!c || typeof c !== "object") continue;
+				progress.push({
+					agent: c.agent,
+					name: c.name,
+					status: c.status,
+					recentTools: Array.isArray(c.recentTools)
+						? c.recentTools.slice(0, 3).map((t: any) => ({
+								name: typeof t === "string" ? t : (t?.name ?? "tool"),
+								status: typeof t === "object" ? t?.status : undefined,
+						  }))
+						: undefined,
+					lastMessage: typeof c.lastMessage === "string" ? c.lastMessage.slice(0, 120) : undefined,
+				});
+			}
+		}
+
+		if (progress.length === 0) return undefined;
+		// 限制最多 12 条，避免 meta 过大
+		return progress.slice(0, 12);
 	}
 
 	private safeJson(value: unknown) {

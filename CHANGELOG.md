@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.5-4 - 2026-07-24
+
+Enhanced tool execution visibility: all running tools now display live elapsed time and structured progress details, replacing static collapsed subtitles.
+
+### Tool execution UX improvements
+
+- Added live elapsed time display for all running tools (updates every second)
+- Extract and render structured progress from `partialResult.details` (agent progress, child calls, recent tools)
+- Auto-expand running tool cards for better visibility, auto-collapse when completed
+- Added `teammate` to tool icon matcher (Network icon) and progress whitelist
+- Fixed bash streaming: `tool_execution_update` events now flush immediately, showing real-time progress for long-running commands
+- Fixed tool message grouping: tools invoked after assistant text completion now appear below the text, not above
+
+### ask-user-question multiSelect
+
+- Forward `multiSelect` from RPC UI requests to the desktop ask card
+- Render checkbox multi-select for `select` questions when `multiSelect` is true, and submit selected values as a JSON array
+
+### Sub-agent panel (experimental)
+
+- Added dedicated right-side panel for monitoring sub-agents
+- Running agents displayed in upper section, completed agents in lower section
+- Smart caching: completed sub-agents marked cached to avoid redundant scanning
+
 ## v0.6.5-2 - 2026-07-24
 
 Compatibility update for the latest `pi-maestro-flow` RPC implementation: desktop Plan confirmation/editor dialogs now complete through native RPC UI, and delegate/explore progress remains visible while work is running.

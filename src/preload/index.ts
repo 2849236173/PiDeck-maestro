@@ -72,6 +72,7 @@ import type {
 	SendPromptInput,
 	SendPromptResult,
 	SessionSummary,
+	SubAgentStateUpdate,
 	TerminalDataEvent,
 	TerminalExitEvent,
 	TerminalTab,
@@ -790,6 +791,14 @@ const api = {
 		/** 回传用户对项目信任确认弹窗的选择（trust-remember/trust-session/deny） */
 		respondTrustRequest: (requestId: string, choice: "trust-remember" | "trust-session" | "deny") =>
 			ipcRenderer.invoke(ipcChannels.agentsTrustResponse, requestId, choice) as Promise<void>,
+	},
+	subAgents: {
+		/** 监听指定 Agent 的子代理状态快照；payload 同时携带父 Agent id。 */
+		onState: (callback: (payload: { agentId: string; update: SubAgentStateUpdate }) => void) =>
+			subscribe(ipcChannels.subAgentsStateUpdate, callback),
+		/** 加载子代理完整会话，供面板展开查看详情。 */
+		loadDetail: (agentId: string, subAgentId: string) =>
+			ipcRenderer.invoke(ipcChannels.subAgentsLoadDetail, agentId, subAgentId) as Promise<ChatMessage[]>,
 	},
 	pet: {
 		/** 宠物窗监听主进程推送的聚合状态 */

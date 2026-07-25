@@ -1,5 +1,33 @@
 # AGENTS.md
 
+## ⚠️ Maestro 兼容版仓库（硬约束，优先于其它 Git 习惯）
+
+本工作区当前维护的是 **PiDeck Maestro 兼容发行线**，不是上游主仓。
+
+| 用途 | Remote 名 | 仓库 |
+|------|-----------|------|
+| **默认推送 / 发版 / Release / PR** | `personal` | https://github.com/2849236173/PiDeck-maestro |
+| 仅只读参考上游 | `origin` | https://github.com/ayuayue/PiDeck |
+
+### 必须遵守
+
+1. **所有 `git push`、创建 PR、打 tag、发 Release，默认目标都是 `personal`（`2849236173/PiDeck-maestro`）。**
+2. **禁止**在未获用户明确指令时向 `origin` / `ayuayue/PiDeck` 推送、开 PR 或发版。
+3. 发版流程：代码合并到 `personal` 的 `main`（或用户指定分支）后，打 `v*` tag 并 `git push personal vX.Y.Z`，由 `.github/workflows/release.yml` 触发多端构建。
+4. 版本号沿用兼容线方案：`0.6.5-N`（如 `0.6.5-4`），tag 形如 `v0.6.5-4`。
+5. 每次会话开始涉及 push/release 时，先执行 `git remote -v` 复核；若 `personal` 不存在或 URL 不对，先修好再操作。
+6. 上游协作文档 `docs/PiDeck-协作说明.md` 描述的是 `ayuayue/PiDeck` 流程；**本兼容线以本节为准**。
+
+```bash
+# 正确示例
+git push -u personal <branch>
+git push personal v0.6.5-4
+
+# 错误示例（默认禁止）
+git push origin <branch>
+git push origin main
+```
+
 ## 项目简介
 
 pi-desktop 是一个面向本地开发工作的 Electron 桌面应用，用于在多个项目目录之间管理和运行 pi RPC Agent。应用提供多项目工作区、会话时间线、历史会话恢复、文件抽屉、Git 分支信息、模型选择、工具调用展示以及打包发布能力，目标是让用户可以在桌面端更稳定地管理多个 pi 编码助手会话。
