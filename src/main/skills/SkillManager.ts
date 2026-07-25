@@ -18,6 +18,7 @@ import type {
 	PiSkillLocation,
 	PiSkillSummary,
 } from "../../shared/types";
+import type { WslEnvironment } from "../wsl/WslPaths";
 
 const SKILL_FILE = "SKILL.md";
 
@@ -32,17 +33,9 @@ export class SkillManager {
 		this.locations = this.buildLocations(home ?? homedir());
 	}
 
-	/**
-	 * 配置 WSL 模式：将 skill 目录指向 WSL 发行版内的路径（通过 \\wsl$ UNC 访问）。
-	 * 传入 null 恢复为本地 Windows home 目录。
-	 */
-	configureWsl(distro: string | null, user?: string) {
-		if (distro && user) {
-			const uncHome = `\\\\wsl$\\${distro}\\home\\${user}`;
-			this.locations = this.buildLocations(uncHome);
-		} else {
-			this.locations = this.buildLocations(homedir());
-		}
+	/** 将 skill 目录切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
+	configureWsl(environment: WslEnvironment | null) {
+		this.locations = this.buildLocations(environment?.windowsHome ?? homedir());
 	}
 
 	private buildLocations(home: string): PiSkillLocation[] {
@@ -66,7 +59,16 @@ export class SkillManager {
 		const skills = (
 			await Promise.all(this.locations.map((location) => this.scanLocation(location)))
 		).flat();
-		return { locations: this.locations, skills };
+		// 按 name 去重，优先保留 pi-global 目录下的条目
+		// （避免 ~/.pi/agent/skills/ 和 ~/.agents/skills/ 不同步导致同名重复）
+		const seen = new Map<string, PiSkillSummary>();
+		for (const skill of skills) {
+			const key = skill.name.toLowerCase();
+			if (!seen.has(key) || (seen.get(key)!.sourceId !== "pi-global" && skill.sourceId === "pi-global")) {
+				seen.set(key, skill);
+			}
+		}
+		return { locations: this.locations, skills: Array.from(seen.values()) };
 	}
 
 	async create(input: CreatePiSkillInput): Promise<PiSkillSummary> {

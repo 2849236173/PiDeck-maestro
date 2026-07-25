@@ -24,6 +24,13 @@ import { formatBashToolMessage } from "./bashResult";
 import { extractMessageText } from "./messageContent";
 import { mergeHistoryWithPreservedMessages } from "./historyMessages";
 import {
+	assertResendRootEntry,
+	collectDescendantEntryIds,
+	findLastUserMessageLine,
+	takeActiveEntryId,
+} from "./sessionEntryIds";
+import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
+import {
   updateActiveToolCalls,
   type ActiveToolCallState,
 } from "../../shared/toolRuntimeState";
@@ -31,6 +38,11 @@ import type { SettingsStore } from "../settings/SettingsStore";
 import type { ConfigManager } from "../config/ConfigManager";
 import type { RpcLogger } from "../logging/RpcLogger";
 import type { AppLogger } from "../logging/AppLogger";
+import {
+	toWindowsHostPath,
+	toWslLinuxPath,
+	type WslEnvironment,
+} from "../wsl/WslPaths";
 
 /** 项目信任确认弹窗的用户选择 */
 export type ProjectTrustChoice = "trust-remember" | "trust-session" | "deny";
@@ -62,6 +74,10 @@ export class AgentManager {
 	/** 流式消息 emit 节流状态。 */
 	private readonly messageFlushTimers = new Map<string, NodeJS.Timeout>();
 	private readonly pendingMessageAgents = new Set<string>();
+	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
+		50,
+		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
+	);
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
 	/**
@@ -117,6 +133,7 @@ export class AgentManager {
 	private readonly abortedDuringAsk = new Set<string>();
 	/** 待处理的项目信任确认请求。key 为 requestId，用于在 Agent 启动前等待用户的信任决策。 */
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
+	private wslEnvironment: WslEnvironment | null = null;
 
 	/** 子代理状态追踪：key 为主会话 agentId，value 为子代理列表 */
 	private readonly subAgentsByAgent = new Map<string, Map<string, import('../../shared/types').SubAgent>>();
@@ -133,6 +150,24 @@ export class AgentManager {
 		private readonly rpcLogger?: RpcLogger,
 		private readonly appLogger?: AppLogger,
 	) {}
+
+	configureWsl(environment: WslEnvironment | null): void {
+		this.wslEnvironment = environment;
+	}
+
+	/** Windows 主进程文件操作必须使用可由 host 访问的路径。 */
+	private toSessionHostPath(sessionPath: string): string {
+		return this.wslEnvironment
+			? toWindowsHostPath(sessionPath, this.wslEnvironment)
+			: sessionPath;
+	}
+
+	/** Pi/RPC/session identity 在 WSL 模式下始终使用 Linux 逻辑路径。 */
+	private toSessionProtocolPath(sessionPath: string): string {
+		return this.wslEnvironment
+			? toWslLinuxPath(sessionPath, this.wslEnvironment)
+			: sessionPath;
+	}
 
 	list() {
 		return [...this.agents.values()]
@@ -153,6 +188,102 @@ export class AgentManager {
 
 	getMessages(agentId: string) {
 		return this.messages.get(agentId) ?? [];
+	}
+
+	/**
+	 * 不启动 pi 进程，直接从 JSONL 构造与运行态相同的时间线数据。
+	 * Viewer 必须复用 AgentManager 的压缩归档与消息转换规则，避免维护第二套显示模型。
+	 */
+	async readSessionDisplayMessages(
+		sessionPath: string,
+		agentId = "_viewer",
+		sessionContent?: string,
+	): Promise<ChatMessage[]> {
+		const content = sessionContent ?? await readFile(this.toSessionHostPath(sessionPath), "utf8");
+		const entries: Array<{
+			id: string;
+			parentId: string | null;
+			type: string;
+			message?: unknown;
+			summary?: string;
+			firstKeptEntryId?: string;
+			tokensBefore?: number;
+			timestamp?: string;
+		}> = [];
+
+		for (const line of content.split("\n")) {
+			if (!line.trim()) continue;
+			try {
+				const entry = JSON.parse(line);
+				if (!entry || typeof entry !== "object" || typeof entry.id !== "string") continue;
+				entries.push({
+					id: entry.id,
+					parentId: typeof entry.parentId === "string" ? entry.parentId : null,
+					type: typeof entry.type === "string" ? entry.type : "",
+					message: entry.message,
+					summary: typeof entry.summary === "string" ? entry.summary : undefined,
+					firstKeptEntryId: typeof entry.firstKeptEntryId === "string" ? entry.firstKeptEntryId : undefined,
+					tokensBefore: typeof entry.tokensBefore === "number" ? entry.tokensBefore : undefined,
+					timestamp: typeof entry.timestamp === "string" ? entry.timestamp : undefined,
+				});
+			} catch {
+				// 单行损坏不应阻断整个 Viewer。
+			}
+		}
+		if (entries.length === 0) return [];
+
+		// JSONL 最后一个 entry 是 pi 当前叶节点；沿 parentId 回溯得到与 get_messages 一致的活动分支。
+		const byId = new Map(entries.map((entry) => [entry.id, entry]));
+		const activeBranch: typeof entries = [];
+		const seen = new Set<string>();
+		let current: (typeof entries)[number] | undefined = entries[entries.length - 1];
+		while (current && !seen.has(current.id)) {
+			seen.add(current.id);
+			activeBranch.push(current);
+			current = current.parentId ? byId.get(current.parentId) : undefined;
+		}
+		activeBranch.reverse();
+
+		const lastCompactionIndex = activeBranch.findLastIndex((entry) => entry.type === "compaction");
+		const lastCompaction = lastCompactionIndex >= 0 ? activeBranch[lastCompactionIndex] : undefined;
+		const firstKeptIndex = lastCompaction?.firstKeptEntryId
+			? activeBranch.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
+			: -1;
+		// pi 压缩后上下文由 summary + firstKeptEntryId 起的保留消息 + 后续消息组成；
+		// 不能只取 compaction entry 之后，否则会漏掉压缩时明确保留的尾部消息。
+		const currentStartIndex = firstKeptIndex >= 0
+			? firstKeptIndex
+			: lastCompactionIndex >= 0
+				? lastCompactionIndex + 1
+				: 0;
+		const currentEntries = activeBranch
+			.slice(currentStartIndex)
+			.filter((entry) => entry.type === "message" && entry.message);
+		const rawMessages = currentEntries.map((entry) => entry.message);
+		const trimmed = this.trimHistoryMessages(rawMessages);
+		const trimStart = trimmed.length > 0 ? rawMessages.indexOf(trimmed[0]) : 0;
+		const activeEntryIds = currentEntries.slice(Math.max(0, trimStart)).map((entry) => entry.id);
+
+		let finalRaw: unknown[] = trimmed;
+		if (lastCompaction) {
+			const compactionEntry = lastCompaction;
+			const archiveData = await this.parseSessionArchives(sessionPath, agentId, content);
+			const archivedMessages = archiveData.archivedMessagesByCompactionId.get(compactionEntry.id) ?? [];
+			finalRaw = [{
+				role: "compactionSummary",
+				summary: compactionEntry.summary || "[摘要]",
+				timestamp: compactionEntry.timestamp ? Date.parse(compactionEntry.timestamp) : Date.now(),
+				meta: {
+					compactionId: compactionEntry.id,
+					compactionCount: archiveData.compactions.length,
+					firstKeptEntryId: compactionEntry.firstKeptEntryId,
+					tokensBefore: compactionEntry.tokensBefore,
+					archivedMessages,
+				},
+			}, ...trimmed];
+		}
+
+		return this.convertAgentMessages(agentId, finalRaw, activeEntryIds);
 	}
 
 	recordHostExchange(agentId: string, userText: string, assistantText: string) {
@@ -309,8 +440,11 @@ export class AgentManager {
 	}
 
 	async create(input: CreateAgentInput) {
-		const sessionKey = this.normalizeSessionPathForCompare(input.sessionPath);
-		if (!sessionKey) return this.createUnlocked(input);
+		const normalizedInput = input.sessionPath
+			? { ...input, sessionPath: this.toSessionProtocolPath(input.sessionPath) }
+			: input;
+		const sessionKey = this.normalizeSessionPathForCompare(normalizedInput.sessionPath);
+		if (!sessionKey) return this.createUnlocked(normalizedInput);
 
 		const existingForSession = this.findRuntimeBySessionKey(sessionKey);
 		if (existingForSession) return existingForSession.tab;
@@ -320,7 +454,7 @@ export class AgentManager {
 
 		// 历史会话激活属于“一个 sessionPath 只能对应一个 Agent”的业务规则；
 		// 先登记 in-flight Promise，再启动真实创建，防止第二次点击绕过 agents map 检查。
-		const createPromise = this.createUnlocked(input).finally(() => {
+		const createPromise = this.createUnlocked(normalizedInput).finally(() => {
 			this.creatingSessionAgents.delete(sessionKey);
 		});
 		this.creatingSessionAgents.set(sessionKey, createPromise);
@@ -328,13 +462,21 @@ export class AgentManager {
 	}
 
 	private normalizeSessionPathForCompare(sessionPath?: string) {
-		return sessionPath?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+		if (!sessionPath) return undefined;
+		const normalized = this.toSessionProtocolPath(sessionPath)
+			.replace(/\\/g, "/")
+			.replace(/\/+$/, "");
+		// Native Windows and /mnt drive paths inherit case-insensitive host semantics.
+		// WSL-internal paths retain Linux case sensitivity so distinct sessions are not deduplicated.
+		return !this.wslEnvironment || /^\/mnt\/[a-z](?:\/|$)/i.test(normalized)
+			? normalized.toLowerCase()
+			: normalized;
 	}
 
 	private getHistoryAutoLoadDecision(sessionPath?: string): { shouldLoad: boolean; sizeBytes?: number } {
 		if (!sessionPath) return { shouldLoad: true };
 		try {
-			const sizeBytes = statSync(sessionPath).size;
+			const sizeBytes = statSync(this.toSessionHostPath(sessionPath)).size;
 			return {
 				shouldLoad: sizeBytes <= AgentManager.MAX_AUTO_HISTORY_LOAD_BYTES,
 				sizeBytes,
@@ -358,7 +500,7 @@ export class AgentManager {
 		const t0 = Date.now();
 		let content: string;
 		try {
-			content = await readFile(sessionPath, "utf8");
+			content = await readFile(this.toSessionHostPath(sessionPath), "utf8");
 		} catch (error) {
 			void this.appLogger?.warn("agent", "Failed to read session file for recent messages", {
 				sessionPath,
@@ -411,14 +553,18 @@ export class AgentManager {
 	 *   2) 统计压缩次数，供前端展示"已压缩 N 次";
 	 *   3) 提取每个压缩段归档的消息，支持在时间线中展开查看压缩前内容。
 	 */
-	private async parseSessionArchives(sessionPath: string, agentId: string): Promise<{
+	private async parseSessionArchives(
+		sessionPath: string,
+		agentId: string,
+		sessionContent?: string,
+	): Promise<{
 		compactions: Array<{ id: string; summary: string; timestamp: string; firstKeptEntryId?: string; tokensBefore?: number }>;
 		/** 每个压缩条目对应的归档消息（ChatMessage 格式），key 为压缩条目 id */
 		archivedMessagesByCompactionId: Map<string, ChatMessage[]>;
 	}> {
 		let content: string;
 		try {
-			content = await readFile(sessionPath, "utf8");
+			content = sessionContent ?? await readFile(this.toSessionHostPath(sessionPath), "utf8");
 		} catch (error) {
 			void this.appLogger?.warn("agent", "Failed to read session file for archive parsing", {
 				sessionPath,
@@ -569,6 +715,7 @@ export class AgentManager {
 			title: input.title || `${project.name} agent`,
 			status: "starting",
 			sessionPath: input.sessionPath,
+			noSession: input.noSession,
 			createdAt: Date.now(),
 		};
 
@@ -589,7 +736,7 @@ export class AgentManager {
 		this.messages.set(id, []);
 		this.emitState();
 
-		const client = await process.start(input.sessionPath, trustOverride);
+		const client = await process.start(input.sessionPath, trustOverride, input.noSession);
 		const t3 = Date.now();
 		const diag = process.getDiagnostics();
 		void this.appLogger?.info("agent", "Pi process spawned", {
@@ -744,11 +891,6 @@ export class AgentManager {
 				: undefined;
 			const preserveMessagesAfter = Date.now();
 			if (messagesPromise) {
-				if (input.sessionPath) {
-					this.addMessage(id, "system", "正在加载历史会话，大会话可能需要几秒钟…", {
-						historyLoading: true,
-					});
-				}
 				void this.loadMessages(id, true, messagesPromise, { preserveMessagesAfter })
 					.catch(() =>
 						new Promise<void>((resolve) => setTimeout(resolve, 800))
@@ -776,15 +918,6 @@ export class AgentManager {
 						});
 					});
 			} else if (input.sessionPath) {
-				this.addMessage(
-					id,
-					"system",
-					`历史会话文件较大，正在加载最近 ${AgentManager.MAX_HISTORY_LOAD_TURNS} 条消息…`,
-					{
-						historyLoading: true,
-						sessionSizeBytes: historyLoadDecision.sizeBytes,
-					},
-				);
 				void this.loadMessages(
 					id,
 					true,
@@ -965,6 +1098,7 @@ export class AgentManager {
 		this.emitState();
 
 		// 乐观更新：在等待 RPC 返回前先把用户消息写入会话，让用户立即看到自己的消息。
+		// 只展示用户原文；agentMessage 里的宿主指令不进 UI 气泡。
 		// 如果后续 RPC 失败，再追加错误消息；用户消息本身仍保留在聊天中（用户确已发送）。
 		this.addMessage(
 			input.agentId,
@@ -1418,7 +1552,7 @@ export class AgentManager {
 	 */
 	private async getLatestCacheMessageHitRate(sessionPath: string): Promise<number | undefined> {
 		try {
-			const raw = await readFile(sessionPath, "utf8");
+			const raw = await readFile(this.toSessionHostPath(sessionPath), "utf8");
 			const lines = raw.split(/\r?\n/);
 			// 从后往前遍历，找到最后一条 assistant 消息
 			for (let i = lines.length - 1; i >= 0; i--) {
@@ -1642,12 +1776,12 @@ export class AgentManager {
 
 	/**
 	 * 刷新模型配置：让运行中的 agent 重新加载 models.json，无需完全重启。
-	 * 
+	 *
 	 * 当前仅支持轻量级 reload_config RPC（策略 1）。
 	 * 策略 2（进程重启）已注释，等待 pi 官方支持 reload_config RPC 后再考虑：
 	 *   - 运行中的 Agent 重启进程会打断正在进行的对话/工具执行
 	 *   - 进程重启涉及 exit 事件竞态、模型恢复等复杂边界条件
-	 * 
+	 *
 	 * RPC 提案：https://github.com/earendil-works/pi/issues/6890
 	 * pi 合并 reload_config 后，本方法将自动生效，无需任何修改。
 	 */
@@ -1741,11 +1875,13 @@ export class AgentManager {
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session path not available for reload");
+		const sessionHostPath = this.toSessionHostPath(sessionPath);
+		const sessionProtocolPath = this.toSessionProtocolPath(sessionPath);
 
 		const markerId = randomUUID();
 
 		try {
-			const raw = await readFile(sessionPath, "utf8");
+			const raw = await readFile(sessionHostPath, "utf8");
 			const lines = raw.split(/\r?\n/);
 			if (lines.length === 0 || !lines[0].trim()) {
 				throw new Error("Session file is empty");
@@ -1756,7 +1892,7 @@ export class AgentManager {
 			delete firstLine._reloadMarker; // 先清除旧的，确保值不同
 			firstLine._reloadMarker = markerId;
 			lines[0] = JSON.stringify(firstLine);
-			await writeFile(sessionPath, lines.join("\n"), "utf8");
+			await writeFile(sessionHostPath, lines.join("\n"), "utf8");
 
 			void this.appLogger?.info("agent", "Session reload: switch_session start", {
 				agentId,
@@ -1766,7 +1902,7 @@ export class AgentManager {
 
 			const response = await runtime.process.client.request({
 				type: "switch_session",
-				sessionPath,
+				sessionPath: sessionProtocolPath,
 			}, 30_000);
 
 			void this.appLogger?.info("agent", "Session reload: switch_session done", {
@@ -1778,13 +1914,13 @@ export class AgentManager {
 
 			// �ָ���һ�У��Ƴ� _reloadMarker �ֶΣ������ļ���ԭʼ״̬
 			try {
-				const afterRaw = await readFile(sessionPath, "utf8");
+				const afterRaw = await readFile(sessionHostPath, "utf8");
 				const afterLines = afterRaw.split(/\r?\n/);
 				if (afterLines.length > 0 && afterLines[0].includes("_reloadMarker")) {
 					const restored = JSON.parse(afterLines[0]) as Record<string, unknown>;
 					delete restored._reloadMarker;
 					afterLines[0] = JSON.stringify(restored);
-					await writeFile(sessionPath, afterLines.join("\n"), "utf8");
+					await writeFile(sessionHostPath, afterLines.join("\n"), "utf8");
 				}
 			} catch {
 				// _reloadMarker �ֶ����� residue ���ᵼ�� pi ���Է�����������Ӱ���Ựʹ��
@@ -1840,8 +1976,9 @@ export class AgentManager {
 	private async backupSessionFile(sessionPath: string): Promise<void> {
 		const maxBackups = 3;
 		try {
-			const dir = dirname(sessionPath);
-			const base = basename(sessionPath);
+			const sessionHostPath = this.toSessionHostPath(sessionPath);
+			const dir = dirname(sessionHostPath);
+			const base = basename(sessionHostPath);
 			const { readdir, copyFile, unlink } = await import("node:fs/promises");
 			const backupPrefix = `${base}.`;
 			const backupSuffix = ".edit-backup";
@@ -1861,7 +1998,7 @@ export class AgentManager {
 
 			// 创建新备份
 			const backupPath = join(dir, `${base}.${Date.now()}${backupSuffix}`);
-			await copyFile(sessionPath, backupPath);
+			await copyFile(sessionHostPath, backupPath);
 		} catch {
 			// 备份失败不影响主流程
 			void this.appLogger?.warn("agent", "Session file backup failed", { sessionPath });
@@ -1873,8 +2010,9 @@ export class AgentManager {
 	 */
 	private findLatestBackup(sessionPath: string): string | null {
 		try {
-			const dir = dirname(sessionPath);
-			const base = basename(sessionPath);
+			const sessionHostPath = this.toSessionHostPath(sessionPath);
+			const dir = dirname(sessionHostPath);
+			const base = basename(sessionHostPath);
 			const backupPrefix = `${base}.`;
 			const backupSuffix = ".edit-backup";
 			const allFiles = readdirSync(dir).filter(
@@ -1986,28 +2124,35 @@ export class AgentManager {
 
 		// 方案三：按角色 + 文本内容匹配（兜底方案）
 		// 当 JSONL 中存在多个分支时，计数方案会错误统计非活跃分支的条目。
-		// 改用文本匹配，只找与 msg 角色和文本内容完全一致的 entry。
-		// 注意：相同文本在不同消息中重复时只能返回第一个匹配，但对常见场景足够。
+		// 用户消息优先取「最后一次」匹配：重复文案时第一个命中往往是更早的历史，
+		// 重发若绑到更早 root 会把中间整段对话当后代删掉。
 		console.log(`[locateJsonlEntry] scheme3 scanning by role=${msg.role} + text match`);
-		let matchCount = 0;
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i].trim();
-			if (!line) continue;
-			try {
-				const entry = JSON.parse(line);
-				const entryRole = (entry as any)?.message?.role;
-				if (
-					entryRole === msg.role ||
-					(entryRole === "toolResult" && msg.role === "tool")
-				) {
-					const text = this.extractText((entry as any)?.message?.content);
-					if (text === msg.text) {
-						matchCount++;
-						console.log(`[locateJsonlEntry] scheme3 found at line=${i}, role=${entryRole}, match#=${matchCount}`);
-						return { lineIndex: i, entry };
+		if (msg.role === "user") {
+			const last = findLastUserMessageLine(lines, msg.text, (content) => this.extractText(content));
+			if (last) {
+				console.log(`[locateJsonlEntry] scheme3 last-user found at line=${last.lineIndex}`);
+				return last;
+			}
+		} else {
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i].trim();
+				if (!line) continue;
+				try {
+					const entry = JSON.parse(line);
+					if ((entry as any)?.type === "deleted") continue;
+					const entryRole = (entry as any)?.message?.role;
+					if (
+						entryRole === msg.role ||
+						(entryRole === "toolResult" && msg.role === "tool")
+					) {
+						const text = this.extractText((entry as any)?.message?.content);
+						if (text === msg.text) {
+							console.log(`[locateJsonlEntry] scheme3 found at line=${i}, role=${entryRole}`);
+							return { lineIndex: i, entry };
+						}
 					}
-				}
-			} catch { /* 跳过不可解析的行 */ }
+				} catch { /* 跳过不可解析的行 */ }
+			}
 		}
 
 		console.error(`[locateJsonlEntry] ALL SCHEMES FAILED. msg.id=${msg.id}, role=${msg.role}, text=[${msg.text.slice(0, 100)}], jsonlLines=${lines.length}`);
@@ -2036,8 +2181,9 @@ export class AgentManager {
 			const runtime = this.requireRuntime(agentId);
 			const sessionPath = runtime.tab.sessionPath;
 			if (!sessionPath) throw new Error("Session not persisted");
+			const sessionHostPath = this.toSessionHostPath(sessionPath);
 
-			const raw = await readFile(sessionPath, "utf8").catch(() => "");
+			const raw = await readFile(sessionHostPath, "utf8").catch(() => "");
 			if (!raw) throw new Error("Session file is empty");
 			const lines = raw.split(/\r?\n/);
 
@@ -2073,7 +2219,7 @@ export class AgentManager {
 
 			// 4. 写回 JSONL
 			lines[lineIndex] = JSON.stringify(entry);
-			await writeFile(sessionPath, lines.join("\n"), "utf8");
+			await writeFile(sessionHostPath, lines.join("\n"), "utf8");
 
 			// 5. 使用 _reloadMarker 重载 pi 会话
 			// 注意：不再手动更新桌面端内存——reloadSession 内部调用 loadMessages
@@ -2093,7 +2239,7 @@ export class AgentManager {
 					const backupPath = this.findLatestBackup(sessionPath);
 					if (backupPath) {
 						const backupContent = await readFile(backupPath, "utf8");
-						await writeFile(sessionPath, backupContent, "utf8");
+						await writeFile(sessionHostPath, backupContent, "utf8");
 						await this.loadMessages(agentId).catch(() => {});
 					}
 				} catch (restoreError) {
@@ -2134,8 +2280,9 @@ export class AgentManager {
 			const runtime = this.requireRuntime(agentId);
 			const sessionPath = runtime.tab.sessionPath;
 			if (!sessionPath) throw new Error("Session not persisted");
+			const sessionHostPath = this.toSessionHostPath(sessionPath);
 
-			const raw = await readFile(sessionPath, "utf8").catch(() => "");
+			const raw = await readFile(sessionHostPath, "utf8").catch(() => "");
 			if (!raw) throw new Error("Session file is empty");
 			const lines = raw.split(/\r?\n/);
 
@@ -2179,7 +2326,7 @@ export class AgentManager {
 				originalEntryId: deletedEntryId ?? `unknown-${messageId}`,
 				ts: Date.now(),
 			});
-			await writeFile(sessionPath, lines.join("\n"), "utf8");
+			await writeFile(sessionHostPath, lines.join("\n"), "utf8");
 
 			// 5. 使用 _reloadMarker 重载 pi 会话
 			// 不再手动更新 desktop 内存——reloadSession 内部调用 loadMessages
@@ -2199,7 +2346,7 @@ export class AgentManager {
 					const backupPath = this.findLatestBackup(sessionPath);
 					if (backupPath) {
 						const backupContent = await readFile(backupPath, "utf8");
-						await writeFile(sessionPath, backupContent, "utf8");
+						await writeFile(sessionHostPath, backupContent, "utf8");
 						await this.loadMessages(agentId).catch(() => {});
 					}
 				} catch (restoreError) {
@@ -2216,6 +2363,138 @@ export class AgentManager {
 			agentId,
 			messageId,
 			elapsedMs: Date.now() - startTime,
+		});
+	}
+
+	/**
+	 * 同文件重发：截断该用户消息及其所有后代（assistant/tool 等），再返回可重新 prompt 的原文。
+	 * 不调用 fork，因此不会生成新的会话文件。
+	 */
+	async prepareResendFromMessage(
+		agentId: string,
+		messageId: string,
+	): Promise<{ text: string; images?: ImageContent[] }> {
+		const startTime = Date.now();
+		void this.appLogger?.info("agent", "Prepare resend requested", { agentId, messageId });
+
+		return await this.withSessionLock(agentId, async () => {
+			await this.ensureAgentIdle(agentId);
+
+			const runtime = this.requireRuntime(agentId);
+			const sessionPath = runtime.tab.sessionPath;
+			if (!sessionPath) throw new Error("Session not persisted");
+			const sessionHostPath = this.toSessionHostPath(sessionPath);
+
+			const messages = this.messages.get(agentId);
+			if (!messages) throw new Error("No messages for agent");
+			const msg = messages.find((m) => m.id === messageId);
+			if (!msg) throw new Error("Message not found");
+			if (msg.role !== "user") throw new Error("Only user messages can be resent");
+
+			const raw = await readFile(sessionHostPath, "utf8").catch(() => "");
+			if (!raw) throw new Error("Session file is empty");
+			const lines = raw.split(/\r?\n/);
+			let lineIndex = -1;
+			let entry: Record<string, any>;
+			try {
+				const located = this.locateJsonlEntry(lines, messages, msg);
+				lineIndex = located.lineIndex;
+				entry = located.entry;
+				// entryId 错位时可能定位到 assistant 或更早的 user；
+				// 校验失败则回退到「最后一条同文案 user」，禁止带着错误根继续截断。
+				assertResendRootEntry(entry, msg.text, (content) => this.extractText(content));
+			} catch (locateError) {
+				const fallback = findLastUserMessageLine(lines, msg.text, (content) =>
+					this.extractText(content),
+				);
+				if (!fallback) throw locateError;
+				void this.appLogger?.warn("agent", "Prepare resend: entry locate mismatch, using last text match", {
+					agentId,
+					messageId,
+					error: locateError instanceof Error ? locateError.message : String(locateError),
+				});
+				lineIndex = fallback.lineIndex;
+				entry = fallback.entry;
+				assertResendRootEntry(entry, msg.text, (content) => this.extractText(content));
+			}
+			const rootEntryId = typeof (entry as any)?.id === "string" ? String((entry as any).id) : undefined;
+			if (!rootEntryId) throw new Error("User message entryId missing");
+
+			// 只收集该用户消息及其后代（assistant/tool 等），保留 root 之前的全部历史。
+			const removeIds = collectDescendantEntryIds(lines, rootEntryId);
+
+			await this.backupSessionFile(sessionPath);
+
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i]?.trim();
+				if (!line) continue;
+				try {
+					const parsed = JSON.parse(line) as { id?: string; type?: string };
+					if (!parsed?.id || parsed.type === "deleted") continue;
+					if (!removeIds.has(parsed.id)) continue;
+					lines[i] = JSON.stringify({
+						type: "deleted",
+						originalEntryId: parsed.id,
+						ts: Date.now(),
+						reason: "resend-truncate",
+					});
+				} catch {
+					// 跳过无法解析的行
+				}
+			}
+
+			// 兜底：若 entry 定位到了行但 id 集合异常，至少截掉该行本身。
+			if (lineIndex >= 0 && lineIndex < lines.length) {
+				const current = lines[lineIndex]?.trim();
+				if (current && !current.includes('"type":"deleted"')) {
+					lines[lineIndex] = JSON.stringify({
+						type: "deleted",
+						originalEntryId: rootEntryId,
+						ts: Date.now(),
+						reason: "resend-truncate",
+					});
+				}
+			}
+
+			await writeFile(sessionHostPath, lines.join("\n"), "utf8");
+
+			try {
+				await this.reloadSession(agentId);
+			} catch (error) {
+				const errMsg = error instanceof Error ? error.message : String(error);
+				void this.appLogger?.error("agent", "Prepare resend: reload failed, restoring backup", {
+					agentId,
+					messageId,
+					error: errMsg,
+					elapsedMs: Date.now() - startTime,
+				});
+				try {
+					const backupPath = this.findLatestBackup(sessionPath);
+					if (backupPath) {
+						const backupContent = await readFile(backupPath, "utf8");
+						await writeFile(sessionHostPath, backupContent, "utf8");
+						await this.loadMessages(agentId).catch(() => {});
+					}
+				} catch (restoreError) {
+					void this.appLogger?.error("agent", "Prepare resend: failed to restore backup", {
+						agentId,
+						error: restoreError instanceof Error ? restoreError.message : String(restoreError),
+					});
+				}
+				throw error;
+			}
+
+			void this.appLogger?.info("agent", "Prepare resend completed", {
+				agentId,
+				messageId,
+				removed: removeIds.size,
+				elapsedMs: Date.now() - startTime,
+			});
+
+			return {
+				text: msg.text,
+				...(msg.images?.length ? { images: msg.images } : {}),
+			};
 		});
 	}
 
@@ -2349,7 +2628,7 @@ export class AgentManager {
 	async switchSession(agentId: string, sessionPath: string) {
 		const runtime = this.requireRuntime(agentId);
 		const response = await runtime.process.client.request(
-			{ type: "switch_session", sessionPath },
+			{ type: "switch_session", sessionPath: this.toSessionProtocolPath(sessionPath) },
 			120_000,
 		);
 		await this.refreshRuntimeAfterSessionReplacement(agentId);
@@ -3266,15 +3545,19 @@ export class AgentManager {
 	 * 需要信任才能加载的资源（.pi 下的配置/扩展/skills 等，或项目级 .agents/skills）。
 	 * 用户全局 ~/.agents/skills 视为可信，不触发信任确认。
 	 */
-	private hasTrustRequiringResources(cwd: string): boolean {
-		const configDir = join(cwd, ".pi");
+	private hasTrustRequiringResources(hostCwd: string): boolean {
+		const configDir = join(hostCwd, ".pi");
 		if (
 			AgentManager.TRUST_REQUIRING_RESOURCE_FILES.some((file) => existsSync(join(configDir, file)))
 		) {
 			return true;
 		}
-		const userAgentsSkillsDir = join(homedir(), ".agents", "skills");
-		let currentDir = cwd;
+		const userAgentsSkillsDir = join(
+			this.wslEnvironment?.windowsHome ?? homedir(),
+			".agents",
+			"skills",
+		);
+		let currentDir = hostCwd;
 		while (true) {
 			const agentsSkillsDir = join(currentDir, ".agents", "skills");
 			if (agentsSkillsDir !== userAgentsSkillsDir && existsSync(agentsSkillsDir)) {
@@ -3301,8 +3584,13 @@ export class AgentManager {
 	 *   - deny：用 --no-approve 本次以不信任模式启动，pi 不加载项目级资源，Agent 仍可创建。
 	 */
 	private async ensureProjectTrust(project: Project): Promise<"approve" | "no-approve" | undefined> {
-		const cwd = project.path;
-		if (!this.hasTrustRequiringResources(cwd)) {
+		const cwd = this.wslEnvironment
+			? toWslLinuxPath(project.path, this.wslEnvironment)
+			: project.path;
+		const hostCwd = this.wslEnvironment
+			? toWindowsHostPath(project.path, this.wslEnvironment)
+			: project.path;
+		if (!this.hasTrustRequiringResources(hostCwd)) {
 			// 干净项目：pi 无需加载项目级资源，pi-desktop 自动记入信任，避免每次创建 Agent 重复检查。
 			void this.appLogger?.info("agent", "Agent ensure trusted directory start", { cwd });
 			await this.configManager.ensureTrustedDirectory(cwd);
@@ -3392,7 +3680,7 @@ export class AgentManager {
 			const prev = this.streamingThinking.get(agentId) ?? "";
 			const delta = String(assistantEvent.delta ?? "");
 			this.streamingThinking.set(agentId, prev + delta);
-			this.emitThinking(agentId, this.stripAnsi(prev + delta));
+			this.thinkingEmitter.push(agentId, this.stripAnsi(prev + delta));
 			this.upsertAssistantMessage(agentId, partialMessage);
 			return;
 		}
@@ -3403,6 +3691,8 @@ export class AgentManager {
 			);
 			if (finalThinking) {
 				this.streamingThinking.set(agentId, finalThinking);
+				this.thinkingEmitter.push(agentId, this.stripAnsi(finalThinking));
+				this.thinkingEmitter.flush(agentId);
 			}
 			this.upsertAssistantMessage(agentId, partialMessage);
 			// thinking_end 是阶段性终态，立即 flush 让思考块完整落盘显示。
@@ -3800,15 +4090,16 @@ export class AgentManager {
 				const typed = message as any;
 
 				if (typed.role === "user") {
-					// 在角色块内读取 entryId，避免 compactionSummary 等元消息抢占 slot
-					const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
-						? activeEntryIds[entryIndex]
-						: undefined;
+					// 先消费 activeEntryIds 槽位，再决定是否渲染。
+					// 边界：空文本 user 不展示，但 get_entries 仍有对应 entry，
+					// 若不推进 index，后续消息 entryId 会整体前移错位。
+					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
+					entryIndex = taken.nextIndex;
+					const currentEntryId = taken.entryId;
 					const images = this.extractImages(typed.content);
 					const text = this.extractText(typed.content) ||
 						(images.length > 0 ? "[图片]" : "");
 					if (!text.trim()) return [];
-					entryIndex++;
 					return [{
 						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
@@ -3824,13 +4115,15 @@ export class AgentManager {
 					}];
 				}
 				if (typed.role === "assistant") {
-					const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
-						? activeEntryIds[entryIndex]
-						: undefined;
+					// 工具调用回合常见「assistant 仅含 toolCall、无可见文本」：UI 跳过，
+					// 但仍必须消费 entry 槽位，否则后面用户消息会绑到更早的 entryId，
+					// 重发截断会沿错误根节点删掉大半段历史。
+					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
+					entryIndex = taken.nextIndex;
+					const currentEntryId = taken.entryId;
 					const text = this.extractText(typed.content);
 					if (!text.trim()) return [];
 					const thinking = this.extractThinking(typed.content);
-					entryIndex++;
 					return [{
 						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
@@ -3845,9 +4138,9 @@ export class AgentManager {
 					}];
 				}
 				if (typed.role === "toolResult") {
-					const currentEntryId = activeEntryIds && entryIndex < activeEntryIds.length
-						? activeEntryIds[entryIndex]
-						: undefined;
+					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
+					entryIndex = taken.nextIndex;
+					const currentEntryId = taken.entryId;
 					const toolCallId = String(typed.toolCallId ?? `history-tool-${index}`);
 					const historicalCall = historicalToolCalls.get(toolCallId);
 					const toolName = String(typed.toolName ?? historicalCall?.name ?? "tool");
@@ -3911,7 +4204,7 @@ export class AgentManager {
 						}
 						return undefined;
 					})();
-					entryIndex++;
+					// entryIndex 已在上方 takeActiveEntryId 推进
 					return [{
 						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
@@ -4332,6 +4625,11 @@ export class AgentManager {
 	}
 
 	private emitThinking(agentId: string, thinking: string) {
+		if (!thinking) this.thinkingEmitter.cancel(agentId);
+		this.emitThinkingNow(agentId, thinking);
+	}
+
+	private emitThinkingNow(agentId: string, thinking: string) {
 		const update: ThinkingUpdate = { agentId, thinking };
 		this.emit(ipcChannels.agentsThinking, update);
 	}

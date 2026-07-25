@@ -536,17 +536,21 @@ export function ModelsTab(props: {
 									<div className="config-provider-form">
 										<div className="config-form-row">
 											<label>{t("config.field.baseUrl")}</label>
-											<input
-												value={provider.baseUrl ?? ""}
-												onChange={(e) =>
-													props.onChangeProvider(
-														name,
-														"baseUrl",
-														e.target.value,
-													)
-												}
-												placeholder="https://api.openai.com/v1"
-											/>
+											<div className="config-base-url-field">
+												<input
+													value={provider.baseUrl ?? ""}
+													onChange={(e) =>
+														props.onChangeProvider(
+															name,
+															"baseUrl",
+															e.target.value,
+														)
+													}
+													placeholder="https://api.openai.com/v1"
+												/>
+												{/* 说明检测兼容补路径 vs 会话原样使用 baseUrl 的差异 */}
+												<span className="config-field-hint">{t("config.baseUrlHint")}</span>
+											</div>
 										</div>
 										<div className="config-form-row">
 											<label>{t("config.field.apiType")}</label>

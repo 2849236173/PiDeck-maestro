@@ -28,6 +28,7 @@ export const ipcChannels = {
 	filesShowInFolder: "files:show-in-folder",
 	filesReadContent: "files:read-content",
 	filesWriteContent: "files:write-content",
+	filesCreate: "files:create",
 	filesDelete: "files:delete",
 	filesRename: "files:rename",
 	sessionsList: "sessions:list",
@@ -36,6 +37,8 @@ export const ipcChannels = {
 	sessionsExportHtml: "sessions:export-html",
 	sessionsDelete: "sessions:delete",
 	sessionsReadMessages: "sessions:read-messages",
+	sessionsReadMeta: "sessions:read-meta",
+	sessionsReadChatMessages: "sessions:read-chat-messages",
 	codexSessionsScan: "codex-sessions:scan",
 	codexSessionsImport: "codex-sessions:import",
 	claudeSessionsScan: "claude-sessions:scan",
@@ -97,7 +100,17 @@ export const ipcChannels = {
 	gitWorkspaceFileDiff: "git:workspace-file-diff",
 	gitStage: "git:stage",
 	gitUnstage: "git:unstage",
+	gitDiscard: "git:discard",
 	gitCommit: "git:commit",
+	gitCherryPick: "git:cherry-pick",
+	gitRevert: "git:revert",
+	gitReset: "git:reset",
+	gitDropCommit: "git:drop-commit",
+	gitGenerateCommitMessage: "git:generate-commit-message",
+	gitInit: "git:init",
+	gitPush: "git:push",
+	gitPull: "git:pull",
+	gitFetch: "git:fetch",
 	piCheck: "pi:check",
 	piCheckCustom: "pi:check-custom",
 	/** 获取已安装的 WSL 发行版列表（仅 Windows） */
@@ -156,6 +169,8 @@ export const ipcChannels = {
 	agentsReload: "agents:reload",
 	agentsEditMessage: "agents:edit-message",
 	agentsDeleteMessage: "agents:delete-message",
+	/** 同文件重发：截断该用户消息及其后续，不生成新会话文件 */
+	agentsPrepareResend: "agents:prepare-resend",
 	agentsRestart: "agents:restart",
 	agentsCompact: "agents:compact",
 	agentsRuntimeState: "agents:runtime-state",
@@ -167,6 +182,7 @@ export const ipcChannels = {
 	agentsCycleThinking: "agents:cycle-thinking",
 	agentsSetThinking: "agents:set-thinking",
 	agentsState: "agents:state",
+	projectsListModels: "projects:list-models",
 	agentsEvent: "agents:event",
 	agentsMessage: "agents:message",
 	agentsLog: "agents:log",
@@ -299,4 +315,7 @@ export const ipcChannels = {
 	subAgentsStateUpdate: "sub-agents:state-update",
 	/** 渲染进程 → 主进程：请求加载子代理详细数据（点击已完成的子代理） */
 	subAgentsLoadDetail: "sub-agents:load-detail",
+	// ===== 系统文件选择器 =====
+	/** 打开系统原生文件/文件夹选择器，返回选中路径列表 */
+	dialogPickFiles: "dialog:pick-files",
 } as const;

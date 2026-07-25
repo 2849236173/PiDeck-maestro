@@ -1,4 +1,4 @@
-import { stripFeishuDocActionHint } from "../feishu/docActions";
+import { stripFeishuDocActionHint, stripHostInstruction } from "../feishu/docActions";
 
 function stripCpaCompletionMarker(text: string): string {
 	// CPA uses this final-line sentinel for transport completion; it is not user-visible content.
@@ -13,7 +13,10 @@ function stripCpaCompletionMarker(text: string): string {
  */
 export function extractMessageText(content: unknown): string {
 	if (typeof content === "string") {
-		return stripCpaCompletionMarker(stripFeishuDocActionHint(content));
+		// 宿主指令 / 飞书能力提示只给模型看，UI 与历史展示前剥离。
+		return stripCpaCompletionMarker(
+			stripHostInstruction(stripFeishuDocActionHint(content)),
+		);
 	}
 	if (!Array.isArray(content)) return "";
 
@@ -41,5 +44,24 @@ export function extractMessageText(content: unknown): string {
 		text += String(typed.text ?? "");
 	}
 
-	return stripCpaCompletionMarker(stripFeishuDocActionHint(text));
+	return stripCpaCompletionMarker(
+		stripHostInstruction(stripFeishuDocActionHint(text)),
+	);
+}
+
+/**
+ * 从 pi/RPC content 数组中提取 thinking 块的纯文本（不含标签包裹）。
+ * 与 AgentManager.extractThinking 逻辑一致，用于会话文件直接读取场景。
+ */
+export function extractThinkingRaw(content: unknown): string {
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((item) => {
+			if (!item || typeof item !== "object") return "";
+			const typed = item as Record<string, unknown>;
+			if (typed.type !== "thinking") return "";
+			return String(typed.thinking ?? typed.text ?? "");
+		})
+		.filter(Boolean)
+		.join("\n");
 }

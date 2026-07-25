@@ -44,7 +44,7 @@ import {
 } from "./FeishuConfig";
 import { chooseMessageMode, buildPostMessages, buildMarkdownCards } from "./rich-text";
 import { CardStream } from "./CardStream";
-import { buildFeishuTextChildren, stripFeishuActionMarkers, wantsFeishuDoc } from "./docActions";
+import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc, wrapHostInstruction } from "./docActions";
 import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, markDone, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
@@ -102,6 +102,8 @@ export class FeishuBridge {
 	private pendingCardEvents = new Map<string, unknown[]>();
 	// 记录卡片更新失败的 session（用于 runAgent 降级兜底）
 	private cardUpdateFailed = new Set<string>();
+	/** 本轮已成功完成流式卡片终态的 session；agent_end 时跳过二次纯文本同步，避免双消息。 */
+	private cardTerminalSucceeded = new Set<string>();
 
 	private unsubscribeLocalEvents: (() => void) | null = null;
 	// 哪些 session 是飞书发起的（不需要 session mirror）
@@ -604,10 +606,10 @@ export class FeishuBridge {
 				"当前会话已连接飞书聊天。严禁调用 lark-cli、飞书 IM API 或搜索群聊来发送文件；不要询问 chat_id。需要把本地文件发到当前飞书聊天时，最终回答末尾独立一行写 [SEND_FILE:本地文件路径]，PiDeck 会按当前会话绑定自动上传。",
 				"只有用户明确要求发送、上传或分享文件时才写 [SEND_FILE:本地文件路径]；如果只是要求保存到本地，不要写该标记。",
 				`当前绑定的飞书 chat_id: ${chatId}。这是只读上下文，用于确认当前会话绑定；发送文件仍必须用 [SEND_FILE:本地文件路径]。`,
+				"这是飞书群聊消息。请直接回复用户。",
 			].join("\n");
-			const feishuCtx = finalText
-				? `${feishuActionInstruction}\n\n${finalText}\n\n[这是飞书群聊消息。请直接回复用户。]`
-				: `${feishuActionInstruction}\n\n[飞书群聊消息。请直接回复用户。]`;
+			// 宿主指令包进隐藏标记，展示/历史只保留用户原文。
+			const feishuCtx = wrapHostInstruction(feishuActionInstruction, finalText || "处理附件");
 			await this.agentManager.sendPrompt({ agentId: binding.sessionId, message: finalText || "处理附件", agentMessage: feishuCtx, ...(images.length > 0 ? { images } : {}) });
 		} catch (e) {
 			this.feishuDrivenRuns.delete(binding.sessionId);
@@ -740,9 +742,8 @@ export class FeishuBridge {
 				this.streamingRunStates.set(agentId, nextState);
 			}
 			if (cardStream) {
-				// 卡片已就绪 → 直接更新（先清掉 [SEND_FILE:] [CREATE_DOC:] 标记）
-				const cleanText = nextState.outputText
-					.replace(/\[(SEND_FILE|CREATE_DOC):[^\]]*\]/g, "").trim();
+				// 卡片只展示用户可见正文，去掉 thinking 标签与内部动作标记。
+				const cleanText = sanitizeFeishuUserVisibleText(nextState.outputText);
 				const displayState = cleanText !== nextState.outputText
 					? { ...nextState, outputText: cleanText } : nextState;
 				const chatId = this.sessionToChat.get(agentId) ?? "";
@@ -751,16 +752,32 @@ export class FeishuBridge {
 				if (nextState.terminal === "running") {
 					cardStream.update(card);
 				} else {
-					// 终态：强制 flush + close，记录失败以便 runAgent 降级兜底
+					// 先标记“本轮由卡片交付”，避免 agent_end 抢先再发一条纯文本（竞态）。
+					this.cardTerminalSucceeded.add(agentId);
+					// 终态：强制 flush + close，记录失败以便降级补发纯文本
 					void cardStream.flush(card).then(() => {
-						// flush 成功 → 检查实际 patch 是否成功
 						if (cardStream.lastPatchFailed) {
 							this.cardUpdateFailed.add(agentId);
+							this.cardTerminalSucceeded.delete(agentId);
 							log(`[飞书 Bridge] 终态卡片 patch 失败: ${cardStream.lastPatchError}`);
+							// 卡片交付失败时再补一条纯文本，保证用户仍能看到结果。
+							const chatIdForFallback = this.getBestChatId(agentId);
+							if (chatIdForFallback && this.client) {
+								void this.syncPiMessageToFeishu(agentId, chatIdForFallback).catch((e) =>
+									logErr("[Feishu Bridge] card-fallback sync failed:", e),
+								);
+							}
 						}
 					}).then(() => cardStream.close()).catch((e) => {
 						this.cardUpdateFailed.add(agentId);
+						this.cardTerminalSucceeded.delete(agentId);
 						logErr("[飞书 Bridge] 终态卡片 flush/close 异常:", e);
+						const chatIdForFallback = this.getBestChatId(agentId);
+						if (chatIdForFallback && this.client) {
+							void this.syncPiMessageToFeishu(agentId, chatIdForFallback).catch((err) =>
+								logErr("[Feishu Bridge] card-fallback sync failed:", err),
+							);
+						}
 					});
 					this.streamingRunStates.delete(agentId);
 					this.streamingCards.delete(agentId);
@@ -776,9 +793,21 @@ export class FeishuBridge {
 		}
 
 		// 只有用户显式手动连接过的 PiDeck 会话，才把 Agent 结果同步到飞书。
-		if (!this.feishuSessions.has(agentId) && !this.feishuDrivenRuns.has(agentId) && typed.type === "agent_end") {
+		// 本轮若已由流式卡片交付（含交付中/刚成功），跳过纯文本，避免双消息。
+		if (
+			!this.feishuSessions.has(agentId) &&
+			!this.feishuDrivenRuns.has(agentId) &&
+			typed.type === "agent_end"
+		) {
+			if (
+				this.cardTerminalSucceeded.has(agentId) ||
+				this.streamingCards.has(agentId) ||
+				this.streamingRunStates.has(agentId)
+			) {
+				// 卡片路径自己负责终态；flush 失败时会主动 fallback 补发。
+				return;
+			}
 			log(`[Feishu Bridge] agent_end 触发 syncPiMessageToFeishu, agentId=${agentId.slice(0,8)}`);
-			// 优先用 session-mirror 群聊，没有则回退到 sessionToChat
 			const chatId = this.getBestChatId(agentId);
 			if (chatId && this.client) {
 				this.syncPiMessageToFeishu(agentId, chatId).catch((e) =>
@@ -805,8 +834,8 @@ export class FeishuBridge {
 		}
 		((this as Record<string, unknown>).__feishuSyncFp as Set<string>).add(fingerprint);
 
-		// 清掉标记再发送
-		const cleanText = lastAssistant.text.replace(/\[(SEND_FILE|CREATE_DOC):[^\]]*\]/g, "").trim();
+		// 只同步最终可见回复，避免把 thinking/内部指令带进飞书。
+		const cleanText = sanitizeFeishuUserVisibleText(lastAssistant.text);
 		if (cleanText) await this.sendSmartMessage(chatId, cleanText);
 
 		// 先扫 [CREATE_DOC:] 标记
@@ -1304,7 +1333,7 @@ export class FeishuBridge {
 		const resultText = lastAssistant?.text ?? "";
 		if (!resultText.trim()) return;
 		const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-		const cleanText = resultText.replace(/\[SEND_FILE:[^\]]*\]/g, "").replace(/\[CREATE_DOC:[^\]]*\]/g, "").trim();
+		const cleanText = sanitizeFeishuUserVisibleText(resultText);
 		if (cleanText) await this.sendSmartMessage(chatId, `${cleanText}\n\n⏱ ${duration}s ✅ 完成`);
 	}
 

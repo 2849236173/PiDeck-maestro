@@ -65,8 +65,10 @@ export type AgentTab = {
 	sessionId?: string;
 	sessionPath?: string;
 	createdAt: number;
-	/** 会话累计压缩次数，由主进程解析会话文件得到，用于前端展示“已压缩 N 次”。 */
+	/** 会话累计压缩次数，由主进程解析会话文件得到，用于前端展示"已压缩 N 次"。 */
 	compactionCount?: number;
+	/** 瞬时会话（--no-session），不保存记录，关闭即丢失 */
+	noSession?: boolean;
 };
 
 export type TerminalShell = "pwsh" | "powershell" | "cmd" | "zsh" | "bash" | "fish" | "sh";
@@ -332,6 +334,8 @@ export type AppSettings = {
 	piEnvironmentChecked: boolean;
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
+	/** Git 提交摘要生成提示词模板，{diff} 会被替换为实际 diff 内容 */
+	gitCommitMessagePrompt: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
 	/** 会话结束时发送系统通知 */
@@ -429,6 +433,7 @@ export type AppSettings = {
 	/** 是否禁用版本更新检测（PiDeck + Pi CLI），默认 false 表示正常检测；
 	 *  开启后自动跳过启动和定时检测，设置页中检测按钮也禁用。 */
 	disableUpdateCheck: boolean;
+
 };
 
 // ── 桌面宠物类型 ──
@@ -675,6 +680,8 @@ export interface SkillHubItem {
 	source?: string;
 	verified?: boolean;
 	updatedAt?: number;
+	/** 在 skillhub 网站上的详情页 URL，点击卡片时直接跳转 */
+	homepage?: string;
 }
 
 /** SkillHub skill 详情（含版本信息） */
@@ -765,6 +772,12 @@ export type YaoPromptListResult = {
 	categories: YaoPromptCategory[];
 	prompts: YaoPromptItem[];
 	repoPath: string;
+	/** 分页相关：匹配的总数（仅分页查询时返回） */
+	total?: number;
+	/** 当前页码（1-based，仅分页查询时返回） */
+	page?: number;
+	/** 每页条数（仅分页查询时返回） */
+	pageSize?: number;
 };
 
 export type YaoPromptDetailResult = {
@@ -847,6 +860,8 @@ export type AppInfo = {
 	releasesUrl: string;
 	/** 当前运行平台：win32 / darwin / linux，用于 UI 中按平台条件渲染（如 WSL 选项仅在 Windows 显示） */
 	platform: NodeJS.Platform;
+	/** 用户 home 目录，供扩展读取本地文件（如 memory-store.json） */
+	homeDir: string;
 };
 
 export type FeedbackEnvironment = {
@@ -1055,6 +1070,8 @@ export type CreateAgentInput = {
 	projectId: string;
 	title?: string;
 	sessionPath?: string;
+	/** 瞬时会话：不保存 session 文件（对应 pi --no-session） */
+	noSession?: boolean;
 };
 
 export type ForkMessage = {

@@ -44,6 +44,7 @@ import type {
 	FileTreeNode,
 	ForkMessage,
 	GitBranchInfo,
+	ImageContent,
 	CommitDetail,
 	GitCommitFileDiff,
 	GitWorkspaceDiffGroup,
@@ -134,6 +135,11 @@ const api = {
 		// 设置聊天记录目录
 		setChatPath: (path: string) =>
 			ipcRenderer.invoke(ipcChannels.projectsSetChatPath, path) as Promise<Project | null>,
+		// 通过 pi --list-models 获取可用模型列表（无需启动 agent）
+		listModels: (projectId?: string) =>
+			ipcRenderer.invoke(ipcChannels.projectsListModels, projectId) as Promise<
+				AvailableModel[]
+			>,
 	},
 	projectResources: {
 		list: (projectId: string) =>
@@ -168,6 +174,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.filesDelete, path, recursive) as Promise<void>,
 		rename: (path: string, newName: string) =>
 			ipcRenderer.invoke(ipcChannels.filesRename, path, newName) as Promise<string>,
+		create: (parentDir: string, name: string, type: "file" | "directory") =>
+			ipcRenderer.invoke(ipcChannels.filesCreate, parentDir, name, type) as Promise<string>,
 	},
 	sessions: {
 		list: (projectId?: string) =>
@@ -198,6 +206,16 @@ const api = {
 		readMessages: (filePath: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsReadMessages, filePath) as Promise<
 				Array<{ role: string; content: string; timestamp: number }>
+			>,
+		readSessionMeta: (filePath: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsReadMeta, filePath) as Promise<{
+				provider?: string;
+				modelId?: string;
+				thinkingLevel?: string;
+			}>,
+		readChatMessages: (filePath: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsReadChatMessages, filePath) as Promise<
+				import("../shared/types").ChatMessage[]
 			>,
 	},
 	codexSessions: {
@@ -354,12 +372,75 @@ const api = {
 				projectId,
 				paths,
 			) as Promise<void>,
+		// 丢弃单个未暂存文件；主进程会按最新 status 再次验证 group 与路径。
+		discard: (projectId: string, group: "workingTree" | "untracked", filePath: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitDiscard,
+				projectId,
+				group,
+				filePath,
+			) as Promise<void>,
 		// Commit
 		commit: (projectId: string, message: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.gitCommit,
 				projectId,
 				message,
+			) as Promise<void>,
+		cherryPick: (projectId: string, hash: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitCherryPick,
+				projectId,
+				hash,
+			) as Promise<void>,
+		revert: (projectId: string, hash: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitRevert,
+				projectId,
+				hash,
+			) as Promise<void>,
+		reset: (projectId: string, hash: string, mode: "soft" | "mixed" | "hard") =>
+			ipcRenderer.invoke(
+				ipcChannels.gitReset,
+				projectId,
+				hash,
+				mode,
+			) as Promise<void>,
+		dropCommit: (projectId: string, hash: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitDropCommit,
+				projectId,
+				hash,
+			) as Promise<void>,
+		/** AI 生成提交摘要 */
+		generateCommitMessage: (projectId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitGenerateCommitMessage,
+				projectId,
+			) as Promise<string>,
+		/** 初始化 Git 仓库 */
+		init: (projectId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitInit,
+				projectId,
+			) as Promise<void>,
+		/** Push：将当前分支推送到远程 */
+		push: (projectId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitPush,
+				projectId,
+			) as Promise<void>,
+		/** Pull：从远程拉取并合并到当前分支 */
+		pull: (projectId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitPull,
+				projectId,
+			) as Promise<void>,
+		/** Fetch：从远程获取最新数据但不合并 */
+		fetch: (projectId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitFetch,
+				projectId,
 			) as Promise<void>,
 	},
 	pi: {
@@ -437,8 +518,8 @@ const api = {
 			ipcRenderer.invoke(
 				ipcChannels.appFeedbackEnvironment,
 			) as Promise<FeedbackEnvironment>,
-		openExternal: (url: string) =>
-			ipcRenderer.invoke(ipcChannels.appOpenExternal, url) as Promise<void>,
+		openExternal: (url: string, forceSystem?: boolean) =>
+			ipcRenderer.invoke(ipcChannels.appOpenExternal, url, forceSystem) as Promise<void>,
 		onOpenInBrowser: (callback: (url: string) => void) =>
 			subscribe(ipcChannels.appOpenInBrowser, callback),
 		restart: () => ipcRenderer.invoke(ipcChannels.appRestart) as Promise<void>,
@@ -523,24 +604,25 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.skillStoreImport, item, locationId) as Promise<PiSkillSummary>,
 	},
 	skillHub: {
-		search: (query: string, page?: number) =>
-			ipcRenderer.invoke(ipcChannels.skillHubSearch, query, page ?? 1) as Promise<import("../shared/types").SkillHubSearchResult>,
+		search: (query: string, page?: number, pageSize?: number, sortBy?: string, order?: string) =>
+			ipcRenderer.invoke(ipcChannels.skillHubSearch, { query, page, pageSize, sortBy, order }) as Promise<import("../shared/types").SkillHubSearchResult>,
 		detail: (slug: string) =>
 			ipcRenderer.invoke(ipcChannels.skillHubDetail, slug) as Promise<import("../shared/types").SkillHubDetail | null>,
 		install: (slug: string, installDir: string) =>
 			ipcRenderer.invoke(ipcChannels.skillHubInstall, slug, installDir) as Promise<import("../shared/types").SkillHubInstallResult>,
 	},
 	yaoPrompts: {
-		list: () =>
-			ipcRenderer.invoke(ipcChannels.yaoPromptsList) as Promise<YaoPromptListResult>,
+		list: (opts?: { category?: string; search?: string; page?: number; pageSize?: number }) =>
+			ipcRenderer.invoke(ipcChannels.yaoPromptsList, opts) as Promise<YaoPromptListResult>,
 		detail: (slug: string, category: string) =>
 			ipcRenderer.invoke(ipcChannels.yaoPromptsDetail, slug, category) as Promise<YaoPromptDetailResult>,
 		import: (slug: string, category: string) =>
 			ipcRenderer.invoke(ipcChannels.yaoPromptsImport, slug, category) as Promise<PiPromptTemplateSummary>,
 	},
 	extensions: {
-		list: () =>
-			ipcRenderer.invoke(ipcChannels.extensionsList) as Promise<PiExtensionListResult>,
+		// forceRefresh=true 时跳过主进程缓存并补充 npm 版本信息。
+		list: (forceRefresh = false) =>
+			ipcRenderer.invoke(ipcChannels.extensionsList, forceRefresh) as Promise<PiExtensionListResult>,
 		uninstall: (source: string, scope?: "user" | "project" | "unknown") =>
 			ipcRenderer.invoke(ipcChannels.extensionsUninstall, source, scope) as Promise<void>,
 		install: (source: string) =>
@@ -627,6 +709,10 @@ const api = {
 				success: boolean;
 				models?: Array<{ id: string; name?: string }>;
 				error?: string;
+				requestUrl?: string;
+				sessionBaseUrlNeedsVersion?: boolean;
+				/** 检测走通版本路径时，建议写入配置的 baseUrl（含 /v1） */
+				suggestedBaseUrl?: string;
 			}>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
 		testProvider: (
@@ -648,6 +734,8 @@ const api = {
 				error?: string;
 				requestUrl?: string;
 				requestBody?: string;
+				sessionBaseUrlNeedsVersion?: boolean;
+				suggestedBaseUrl?: string;
 			}>,
 	},
 	agents: {
@@ -704,6 +792,13 @@ const api = {
 				agentId,
 				messageId,
 			) as Promise<void>,
+		// 同文件重发准备：截断原用户消息及其后续，返回可重新 prompt 的原文。
+		prepareResend: (agentId: string, messageId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsPrepareResend,
+				agentId,
+				messageId,
+			) as Promise<{ text: string; images?: ImageContent[] }>,
 		reload: (agentId: string) =>
 			ipcRenderer.invoke(ipcChannels.agentsReload, agentId) as Promise<void>,
 		restart: (agentId: string) =>
@@ -938,7 +1033,21 @@ const api = {
 		sessionBotGet: (agentId: string) =>
 			ipcRenderer.invoke(ipcChannels.feishuSessionBotGet, agentId) as Promise<string | null>,
 		sessionBotSet: (agentId: string, botId: string | null) =>
-			ipcRenderer.invoke(ipcChannels.feishuSessionBotSet, agentId, botId) as Promise<void>,
+			ipcRenderer.invoke(ipcChannels.feishuSessionBotSet, agentId, botId) as Promise<{
+				success: boolean;
+				message?: string;
+				chatId?: string;
+			}>,
+	},
+
+	// ===== 系统文件选择器 =====
+	dialog: {
+		/**
+		 * 打开系统原生文件/文件夹选择器，支持多选。
+		 * 返回选中路径列表，取消时返回空数组。
+		 */
+		pickFiles: (options?: { title?: string }) =>
+			ipcRenderer.invoke(ipcChannels.dialogPickFiles, options) as Promise<string[]>,
 	},
 
 	// ===== 内置浏览器 =====

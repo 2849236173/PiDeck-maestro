@@ -30,7 +30,42 @@ git push origin main
 
 ## 项目简介
 
-pi-desktop 是一个面向本地开发工作的 Electron 桌面应用，用于在多个项目目录之间管理和运行 pi RPC Agent。应用提供多项目工作区、会话时间线、历史会话恢复、文件抽屉、Git 分支信息、模型选择、工具调用展示以及打包发布能力，目标是让用户可以在桌面端更稳定地管理多个 pi 编码助手会话。
+PiDeck 是一个面向本地开发工作的 Electron 桌面应用，用于在多个项目目录之间管理和运行 pi RPC Agent。应用提供多项目工作区、会话时间线、历史会话恢复、文件抽屉、Git 面板、模型选择、工具调用展示、内置浏览器、中文提示词精选、技能/扩展商店以及打包发布能力，目标是让用户可以在桌面端更稳定地管理多个 pi 编码助手会话。
+
+技术栈：Electron 38 + React 19 + TypeScript + Vite。
+
+## 目录结构
+
+```
+src/
+├── main/              # Electron 主进程
+│   ├── pi/            # pi RPC 进程管理、消息解析
+│   ├── sessions/      # 会话扫描、导入、摘要缓存
+│   ├── git/           # GitService（status/diff/commit/cherry-pick 等）
+│   ├── prompts/       # PromptManager（本地模板）+ XuePromptManager（SQLite 中文精选）
+│   ├── skills/        # SkillManager
+│   ├── extensions/    # ExtensionManager
+│   ├── settings/      # SettingsStore + DesktopProxy
+│   ├── terminal/      # 终端会话管理
+│   ├── pet/           # 桌面宠物
+│   ├── feishu/        # 飞书集成
+│   └── web/           # Web 服务管理
+├── preload/           # preload 脚本，暴露 IPC API
+├── renderer/
+│   └── src/
+│       ├── components/
+│       │   ├── ui/        # ★ 共享 UI 组件（Button/IconButton/SelectField/TextField/Modal）
+│       │   ├── app/       # 业务组件（AppParts/GitPanel/BrowserPanel/FileDiffViewer 等）
+│       │   ├── terminal/  # 终端 Dock
+│       │   ├── scratchPad/# 草稿本
+│       │   └── feishu/     # 飞书相关
+│       ├── config/        # 配置弹窗各 tab（Models/Auth/Settings/Skills/Prompts/Extensions）
+│       ├── assets/        # 字体、编辑器图标、git-logo
+│       ├── utils/         # monacoSetup、openExternal、notice、agentRuntimeState 等
+│       ├── i18n.ts        # 所有可见文案
+│       └── styles.css     # 全局样式 + 语义 token
+└── shared/            # 主进程与渲染进程共享类型和 IPC 通道定义
+```
 
 ## 开发要求
 
@@ -38,6 +73,68 @@ pi-desktop 是一个面向本地开发工作的 Electron 桌面应用，用于�
 - 注释应说明为什么这样做、对应的业务规则或边界条件，不要逐行解释显而易见的代码。
 - UI 调整应尽量保持现有桌面三栏布局和微信式交互风格，避免引入无关重构。
 - 修改后应根据影响范围运行必要验证，例如 `npm run typecheck`。
+
+## 共享 UI 组件（必须使用）
+
+> **核心规则：新增 UI 时优先使用 `src/renderer/src/components/ui/` 下的共享组件，不要自己造轮子，也不要用原生 HTML 控件。**
+
+### 已有组件
+
+| 组件 | 路径 | 用途 | 何时用 |
+|------|------|------|--------|
+| `Button` | `components/ui/Button.tsx` | 主按钮、次按钮、危险按钮、ghost 按钮；支持 `loading` | 任何可点击的操作按钮 |
+| `IconButton` | `components/ui/IconButton.tsx` | 纯图标按钮，带 `aria-label` | 工具栏图标按钮、行内操作按钮 |
+| `CloseIconButton` | `components/ui/IconButton.tsx` | 统一的关闭按钮（X 图标） | 弹框/抽屉的关闭按钮 |
+| `SelectField` | `components/ui/SelectField.tsx` | 自定义下拉选择器（按钮 + 弹出 listbox） | **替代所有原生 `<select>`** |
+| `TextField` | `components/ui/TextField.tsx` | 带标签的文本输入 | 表单输入、配置项编辑 |
+| `Modal` | `components/ui/Modal.tsx` | 基于 Radix Dialog 的弹框，支持 full/medium/small 三档尺寸 | 全屏弹框、中/小弹框 |
+| `LazyMonacoEditor` | `components/ui/LazyMonacoEditor.tsx` | Monaco 编辑器懒加载封装 | 代码编辑、SKILL.md 编辑 |
+
+### 禁止的做法
+
+| ❌ 禁止 | ✅ 正确 |
+|---------|---------|
+| `<select><option>...</option></select>` | `<SelectField label=... value=... options=... onChange=... />` |
+| `<input type="text" />` 裸写 | `<TextField label=... value=... onChange=... />` |
+| `<button className="随便写">` | `<Button variant="primary">...</Button>` 或 `<IconButton label="...">{icon}</IconButton>` |
+| 手写 `div + onClick` 弹框 | `<Modal open=... onClose=...>...</Modal>` |
+| 自己实现 `✕` 关闭按钮 | `<CloseIconButton label={t("common.close")} onClick=... />` |
+
+### 自定义下拉的例外
+
+如果 `SelectField` 无法满足需求（例如选项里需要显示图标、两行文字、分组等），可以参考 `GitPanel.tsx` 的 `GitCompactFilter` 自定义实现，但必须：
+- 使用 `button + role="listbox"` + `role="option"` 的 ARIA 结构
+- 用 `ChevronDown` 图标（来自 lucide-react）
+- 支持 `Escape` 关闭、点击外部关闭、键盘 `ArrowDown/ArrowUp` 打开
+- 样式走 `--color-*` 语义 token，不要写死颜色
+
+## 图标系统
+
+> **图标统一使用 `lucide-react`，不要引入其他图标库，不要用 emoji 代替功能图标。**
+
+### 使用规范
+
+- 所有功能图标来自 `lucide-react`（已在 `package.json` 中，`^1.17.0`）。
+- 图标尺寸：按钮内 `14~18`，行内 `12~15`，标题旁 `18~20`。
+- `strokeWidth` 统一 `1.8`（默认）或 `2.0~2.4`（强调状态）。
+- 交互图标必须带 `aria-hidden="true"`（纯装饰），可点击的图标按钮用 `IconButton` + `aria-label`。
+- 不要用 emoji（🚀🔥✅ 等）作为 UI 控件图标，只能用于文案/通知。
+
+### Logo
+
+项目 Logo 是一个**特定的 SVG 路径**，不是通用图标，不要用 lucide 的图标替代。
+
+- **品牌 Logo（应用图标/启动画面/Agent 头像）**：使用 `LogoMark` 组件（`AppParts.tsx`），它内嵌 PiDeck 标志的 SVG path。
+  ```tsx
+  <LogoMark />  // 22x22 品牌标志
+  ```
+- **Agent 头像**：使用 `AgentAvatar` 组件（`AppParts.tsx`），内嵌相同的 SVG path + 状态 class。
+- **启动画面 Logo**：见 `index.html` 中的 `#boot-logo`，SVG path 与 `LogoMark` 保持一致。
+- **项目头像**：使用 `ProjectAvatar` 组件（`AppParts.tsx`），区分 chat / project 两种 kind。
+- **编辑器 Logo**：使用 `src/renderer/src/assets/editors/` 下的对应图片，通过 `new URL("./assets/editors/vscode.png", import.meta.url).href` 引用，配合 `editor-logo` class。
+- **Git Logo**：`src/renderer/src/assets/git-logo.svg`。
+
+> 修改 Logo 时，`LogoMark`、`AgentAvatar`、`EmptyState`、`index.html` 中的 SVG path 必须保持一致。
 
 ## UI 设计规范
 
@@ -48,11 +145,23 @@ pi-desktop 是一个面向本地开发工作的 Electron 桌面应用，用于�
 - 间距尽量遵守 4px 栅格，优先使用 `--space-*` 或与相邻布局一致的响应式 padding。列表 hover、按钮显隐不能造成文本跳动。
 - 交互态必须覆盖 hover、active、disabled 和 `focus-visible`。输入、下拉、按钮和可点击列表项应使用统一焦点环，不要只依赖颜色变化表达状态。
 - 暗色模式必须通过语义 token 自然适配。新增面板、弹层、菜单、日志、代码块时，不要写死浅色背景或固定深色块，除非是明确的终端主题或图片预览遮罩。
-- 多语言文案必须走 `i18n.ts`，不要在 JSX 中新增硬编码中英文可见文本。按钮和 tab 需要为英文、中文和伪翻译预留伸缩空间。
-- 设置、配置管理、反馈等全屏页面式弹层需要适配自定义标题栏，内容不能被顶部窗口控制栏遮挡。
-- 公共控件优先沉淀到 `src/renderer/src/components/ui/`，例如 `Button`、`IconButton`、`TextField`、`SelectField`。当两个以上页面需要相同按钮、输入、下拉、badge、列表行或弹层结构时，应优先抽为共享组件或共享 class。
 
-## 弹框尺寸规范
+## 多语言文案
+
+> **所有用户可见文本必须走 `i18n.ts`，不要在 JSX 中硬编码中英文。**
+
+- 新增文案时在 `i18n.ts` 中添加 key，同时提供中文（`zh`）和英文（`en`）。
+- 按钮、tab、label、placeholder、toast、空状态文案都属于"可见文本"。
+- 按钮和 tab 需要为英文、中文和伪翻译预留伸缩空间（不要用固定宽度）。
+- 日志、调试输出、内部标识符不算"可见文本"，可以硬编码。
+
+## 样式与布局
+
+- 全局样式在 `src/renderer/src/styles.css`，所有语义 token 定义在文件顶部 `:root`。
+- 新增样式优先复用已有 class（如 `config-btn`、`config-icon-btn`、`config-toolbar`、`config-empty`、`config-loading`、`config-error`、`modal-backdrop` 等），避免散落的内联 style。
+- 设置、配置管理、反馈等全屏页面式弹层需要适配自定义标题栏，内容不能被顶部窗口控制栏遮挡。
+
+### 弹框尺寸规范
 
 所有全屏式弹框（设置、配置、导入、会话管理、项目资源等）使用统一的尺寸，以确保视觉一致性：
 
@@ -67,6 +176,8 @@ height: min(850px, calc(100vh - 48px));
 - `border-radius: var(--radius-lg)`
 - `box-shadow: var(--shadow-xl)`
 - 点击 backdrop（`<div className="modal-backdrop">`）关闭弹框，弹框本身通过 `stopPropagation()` 阻止冒泡
+
+> **推荐使用 `components/ui/Modal.tsx`**，它基于 Radix Dialog 已内置以上规范。
 
 ## 字体使用标准
 
@@ -116,16 +227,13 @@ height: min(850px, calc(100vh - 48px));
 
 ### 核心原则
 
-> **不要自以为是地提交代码。** 只有用户明确要求时，AI 助手才可以执行 `git add`、`git commit` 或 `git push`。
+> **不要自以为是地提交代码。** 只有用户明确要求时，AI 助手才可以执行 `git add`、`git commit` 或 `git push`。**
 
 ### 规则
 
 1. **禁止在工作过程中自动 commit** — 无论是修改文件、修复 bug 还是新增功能，完成一步后都不应自动提交。修改只是过程，不是节点。
-
 2. **等待用户指令** — 只有用户说出「可以 commit 了」「提交吧」「推上去」「push」等明确意图时，才能执行 commit 或 push。用户没说，就不动。
-
 3. **完成后再确认** — 整个功能或修复完成后，应向用户简要总结做了什么，并询问「需要我提交吗？」或类似措辞，等待用户确认。
-
 4. **提交粒度** — 如果用户同意提交，应在一个 commit 中包含该功能/修复的全部文件变更，不要拆成多个小 commit。用户另有要求除外。
 
 ### 举例

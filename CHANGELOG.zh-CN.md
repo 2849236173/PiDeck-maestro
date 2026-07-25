@@ -46,6 +46,196 @@
 
 这里记录 PiDeck 各版本的重要变化。
 
+## v0.6.6-1 - 2026-07-25
+
+基于上游 `ayuayue/PiDeck v0.6.6-beta.2` 的 Maestro 兼容发行版。
+
+### Maestro 桌面兼容
+
+- 保留子代理 / teammate 实时面板、嵌套会话监控和工具完成后的最终进度。
+- 保留 Maestro `ask_userquestion`、Plan RPC 回退，以及指向 `2849236173/PiDeck-maestro` 的应用内更新检查。
+- 同步上游 0.6.6-beta.2 能力，同时保持 personal 兼容发行线。
+
+### 同步自上游 0.6.6-beta.2
+
+### 🚀 新功能
+
+- **XuePrompt 中文提示词精选** — 取代旧的 yao-prompts 文件，改为 SQLite 数据库存储
+  （~4000 条中文提示词），支持 20+ 分类筛选、FTS3 全文搜索、分页浏览、一键导入。
+- **HTML 预览改为内置浏览器** — 文件编辑器打开 HTML 默认显示源码，点击预览按钮切到
+  右侧浏览器面板用 webview 渲染，不再受 iframe sandbox 限制，外部 CSS/JS 正常加载。
+- **Skills.sh 社区技能商店** — SkillHub 标签切换到 CLI 注册中心 (skill.xfyun.cn) 驱动搜索，
+  安装使用 `npx -g -s <skill> -y` 模式，支持安装量排序和安装中动画。
+- **推荐扩展包改进** — 全部显示复制安装命令按钮，操作按钮横向排列，安装状态按实际变动。
+- **技能安装异步执行** — `npx skills install` 改为 `execFile` 异步调用，不再阻塞主进程 UI。
+
+### ✨ 交互优化
+
+- **行为选择器移到停止按钮左侧** — Steer/Follow-Up 按钮组放到左边，停止按钮靠右，视觉更清晰。
+- **Composer 底部栏样式统一** — `send-behavior-toggle` 改为 `composer-bar-btn` 风格（28px 小圆角）。
+- **Skills/Prompts 切回本地 Tab 自动刷新** — 从商店 tab 切回本地时自动拉取最新列表，安装后立即可见。
+- **Prompt 中文精选安装后立即显示已安装状态** — 导入后刷新 `installedNames`，无需手动刷新。
+- **SkillHub 安装后自动更新已安装标注** — 同名歧义时通过持久化记录正确标记已安装。
+- **内置浏览器 webview 稳定性修复** — 解决初始加载被取消（ERR_ABORTED）、dom-ready 无限刷新、webview 未就绪白屏问题。
+- **浏览器面板关闭/最大化按钮移至标签栏** — 节省顶部空间，操作更顺手。
+- **安装按钮旁加复制命令按钮** — 方便手动终端安装。
+
+### 🐛 Bug 修复
+
+- **Docs 站构建失败** — VitePress YAML frontmatter 中 `&` 被误解析为 anchor，改为引号包裹。
+- **TypeScript CI 构建失败** — App.tsx 中 `setAttachedImages` 函数被重复定义。
+- **Monaco 编辑器 CSP 报错** — `loader.config({ monaco })` 从 `useEffect` 移至模块作用域同步初始化，
+  确保 `<Editor>` 挂载前配置生效，不再从 CDN 加载被 CSP 阻止。
+- **SkillHub 搜索 `persistedRef.current is not iterable` 崩溃** — `loadPersisted()` 增加
+  `Array.isArray` 防御，运行时 `for-of` 迭代前再加兜底检查。
+- **XuePrompt 分类点击无数据** — 数据库中 `category` 存的是原始名，前端传的是 slug 化版本，
+  改为子查询同时匹配 slug 和原始名。
+- **标题栏色差** — `.window-controls` 补充 `background: var(--color-bg-sidebar)`，与 `.window-drag-layer` 背景一致。
+- **sql.js 打包后 ESM 加载失败** — 修复 `node_modules/sql.js` 在 asar 中无法找到 WASM 的问题。
+
+### 🧪 实验性
+
+- **WSL 环境支持** — 会话扫描和列表已适配，文件操作（rename/delete/copy/exportHtml/readMessages）
+  支持 WSL 路径。⚠️ **未做完整测试**，仅保证 Windows 模式下不受影响。
+
+### 📝 待完成
+
+- WSL 完整测试与适配
+- 更多 WSL 功能（技能管理、Prompt 管理等）
+- 版本发布前更新 README 截图
+
+### 🐛 Bug 修复
+
+- **TurnRow "Rendered fewer hooks" 崩溃** — 将 `useMemo` 移至 early return 之前，
+  修复发送消息后白屏。
+- **停止按钮在 agent 回答时不可见** — 从 `hasComposerContent` 条件中抽离，
+  agent 繁忙时始终显示。
+- **历史会话打开不滚动到底部** — `ResizeObserver` 依赖加入 `activeMessages.length`，
+  消息加载后自动滚到底部。
+- **匿名 agent 侧栏重复** — `isReplacementForPendingAgent` 增加 `noSession` 匹配路径。
+- **Agent 启动状态卡在 "starting"** — 修复 `createAgent` 中 `setAgents`
+  在 API 返回后未覆盖已有条目导致状态不更新的问题。
+- **Session 加载指示器闪烁** — 强制最小展示 200ms，避免快速 API 响应时闪一下。
+- **Git 提交摘要生成** — 从每次调起 `pi -p` 改为持久化 `pi --mode rpc` 守护进程，
+  消除反复冷启动开销。启动参数带 `--no-session --no-tools --no-extensions
+  --no-skills --no-prompt-templates --no-context-files --no-themes --thinking off`
+  以最小化启动耗时。
+- **GitService.getStagedDiff maxBuffer 过小** — 原 `maxBuffer` 仅 5KB，diff 稍大
+  即静默失败返回空，改为固定 10MB。
+- **dev 终端中文乱码** — Windows 下自动 `chcp 65001` 切换到 UTF-8 代码页。
+
+### 🚀 新功能
+
+- **Composer 重新设计（OpenCode 风格）** — 顶部圆框按钮组移至底部操作栏：
+  模式切换 / Prompt 图标 / 附件图标 / 模型名 / 思考级别（均可点击）。
+- **本地快速打包** — `npm run compile-exe` 输出便携 exe（跳过 tsc、ASAR 不压缩）。
+  `npm run dist:win -- [格式]` 支持单格式打包（nsis / portable / zip）。
+- **Git Push / Pull** — 变更面板标题栏新增 Push 和 Pull 按钮，
+  完整 IPC 链路及错误通知支持。
+- **可配置的提交摘要提示词** — 新增设置项 `gitCommitMessagePrompt`，
+  在设置 Git 区块中提供 textarea 编辑。模板支持 `{diff}` 占位符，
+  默认提示词包含 Gitmoji 对应关系。
+- **Git 面板相对路径** — 目录分组标题改为显示项目相对路径而非绝对路径。
+
+## v0.6.6-beta.1 - 2026-07-22
+
+### 🚀 新功能
+
+- **Git 源代码管理（大重构）**
+  - VS Code 风格 3 Tab Git 面板：变更 / 历史 / 比较
+  - AI 提交摘要生成（一键调用 pi 模型）
+  - Git 图形化提交历史，带彩色泳道和分支/标签标记
+  - 右键菜单支持 Cherry-pick、Revert、Soft/Mixed/Hard Reset、Drop
+  - 分支切换和新建
+  - Worktree 工作区创建/删除/列表，按 worktree 分组会话
+  - 对话区域浮动 Git 入口按钮
+  - 未初始化 Git 仓库时提示初始化
+  - 文件状态徽标，统一文件图标
+- **& 会话引用快捷输入**
+  - 输入 & 弹出同项目会话搜索列表
+  - 可以选择特定消息或引用全部上下文
+  - 选择持久化，重新打开恢复上次勾选
+  - 精确 chip 边界匹配，不再误吞后续输入
+- **多 Tab 文件编辑器**
+  - 最多 5 个并发编辑器 Tab，弹框/侧栏双模式
+  - Diff 差异对比模式
+  - Monaco 编辑器，支持暗色/亮色主题、Markdown 预览、多光标
+  - 自动保存（Ctrl+S），脏状态标记
+- **会话大纲 & 快捷操作栏**
+  - 浮动大纲面板，支持跳转到指定消息
+  - 快捷操作：终端、文件抽屉、Git、浏览器、草稿本、外部编辑器
+  - 可拖拽调整位置，高度记忆
+  - Git 入口不再依赖 activeAgent——有项目时始终可见
+- **客户端消息队列**
+  - Agent 忙碌时可排队发送（follow-up 或 steer 模式）
+  - 可撤回已排队消息回输入框编辑
+  - 可视化的排队状态：发送中、失败、待发数量
+- **内置浏览器**
+  - 右侧抽屉浏览器面板，支持多 Tab
+  - 全屏模式和设备预设（PC / 手机 / 平板）
+  - 外部链接自动在内部浏览器打开
+- **WSL 环境支持**
+  - 完整 WSL 隔离：pi 检测、会话扫描、文件访问
+  - WSL 发行版选择、用户验证、连接测试
+  - Windows/WSL pi 源切换（设置 > 开发设置）
+- **SkillHub 集成**
+  - 技能商店 Tab，浏览和安装社区技能
+  - CLI 注册中心驱动的技能发现
+- **Toast 通知系统**
+  - 自建 app-notice 系统替代 sonner toast 依赖
+  - Agent 操作、文件动作、复制、模型切换等场景的上下文通知
+  - 圆点标记设计，无侵入绿色边框
+- **Ask Question 弹框**
+  - 交互式选项弹框：select / confirm / input 类型
+  - 按钮行布局，已答选项自动禁用
+  - 支持 ✎ 自定义输入
+- **会话压缩优化**
+  - 可展开的压缩摘要卡片，查看压缩前消息历史
+  - Agent Tab 上显示压缩次数标记
+  - 自动压缩后的进程重启追踪
+
+### ✨ UI 改进
+
+- **设置页重构**：全局保存/取消、新 Tab 分类（基础/代理/Web/开发/宠物/存储）、统一 config-btn 样式
+- **分区域字体**：侧栏 UI/会话正文/输入框独立字体大小；字体预设（系统/sans/serif/自定义）；窗口缩放 80%–150%
+- **模型选择器**：滚动到顶部/底部按钮、折叠/展开所有供应商、最大思考级别支持
+- **文件图标**：VS Code Seti 图标集、Git 状态徽标、统一 20×20 尺寸
+- **文件差异查看器**：工具卡片内联 diff chip、Tab 栏 accent 顶边线、等宽文件名
+- **项目交互**：点击展开 + 加载会话，行脉冲动画，行内加载转圈
+- **浮动操作按钮**：终端/文件/Git/草稿本/编辑器/浏览器均在 outline hover 区可用
+- **空状态**：垂直居中 + 优化字体排版
+- **右键菜单**：项目/会话/Agent 复制路径，自动避免屏幕裁切
+- **中文/Unicode 支持**：prompt/skill/会话名全 Unicode，chip 正则使用 `\p{L}`
+- **暗色模式**：优化颜色和对比度
+
+### 🔧 性能与架构
+
+- **RichInput 重写**：非受控 + 局部修补架构，彻底修复输入时光标漂移
+- **Monaco 懒加载**：17.6MB Web Worker 仅打开文件 diff 时加载
+- **App-notice 系统**：替换 sonner toast 依赖为自建通知机制
+- **归档消息**：透传压缩层，压缩流程添加诊断日志
+- **包体积优化**：larksuiteoapi lib/ 清理、afterPack 优化、renderer chunk 拆分
+- **移除 originalContent**：diff 改用工具参数变动区域而非存储完整内容
+- **remove-markdown**：替代手写正则的 Markdown 转纯文本
+- **统一工具参数解析**：修复 `getToolNewContent` 对 edit 返回 undefined
+- **IPC 减负**：移除会话消息中不必要的字段
+
+### 🐛 Bug 修复
+
+- **Git 面板**：三元表达式缺少 `)}` 导致构建失败；AI 提交生成 catch 块未闭合；修复 commit 生成时 loading 卡死
+- **文件编辑器**：Monaco 'TextModel disposed before DiffEditorWidget model got reset'；移除 `loadedPath` 提前返回；修复 mode/content 切换
+- **光标/滚动**：切换 Agent Tab 时重置自动滚动；composer footer 浮动在 textarea 上；发送后消息滚动到末尾
+- **WSL**：切回 Windows 模式时显示应用/取消按钮；发行版检测和用户验证
+- **扩展生命周期**：禁用的扩展可以重新启用；内置扩展恢复
+- **Ask 弹框**：select 自定义输入委托 Pi 的 ✎ 流；弹框打开时隐藏内联卡片；支持 confirm 类型按钮
+- **会话引用**：& chip 不再吞后续输入；大小写不敏感匹配；`replaceAll` 安全转义；按名称长度排序避免子串误匹配
+- **渲染**：修复消息顺序（user → assistant）、首次发送延迟、abort 后消息污染；执行过程折叠用 `agentRunning` 替代 `isStreaming`；system 消息不再中断 ask 折叠区域
+- **文件树**：字体对齐 VS Code（14px/400w/22px height=line-height）ClearType 渲染；侧栏抽屉状态按项目目录持久化
+- **大会话**：跳过完整加载，从 JSONL 尾部读取最近 8 条消息
+- **依赖**：重新生成 lockfile 修复 CI `npm ci` 同步；移除废弃 `.npmrc allow-scripts`
+- **老版本 pi**：兼容 `--no-approve` 参数
+- **通知**：toast 不被设置弹框遮挡；代理配置两步确认（草稿 → 保存）
+
 ## v0.6.5-1 - 2026-07-23
 
 这是基于上游 `ayuayue/PiDeck v0.6.5` 的 `pi-maestro-flow` 兼容修复版。

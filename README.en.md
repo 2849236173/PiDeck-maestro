@@ -8,13 +8,13 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5--5-green)
+![Version](https://img.shields.io/badge/version-0.6.6--1-green)
 
 > This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
 >
 > - Upstream project: [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)
 > - Compatibility repository: [2849236173/PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro)
-> - Versioning: follow the upstream version and append a compatibility fix suffix, such as `0.6.5-1` or `0.6.5-2`. Suffix releases are maintained compatibility fixes, not upstream releases.
+> - Versioning: follow upstream capability with a compatibility release suffix, such as `0.6.6-1`. Suffix releases are maintained compatibility fixes, not upstream releases.
 
 **PiDeck** is an open-source pi desktop workbench for managing pi Agent sessions across local project folders, with import support for local Codex and Claude sessions so you can browse and restore them in one place. Built with Electron + TypeScript, it provides multi-project workspace management, AI session history, Git integration, built-in terminal, visual config management, and plugin extensions—so local AI coding assistants stay consistent, traceable, and configurable across projects.
 
@@ -26,7 +26,12 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.5-5** (2026-07-25)
+> **Latest compatibility release: v0.6.6-1** (2026-07-25)
+
+### v0.6.6-1 Maestro compatibility release
+
+- Synced upstream `0.6.6-beta.2` features: XuePrompt, Skills.sh, Composer bottom bar, Git Push/Pull, HTML built-in preview, and related fixes.
+- Kept the Maestro sub-agent panel, teammate progress, ask/plan desktop compatibility, and personal release line.
 
 ### v0.6.5-5 Maestro compatibility release
 
@@ -46,7 +51,7 @@ Updated for the latest `pi-maestro-flow` RPC protocol, including desktop Plan co
 - ✨ Added desktop select/editor fallbacks for Maestro Plan interactions in RPC mode.
 - 🔧 In-app update checks use this compatibility repository and do not fall back to upstream releases.
 
-The following section records the upstream baseline features for `v0.6.5`:
+The following section records the upstream baseline features:
 
 ### v0.6.5 Updates
 - 🚀 **Prompt Templates System**: Full template management, built-in templates,

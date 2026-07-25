@@ -127,6 +127,7 @@ let previewSettings: AppSettings = {
 	language: "system",
 	piEnvironmentChecked: true,
 	enableGitManagement: true,
+	gitCommitMessagePrompt: "",
 	closeToTray: true,
 	enableNotifications: true,
 	// showThinking 由 pi agent 的 hideThinkingBlock 控制，运行时从主进程加载
@@ -230,6 +231,7 @@ export function createPreviewApi(): PiDesktopApi {
 			toggleWorktreeEnabled: async () => projects[0],
 			chooseChatPath: async () => null,
 			setChatPath: async () => projects[0],
+			listModels: async () => [],
 		},
 		projectResources: {
 			list: async () => ({ skills: [], extensions: [] }),
@@ -284,6 +286,7 @@ export function createPreviewApi(): PiDesktopApi {
 			writeContent: async () => undefined,
 			delete: async () => undefined,
 			rename: async () => "",
+			create: async () => "",
 		},
 		sessions: {
 			list: async () => getSessions(),
@@ -299,6 +302,8 @@ export function createPreviewApi(): PiDesktopApi {
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },
 				{ role: "assistant", content: "Preview assistant response", timestamp: Date.now() - 30000 },
 			],
+			readSessionMeta: async () => ({}),
+			readChatMessages: async () => [],
 		},
 		codexSessions: {
 			scan: async () => [],
@@ -340,7 +345,17 @@ export function createPreviewApi(): PiDesktopApi {
 				workspaceFileDiff: async () => null,
 				stage: async () => {},
 				unstage: async () => {},
+				discard: async () => {},
 				commit: async () => {},
+				cherryPick: async () => {},
+				revert: async () => {},
+				reset: async () => {},
+				dropCommit: async () => {},
+				generateCommitMessage: async () => "",
+				init: async () => {},
+				push: async () => {},
+				pull: async () => {},
+				fetch: async () => {},
 		},
 		logs: {
 			list: async () => [],
@@ -404,6 +419,7 @@ export function createPreviewApi(): PiDesktopApi {
 				version: "preview",
 				releasesUrl: "https://github.com/2849236173/PiDeck-maestro/releases",
 				platform: "win32" as NodeJS.Platform,
+				homeDir: "C:/Users/preview",
 			}),
 			preferredSystemLanguages: async () => navigator.languages?.length ? [...navigator.languages] : [navigator.language],
 			checkUpdate: async () => ({
@@ -505,7 +521,7 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 		},
 		extensions: {
-			list: async () => ({
+			list: async (_forceRefresh = false) => ({
 				extensions: [
 					{
 						id: "user:npm:preview-extension",
@@ -734,6 +750,7 @@ export function createPreviewApi(): PiDesktopApi {
 			],
 			editMessage: async () => undefined,
 			deleteMessage: async () => undefined,
+			prepareResend: async () => ({ text: "Preview prompt" }),
 			onState: noop,
 			onFocusTarget: noop,
 			onMessages: ((
@@ -833,7 +850,10 @@ export function createPreviewApi(): PiDesktopApi {
 			onBotsChanged: () => () => {},
 			onWhoamiResult: () => () => {},
 			sessionBotGet: async () => null,
-			sessionBotSet: async () => {},
+			sessionBotSet: async () => ({ success: true }),
+		},
+		dialog: {
+			pickFiles: async () => [],
 		},
 		browser: {
 			openExternal: async () => {},

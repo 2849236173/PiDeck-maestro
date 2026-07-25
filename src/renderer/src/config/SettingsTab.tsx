@@ -86,7 +86,10 @@ export function SettingsTab(props: {
 		});
 	};
 
-	/** 配置键名 → 显示标签（未映射的键名回退显示原始 key） */
+	/**
+	 * 配置键名 → 显示标签。
+	 * 已登记 i18n 的键走多语言；未登记回退原始 key，避免未知字段空白。
+	 */
 	const configLabel = (key: string): string => {
 		switch (key) {
 			case "enabledModels": return t("config.label.enabledModels");
@@ -114,8 +117,34 @@ export function SettingsTab(props: {
 			case "defaultThinkingLevel": return t("config.label.defaultThinkingLevel");
 			case "quietStartup": return t("config.label.quietStartup");
 			case "collapseChangelog": return t("config.label.collapseChangelog");
+			case "compaction": return t("config.label.compaction");
+			case "sessionDir": return t("config.label.sessionDir");
+			case "steeringMode": return t("config.label.steeringMode");
+			case "followUpMode": return t("config.label.followUpMode");
+			case "transport": return t("config.label.transport");
+			case "httpProxy": return t("config.label.httpProxy");
+			case "shellPath": return t("config.label.shellPath");
+			case "shellCommandPrefix": return t("config.label.shellCommandPrefix");
+			case "npmCommand": return t("config.label.npmCommand");
+			case "thinkingBudgets": return t("config.label.thinkingBudgets");
+			case "branchSummary": return t("config.label.branchSummary");
+			case "doubleEscapeAction": return t("config.label.doubleEscapeAction");
+			case "treeFilterMode": return t("config.label.treeFilterMode");
 			default: return key;
 		}
+	};
+
+	/** 全局会话目录：空值表示使用 pi 默认 ~/.pi/agent/sessions/<encoded-cwd>/ */
+	const sessionDirValue = typeof data.sessionDir === "string" ? data.sessionDir : "";
+	const updateSessionDir = (raw: string) => {
+		const next = raw.trim();
+		if (!next) {
+			// 清空时移除字段，避免写入空字符串覆盖默认行为
+			const { sessionDir: _removed, ...rest } = data;
+			props.onChange(rest);
+			return;
+		}
+		props.onChange({ ...data, sessionDir: raw });
 	};
 
 	return (
@@ -145,6 +174,24 @@ export function SettingsTab(props: {
 					/>
 				</div>
 
+				{/* ── 全局会话目录（仅编辑 ~/.pi/agent/settings.json 的 sessionDir） ── */}
+				<div className="config-retry-group">
+					<div className="config-settings-row config-retry-header-row">
+						<span className="config-settings-section-title">{t("config.sessionDir.title")}</span>
+						<span className="config-settings-section-hint">{t("config.sessionDir.hint")}</span>
+					</div>
+					<div className="config-settings-row">
+						<span className="config-settings-key">{t("config.label.sessionDir")}</span>
+						<input
+							className="config-settings-input"
+							type="text"
+							value={sessionDirValue}
+							placeholder={t("config.sessionDir.placeholder")}
+							onChange={(e) => updateSessionDir(e.target.value)}
+						/>
+					</div>
+				</div>
+
 				{/* ── 重试配置 ── */}
 				<div className="config-retry-group">
 					<div className="config-settings-row config-retry-header-row">
@@ -162,7 +209,8 @@ export function SettingsTab(props: {
 				</div>
 
 				{entries
-					.filter(([key]) => key !== "enabledModels" && key !== "retry")
+					// sessionDir / retry / enabledModels 已有专用区块，避免列表里重复一行
+					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir")
 					.map(([key, value]) => (
 					<div key={key} className="config-settings-row">
 						<span className="config-settings-key">{configLabel(key)}</span>
