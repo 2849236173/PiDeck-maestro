@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-2 - 2026-07-26
+
+### Stability fix
+
+- Added one Deck-level automatic retry for `stream_read_error` during long-running GPT requests.
+- Requests that already executed tools are not automatically resent, preventing duplicated side effects.
+
 ## v0.6.5-5 - 2026-07-25
 
 Completed the sub-agent monitoring experience introduced in v0.6.5-4 and connected it to live teammate session data.

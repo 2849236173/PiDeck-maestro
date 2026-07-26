@@ -2,7 +2,11 @@
 
 完整更新日志仍维护在仓库根目录：
 
-当前兼容发行线为 `v0.6.6-1`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+当前兼容发行线为 `v0.6.6-2`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+
+## v0.6.6-2
+
+修复 GPT 长时间运行时偶发的 `stream_read_error`，增加一次安全的 Deck 级自动重试；已执行工具的请求不会自动重发。
 
 ## v0.6.6-1
 

@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-1** (2026-07-25)
+> **Latest compatibility release: v0.6.6-2** (2026-07-26)
+
+### v0.6.6-2 Maestro compatibility release
+
+- Fixed intermittent `stream_read_error` during long-running GPT requests with one safe automatic retry.
 
 ### v0.6.6-1 Maestro compatibility release
 
