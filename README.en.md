@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-6** (2026-07-26)
+> **Latest compatibility release: v0.6.6-7** (2026-07-26)
+
+### v0.6.6-7 Maestro compatibility release
+
+- Added session search, incremental IPC updates, and sub-agent stall detection.
 
 ### v0.6.6-6 Maestro compatibility release
 

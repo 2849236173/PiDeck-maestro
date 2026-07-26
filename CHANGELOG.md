@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-7 - 2026-07-26
+
+### Sessions and sub-agents
+
+- Added session search and incremental IPC updates for faster large-history browsing.
+- Added sub-agent stall detection and related UX improvements.
+
 ## v0.6.6-6 - 2026-07-26
 
 ### Sub-agents and workflows
