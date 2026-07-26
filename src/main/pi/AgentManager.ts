@@ -3332,28 +3332,43 @@ export class AgentManager {
 	}
 
 	/** 发送子代理状态更新到前端 */
-	private emitSubAgentState(agentId: string) {
-		const subAgents = this.subAgentsByAgent.get(agentId);
-		if (!subAgents) return;
+	/** 停滞判定阈值：活跃子代理的会话文件超过此时长未更新，视为疑似停滞（进程消失/通知丢失） */
+	private static readonly SUB_AGENT_STALL_MS = 120_000;
 
+	/**
+	 * 构建子代理状态快照。活跃条目附加 stalled 标记：
+	 * “停止输出 ≠ 任务完成”——进程消失、完成通知丢失都会表现为
+	 * 状态活跃但文件长时间不动；只加标记不改状态，避免误杀真在慢思考的任务。
+	 */
+	private buildSubAgentUpdate(subAgents: Map<string, import('../../shared/types').SubAgent>): import('../../shared/types').SubAgentStateUpdate {
+		const now = Date.now();
 		const running: import('../../shared/types').SubAgent[] = [];
 		const completed: import('../../shared/types').SubAgent[] = [];
 
 		for (const subAgent of subAgents.values()) {
 			if (subAgent.status === 'pending' || subAgent.status === 'running' || subAgent.status === 'finalizing') {
-				running.push(subAgent);
+				const stalled = Boolean(subAgent.sessionFile) && now - subAgent.lastUpdate > AgentManager.SUB_AGENT_STALL_MS;
+				running.push(stalled ? { ...subAgent, stalled: true } : subAgent);
 			} else {
 				completed.push(subAgent);
 			}
 		}
 
-		const update: import('../../shared/types').SubAgentStateUpdate = {
+		return {
 			running: running.sort((a, b) => b.startTime - a.startTime),
 			completed: completed.sort((a, b) => (b.endTime || b.lastUpdate) - (a.endTime || a.lastUpdate)),
 		};
+	}
+
+	private emitSubAgentState(agentId: string) {
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+
+		const update = this.buildSubAgentUpdate(subAgents);
 
 		// 扫描与轮询都会无条件调用本方法；用签名去重，状态无变化时不再每秒向渲染进程推 IPC。
-		// lastUpdate 只是 mtime 镜像不参与展示，排除在签名之外，避免文件 touch 引发无意义推送。
+		// lastUpdate 只是 mtime 镜像不参与展示，排除在签名之外，避免文件 touch 引发无意义推送；
+		// stalled 翻转会改变签名，自然触发一次推送。
 		const signature = JSON.stringify(update, (key, value) => (key === 'lastUpdate' ? undefined : value));
 		if (this.subAgentEmitSignatures.get(agentId) === signature) return;
 		this.subAgentEmitSignatures.set(agentId, signature);
@@ -3364,21 +3379,8 @@ export class AgentManager {
 	/** 获取子代理当前状态快照（面板挂载/切换会话时立即拉取，不等下一次轮询推送） */
 	getSubAgentState(agentId: string): import('../../shared/types').SubAgentStateUpdate {
 		const subAgents = this.subAgentsByAgent.get(agentId);
-		const running: import('../../shared/types').SubAgent[] = [];
-		const completed: import('../../shared/types').SubAgent[] = [];
-		if (subAgents) {
-			for (const subAgent of subAgents.values()) {
-				if (subAgent.status === 'pending' || subAgent.status === 'running' || subAgent.status === 'finalizing') {
-					running.push(subAgent);
-				} else {
-					completed.push(subAgent);
-				}
-			}
-		}
-		return {
-			running: running.sort((a, b) => b.startTime - a.startTime),
-			completed: completed.sort((a, b) => (b.endTime || b.lastUpdate) - (a.endTime || a.lastUpdate)),
-		};
+		if (!subAgents) return { running: [], completed: [] };
+		return this.buildSubAgentUpdate(subAgents);
 	}
 
 	/** 加载子代理的完整消息历史（用户点击查看详情时调用） */
@@ -4870,6 +4872,39 @@ export class AgentManager {
 		if (Boolean(runtime.tab.awaitingInput) === waiting) return;
 		runtime.tab.awaitingInput = waiting;
 		this.emitState();
+		if (waiting) this.notifyAwaitingInput(runtime.tab);
+	}
+
+	/**
+	 * 会话进入等待输入时发系统通知（仅窗口失焦时；聚焦时状态指示器/提示条已足够）。
+	 * 点击通知聚焦主窗并切到对应会话（复用桌面宠物的 focus-target 通道）。
+	 */
+	private notifyAwaitingInput(tab: AgentTab) {
+		try {
+			const settings = this.settingsStore.get();
+			if (!settings.enableNotifications) return;
+			if (!Notification.isSupported()) return;
+			const window = this.getWindow();
+			if (window && !window.isDestroyed() && window.isFocused()) return;
+
+			const notification = new Notification({
+				title: app.getName(),
+				body: `${tab.title} 正在等待你的输入`,
+				silent: false,
+			});
+			notification.on("click", () => {
+				const win = this.getWindow();
+				if (win && !win.isDestroyed()) {
+					if (win.isMinimized()) win.restore();
+					win.show();
+					win.focus();
+				}
+				this.emit(ipcChannels.petFocusAgentTarget, { agentId: tab.id });
+			});
+			notification.show();
+		} catch {
+			// 通知失败不影响主流程
+		}
 	}
 
 	private scheduleUIRequestTimeout(agentId: string, requestId: string, timeout: unknown) {
@@ -5084,6 +5119,8 @@ export class AgentManager {
 		agent?: string;
 		name?: string;
 		correlationId?: string;
+		taskIndex?: number;
+		dependencies?: number[];
 		status?: string;
 		recentTools?: Array<{ name: string; status?: string }>;
 		toolCount?: number;
@@ -5106,6 +5143,11 @@ export class AgentManager {
 					name: p.name,
 					// 携带 correlationId，对话流卡片点击时用它寻址到子代理会话
 					correlationId: typeof p.correlationId === "string" ? p.correlationId : undefined,
+					// DAG 信息：多任务派发的序号与依赖，渲染端用于缩进分组展示
+					taskIndex: typeof p.taskIndex === "number" ? p.taskIndex : undefined,
+					dependencies: Array.isArray(p.dependencies)
+						? p.dependencies.filter((dep: unknown) => typeof dep === "number").slice(0, 8)
+						: undefined,
 					status: p.status,
 					recentTools: Array.isArray(p.recentTools)
 						? p.recentTools.slice(0, 3).map((t: any) => ({
@@ -5232,7 +5274,7 @@ export class AgentManager {
 	 */
 	private scheduleMessageEmit(agentId: string, immediate = false) {
 		if (immediate) {
-			this.flushMessageEmit(agentId);
+			this.flushMessageEmit(agentId, true);
 			return;
 		}
 		if (this.pendingMessageAgents.has(agentId)) return;
@@ -5243,16 +5285,34 @@ export class AgentManager {
 		this.messageFlushTimers.set(agentId, timer);
 	}
 
-	private flushMessageEmit(agentId: string) {
+	/** 流式节流路径的增量窗口大小；50ms 内新增消息数远小于此值，边界失配概率极低 */
+	private static readonly MESSAGE_TAIL_WINDOW = 40;
+
+	/**
+	 * 推送消息到渲染端。结构性变更（immediate）与短列表发全量；
+	 * 流式节流 tick 只发尾部窗口，避免长会话 + 图片时每 50ms 在 IPC 上搬运全量 base64。
+	 * 渲染端用 prevId 校验边界，失配时通过 agents:pull-messages 拉全量重同步。
+	 */
+	private flushMessageEmit(agentId: string, full = false) {
 		const timer = this.messageFlushTimers.get(agentId);
 		if (timer) {
 			clearTimeout(timer);
 			this.messageFlushTimers.delete(agentId);
 		}
 		this.pendingMessageAgents.delete(agentId);
+		const messages = this.messages.get(agentId) ?? [];
+		if (full || messages.length <= AgentManager.MESSAGE_TAIL_WINDOW) {
+			this.emit(ipcChannels.agentsMessage, { agentId, messages });
+			return;
+		}
+		const start = messages.length - AgentManager.MESSAGE_TAIL_WINDOW;
 		this.emit(ipcChannels.agentsMessage, {
 			agentId,
-			messages: this.messages.get(agentId) ?? [],
+			tail: {
+				messages: messages.slice(start),
+				total: messages.length,
+				prevId: messages[start - 1]?.id ?? null,
+			},
 		});
 	}
 

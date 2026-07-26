@@ -133,6 +133,8 @@ export type SubAgent = {
 	cached: boolean;         // 是否已缓存完整数据（completed 后设为 true）
 	tokens?: number;         // 累计 token 用量（来自 maestro UCL teammate 事件的增强字段）
 	durationMs?: number;     // 运行耗时（来自 UCL 增强字段，比文件 mtime 推算更准）
+	/** 疑似停滞：活跃状态但会话文件长时间未更新（进程消失/通知丢失的共同症状） */
+	stalled?: boolean;
 };
 
 /**
@@ -1097,6 +1099,17 @@ export type CreateAgentInput = {
 export type ForkMessage = {
 	entryId: string;
 	text: string;
+};
+
+/**
+ * 消息推送载荷：全量（messages）或流式尾部增量（tail）。
+ * 长会话 + 图片场景下，流式期间每 50ms 全量推整个数组会在 IPC 上反复搬运几 MB base64；
+ * 尾部增量只推末尾窗口，prevId 用于边界校验，失配时渲染端拉全量重同步。
+ */
+export type AgentMessagesPayload = {
+	agentId: string;
+	messages?: ChatMessage[];
+	tail?: { messages: ChatMessage[]; total: number; prevId: string | null };
 };
 
 /** 图片内容格式，与 pi RPC 的 ImageContent 一致 */

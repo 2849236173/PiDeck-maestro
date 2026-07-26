@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Code,
   MessageCircle,
   MessageSquare,
@@ -1072,6 +1073,11 @@ export function App() {
   const [subAgentPanelVisible, setSubAgentPanelVisible] = useState(true);
   // 子代理全屏详情弹层：面板条目与对话流内嵌卡片共用；refId 为面板 id 或 correlationId
   const [subAgentDetail, setSubAgentDetail] = useState<{ agentId: string; refId: string } | null>(null);
+  // 会话内搜索（Ctrl+F）：匹配消息文本，跳转复用分页定位机制
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [chatSearchIndex, setChatSearchIndex] = useState(0);
+  const chatSearchInputRef = useRef<HTMLInputElement | null>(null);
   // maestro UCL 实时任务可用时，隐藏 setWidget 推来的 todo-panel 文本卡片，避免双源重复展示
   const [maestroLiveTodosByAgent, setMaestroLiveTodosByAgent] = useState<Record<string, boolean>>({});
   useEffect(() => {
@@ -2205,22 +2211,37 @@ export function App() {
       );
     });
     // 优化:历史会话加载时消息更新频繁,只在消息真正变化时更新 state,避免不必要的重渲染导致输入卡顿
-    const offMessages = api.agents.onMessages((payload) =>
+    const offMessages = api.agents.onMessages((payload) => {
+      // 全量推送（结构性变更/短列表）：直接替换
+      if (payload.messages) {
+        const full = payload.messages;
+        setMessagesByAgent((current) => {
+          const prevMessages = current[payload.agentId];
+          // 消息数量相同且引用相同时跳过更新,减少输入框重渲染
+          if (prevMessages?.length === full.length && prevMessages === full) {
+            return current;
+          }
+          return { ...current, [payload.agentId]: full };
+        });
+        return;
+      }
+      // 流式尾部增量：前缀保留 + 尾部替换；边界失配（中间发生过结构变化）则拉全量重同步
+      const tail = payload.tail;
+      if (!tail) return;
       setMessagesByAgent((current) => {
-        const prevMessages = current[payload.agentId];
-        // 消息数量相同且引用相同时跳过更新,减少输入框重渲染
-        if (
-          prevMessages?.length === payload.messages.length &&
-          prevMessages === payload.messages
-        ) {
+        const prev = current[payload.agentId] ?? [];
+        const start = tail.total - tail.messages.length;
+        const boundaryOk =
+          prev.length >= start && (start === 0 || prev[start - 1]?.id === tail.prevId);
+        if (!boundaryOk) {
+          void api.agents.pullMessages(payload.agentId).then((messages) => {
+            setMessagesByAgent((state) => ({ ...state, [payload.agentId]: messages }));
+          }).catch(() => undefined);
           return current;
         }
-        return {
-          ...current,
-          [payload.agentId]: payload.messages,
-        };
-      }),
-    );
+        return { ...current, [payload.agentId]: [...prev.slice(0, start), ...tail.messages] };
+      });
+    });
     const offLog = api.agents.onLog((payload) =>
       setLogs((current) => {
         // 优化:只在超过200条时才slice,减少不必要的数组操作
@@ -2657,6 +2678,71 @@ export function App() {
     loadMoreMessages();
   }
 
+  // ── 会话内搜索（Ctrl+F）：匹配消息文本，跳转复用分页定位机制 ──
+  const chatSearchMatches = useMemo(() => {
+    const query = chatSearchQuery.trim().toLowerCase();
+    if (!chatSearchOpen || !query) return [] as string[];
+    return activeMessages
+      .filter((message) =>
+        (message.role === "user" || message.role === "assistant" || message.role === "system" || message.role === "error") &&
+        message.text.toLowerCase().includes(query))
+      .map((message) => message.id);
+  }, [chatSearchOpen, chatSearchQuery, activeMessages]);
+
+  useEffect(() => { setChatSearchIndex(0); }, [chatSearchQuery]);
+
+  function jumpToChatSearchMatch(index: number) {
+    const id = chatSearchMatches[index];
+    if (!id) return;
+    // run 内的 assistant 消息 id 会被 join 进 turn-row 的 data-message-id，需要包含匹配回退
+    const el = (document.querySelector(`[data-message-id="${CSS.escape(id)}"]`) ??
+      document.querySelector(`[data-message-id*="${CSS.escape(id)}"]`)) as HTMLElement | null;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      highlightMessageElement(el);
+      return;
+    }
+    const msgIndex = activeMessages.findIndex((message) => message.id === id);
+    if (msgIndex < 0) return;
+    loadMessagesUntilIncluded(msgIndex);
+    setPendingJumpId(id);
+  }
+
+  function stepChatSearch(delta: number) {
+    if (chatSearchMatches.length === 0) return;
+    const next = (chatSearchIndex + delta + chatSearchMatches.length) % chatSearchMatches.length;
+    setChatSearchIndex(next);
+    jumpToChatSearchMatch(next);
+  }
+
+  function closeChatSearch() {
+    setChatSearchOpen(false);
+    setChatSearchQuery("");
+    setChatSearchIndex(0);
+  }
+
+  // Ctrl/Cmd+F 打开；Monaco/终端等自带查找的区域不拦截
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f" || event.shiftKey || event.altKey) return;
+      if (!activeAgentIdRef.current) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.(".monaco-editor") || target?.closest?.(".xterm")) return;
+      event.preventDefault();
+      setChatSearchOpen(true);
+      window.setTimeout(() => chatSearchInputRef.current?.select(), 0);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // 切换会话时关闭搜索，避免旧匹配残留
+  useEffect(() => {
+    setChatSearchOpen(false);
+    setChatSearchQuery("");
+    setChatSearchIndex(0);
+  }, [activeAgentId]);
+
   // 会话定位跳转：若目标消息已在当前分页内则直接滚动定位；
   // 否则先扩展分页窗口把它包含进来，交给 pendingJumpId effect 在渲染后定位。
   function handleOutlineJump(id: string) {
@@ -2879,9 +2965,12 @@ export function App() {
   // 该消息被渲染进 DOM 后，在此 effect 中真正滚动定位并短暂高亮，提示用户落点。
   useEffect(() => {
     if (!pendingJumpId) return;
-    const el = document.querySelector(
+    // 搜索跳转的目标可能是 run 内 assistant 消息，id 被 join 进 turn-row，需要包含匹配回退
+    const el = (document.querySelector(
       `[data-message-id="${CSS.escape(pendingJumpId)}"]`,
-    ) as HTMLElement | null;
+    ) ?? document.querySelector(
+      `[data-message-id*="${CSS.escape(pendingJumpId)}"]`,
+    )) as HTMLElement | null;
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
     highlightMessageElement(el);
@@ -6916,6 +7005,42 @@ export function App() {
             : undefined),
         } as React.CSSProperties}
       >
+        {chatSearchOpen && (
+          <div className="chat-search-bar">
+            <Search size={14} aria-hidden="true" />
+            <input
+              ref={chatSearchInputRef}
+              className="chat-search-input"
+              value={chatSearchQuery}
+              placeholder={t("app.chatSearchPlaceholder")}
+              onChange={(event) => setChatSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  stepChatSearch(event.shiftKey ? -1 : 1);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeChatSearch();
+                }
+              }}
+              autoFocus
+            />
+            <span className="chat-search-count">
+              {chatSearchMatches.length > 0
+                ? `${chatSearchIndex + 1}/${chatSearchMatches.length}`
+                : chatSearchQuery.trim() ? t("app.chatSearchNoMatch") : ""}
+            </span>
+            <button type="button" className="chat-search-btn" onClick={() => stepChatSearch(-1)} disabled={chatSearchMatches.length === 0} aria-label={t("app.chatSearchPrev")}>
+              <ChevronUp size={14} />
+            </button>
+            <button type="button" className="chat-search-btn" onClick={() => stepChatSearch(1)} disabled={chatSearchMatches.length === 0} aria-label={t("app.chatSearchNext")}>
+              <ChevronDown size={14} />
+            </button>
+            <button type="button" className="chat-search-btn" onClick={closeChatSearch} aria-label={t("common.close")}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
         <header ref={chatHeaderRef} className="chat-header">
           <div className="chat-title-block">
             <div className="chat-title-row">
@@ -9145,6 +9270,7 @@ filePath={gitDrawerDiff.filePath}
           onClose={() => setSubAgentDetail(null)}
           onOpenFile={openFilePath}
           showThinking={settings.showThinking}
+          onPreviewImage={setPreviewImage}
         />
       )}
       {codexImportProject && (

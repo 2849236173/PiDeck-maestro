@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ImageContent } from '../../../../shared/types';
 import { CheckCircle2, CircleX, Copy, LoaderCircle } from 'lucide-react';
 import type { PiDesktopApi } from '../../../../preload';
 import type { ChatMessage, SubAgent } from '../../../../shared/types';
@@ -25,11 +26,13 @@ interface SubAgentDetailModalProps {
 	onClose: () => void;
 	onOpenFile?: (path: string) => void;
 	showThinking?: boolean;
+	/** 全局 lightbox 预览（z-index 高于 Radix 弹层，可直接叠加） */
+	onPreviewImage?: (image: ImageContent) => void;
 }
 
 const MODAL_PAGE_SIZE = 100;
 
-export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, showThinking = true }: SubAgentDetailModalProps) {
+export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, showThinking = true, onPreviewImage }: SubAgentDetailModalProps) {
 	const [messages, setMessages] = useState<ChatMessage[] | null>(null);
 	const [loadFailed, setLoadFailed] = useState(false);
 	const [visibleCount, setVisibleCount] = useState(MODAL_PAGE_SIZE);
@@ -37,6 +40,9 @@ export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, 
 	const refreshingRef = useRef(false);
 	// 终态后已经补拉过一次，避免继续无意义轮询
 	const finalLoadedRef = useRef(false);
+	// 运行中自动跟随到底部；用户向上滚动后停止跟随，回到底部附近恢复
+	const bodyRef = useRef<HTMLDivElement | null>(null);
+	const stickToBottomRef = useRef(true);
 
 	const refresh = useCallback(async () => {
 		if (refreshingRef.current) return;
@@ -82,6 +88,18 @@ export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, 
 		return () => clearInterval(timer);
 	}, [active, refresh]);
 
+	useEffect(() => {
+		if (!stickToBottomRef.current) return;
+		const body = bodyRef.current;
+		if (body) body.scrollTop = body.scrollHeight;
+	}, [messages]);
+
+	const handleBodyScroll = () => {
+		const body = bodyRef.current;
+		if (!body) return;
+		stickToBottomRef.current = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+	};
+
 	const copyFinalReply = async () => {
 		try {
 			const source = messages ?? [];
@@ -120,7 +138,7 @@ export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, 
 				</IconButton>
 				<CloseIconButton label={t('common.close')} onClick={onClose} />
 			</header>
-			<div className="subagent-detail-body">
+			<div className="subagent-detail-body" ref={bodyRef} onScroll={handleBodyScroll}>
 				{messages === null && !loadFailed ? <div className="subagent-detail-state">{t('subAgent.loading')}</div> : null}
 				{loadFailed ? <div className="subagent-detail-state error">{t('subAgent.loadFailed')}</div> : null}
 				{messages && messages.length > visibleCount ? (
@@ -144,14 +162,14 @@ export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, 
 											<AssistantText
 												text={message.text}
 												images={message.images}
-												onPreviewImage={() => undefined}
+												onPreviewImage={onPreviewImage ?? (() => undefined)}
 												onOpenExternal={(url) => void api.app.openExternal(url)}
 												onOpenFile={onOpenFile}
 											/>
 										) : null}
 									</>
 								) : message.role === 'tool' ? (
-									<ToolCard message={message} />
+									<ToolCard message={message} onPreviewImage={onPreviewImage} />
 								) : (
 									<div className="subagent-message-plain">{message.text}</div>
 								)}

@@ -1972,6 +1972,8 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 		agent?: string;
 		name?: string;
 		correlationId?: string;
+		taskIndex?: number;
+		dependencies?: number[];
 		status?: string;
 		recentTools?: Array<{ name: string; status?: string }>;
 		toolCount?: number;
@@ -1984,6 +1986,26 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 }) {
 	if (props.progress.length === 0) return null;
 
+	// DAG 依赖深度：有依赖的任务按链路缩进，一眼看清并行/串行结构。深度封顶 3，环防护。
+	const byTaskIndex = new Map<number, { dependencies?: number[] }>();
+	for (const item of props.progress) {
+		if (typeof item.taskIndex === "number") byTaskIndex.set(item.taskIndex, item);
+	}
+	const depthCache = new Map<number, number>();
+	const computeDepth = (index: number, seen: Set<number>): number => {
+		const cached = depthCache.get(index);
+		if (cached !== undefined) return cached;
+		if (seen.has(index)) return 0;
+		seen.add(index);
+		const deps = byTaskIndex.get(index)?.dependencies ?? [];
+		const depth = deps.length === 0
+			? 0
+			: Math.min(3, 1 + Math.max(...deps.map((dep) => computeDepth(dep, seen))));
+		depthCache.set(index, depth);
+		return depth;
+	};
+	const showIndices = props.progress.filter((item) => typeof item.taskIndex === "number").length > 1;
+
 	return (
 		<div className="agent-progress-list">
 			{props.progress.map((item, idx) => {
@@ -1993,11 +2015,13 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 					? item.recentTools[item.recentTools.length - 1]
 					: undefined;
 				const clickable = Boolean(item.correlationId && props.onOpenSubAgent);
+				const depth = typeof item.taskIndex === "number" ? computeDepth(item.taskIndex, new Set()) : 0;
 
 				return (
 					<div
 						key={idx}
 						className={`agent-progress-item${isRunning ? " running" : ""}${hasError ? " error" : ""}${clickable ? " clickable" : ""}`}
+						style={depth > 0 ? { marginLeft: depth * 14 } : undefined}
 						role={clickable ? "button" : undefined}
 						tabIndex={clickable ? 0 : undefined}
 						onClick={clickable ? () => props.onOpenSubAgent?.(item.correlationId!) : undefined}
@@ -2010,9 +2034,17 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 					>
 						<div className="agent-progress-header">
 							{isRunning && <span className="agent-progress-spinner" aria-hidden="true" />}
+							{showIndices && typeof item.taskIndex === "number" ? (
+								<span className="agent-progress-index">#{item.taskIndex + 1}</span>
+							) : null}
 							<span className="agent-progress-name">
 								{item.name || item.agent || "agent"}
 							</span>
+							{item.dependencies && item.dependencies.length > 0 ? (
+								<span className="agent-progress-deps" title={props.t("tool.dependsOn")}>
+									⤤ {item.dependencies.map((dep) => `#${dep + 1}`).join(",")}
+								</span>
+							) : null}
 							{item.agent && item.name && (
 								<span className="agent-progress-agent">· {item.agent}</span>
 							)}

@@ -3986,6 +3986,21 @@ body.is-terminal-resizing .terminal-resize-handle::before {
    ============================================================ */
 
 /* ---------- 一轮 AI 回答：TurnRow ---------- */
+/* 原生虚拟化：离屏回合跳过渲染与布局（Chromium content-visibility），
+   长会话滚动/切换性能大幅提升；contain-intrinsic-size 提供占位高度避免滚动条跳动。
+   图片导出克隆（multi-select-image-export）必须关闭，否则离屏行截图为空。 */
+.message-list .turn-row,
+.message-list .user-turn {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
+.multi-select-image-export .turn-row,
+.multi-select-image-export .user-turn {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
 .turn-row {
   display: block;
   margin: 0 0 var(--space-6);
@@ -4874,6 +4889,20 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   gap: var(--space-2);
   padding: var(--space-2);
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.agent-progress-index {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  flex: 0 0 auto;
+}
+
+.agent-progress-deps {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  flex: 0 0 auto;
 }
 
 .agent-progress-item.clickable {
@@ -8668,6 +8697,18 @@ body.is-resizing .subagent-panel-resizer::before {
   color: var(--color-danger);
 }
 
+.subagent-item-status.stalled {
+  color: var(--color-warning);
+}
+
+.subagent-stalled-chip {
+  color: var(--color-warning);
+}
+
+.subagent-stall-banner {
+  margin-bottom: var(--space-2);
+}
+
 .subagent-status-spinner {
   animation: spin 0.8s linear infinite;
 }
@@ -10990,6 +11031,70 @@ body.is-resizing .subagent-panel-resizer::before {
     var(--color-border-subtle)
   );
   animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+/* 会话内搜索（Ctrl+F）浮动条：固定在聊天区右上，不影响 grid 布局 */
+.chat-search-bar {
+  position: absolute;
+  top: calc(var(--window-drag-height, 0px) + 62px);
+  right: var(--space-5);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-panel);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-tertiary);
+}
+
+.chat-search-input {
+  width: 200px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-small);
+}
+
+.chat-search-count {
+  min-width: 44px;
+  text-align: right;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  white-space: nowrap;
+}
+
+.chat-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.chat-search-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.chat-search-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.chat-search-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* 其它会话等待输入时 composer 上方的跳转提示条 */

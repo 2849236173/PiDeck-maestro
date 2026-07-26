@@ -3328,6 +3328,11 @@ function registerIpc() {
 		agentManager.getMaestroGuiState(agentId),
 	);
 
+	// 增量消息推送边界失配时的全量重同步
+	ipcMain.handle(ipcChannels.agentsPullMessages, (_event, agentId: string) =>
+		agentManager.getMessages(agentId),
+	);
+
 	ipcMain.handle(ipcChannels.terminalList, (_event, agentId: string) =>
 		terminalManager.list(agentId),
 	);

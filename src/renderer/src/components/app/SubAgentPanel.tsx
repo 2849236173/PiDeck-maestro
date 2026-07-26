@@ -1,5 +1,5 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { CheckCircle2, ChevronDown, ChevronRight, CircleX, LoaderCircle, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, CircleX, LoaderCircle, X } from 'lucide-react';
 import type { PiDesktopApi } from '../../../../preload';
 import type { MaestroGuiState, SubAgent, SubAgentStateUpdate } from '../../../../shared/types';
 import { t } from '../../i18n';
@@ -238,11 +238,14 @@ export function subAgentStatusLabel(status: string): string {
 function SubAgentItem(props: { item: SubAgent; onOpenDetail: (item: SubAgent) => void }) {
   const { item, onOpenDetail } = props;
   const isActive = isSubAgentActive(item.status);
-  const statusIcon = isActive
-    ? <LoaderCircle size={15} className="subagent-status-spinner" aria-hidden="true" />
-    : item.status === 'completed'
-      ? <CheckCircle2 size={15} aria-hidden="true" />
-      : <CircleX size={15} aria-hidden="true" />;
+  // 停滞时用警示图标替换转圈：“停止输出 ≠ 完成”，避免用户误以为仍在正常运行
+  const statusIcon = item.stalled
+    ? <AlertTriangle size={15} aria-hidden="true" />
+    : isActive
+      ? <LoaderCircle size={15} className="subagent-status-spinner" aria-hidden="true" />
+      : item.status === 'completed'
+        ? <CheckCircle2 size={15} aria-hidden="true" />
+        : <CircleX size={15} aria-hidden="true" />;
 
   return (
     <article className="subagent-item">
@@ -253,11 +256,12 @@ function SubAgentItem(props: { item: SubAgent; onOpenDetail: (item: SubAgent) =>
         disabled={!item.sessionFile}
         title={item.sessionFile ? t('subAgent.openDetail') : undefined}
       >
-        <span className={`subagent-item-status ${item.status}`}>{statusIcon}</span>
+        <span className={`subagent-item-status ${item.stalled ? 'stalled' : item.status}`}>{statusIcon}</span>
         <span className="subagent-item-main">
           <span className="subagent-item-name">{item.name || item.agent || item.id.slice(0, 8)}</span>
           <span className="subagent-item-meta">
             <span className={`subagent-status-label ${item.status}`}>{subAgentStatusLabel(item.status)}</span>
+            {item.stalled ? <span className="subagent-stalled-chip">{t('subAgent.stalled')}</span> : null}
             {item.agent && item.name ? <span>{item.agent}</span> : null}
             <span>{formatElapsed(item.startTime, item.endTime)}</span>
             {typeof item.toolCount === 'number' ? <span>{item.toolCount} {t('subAgent.tools')}</span> : null}
@@ -356,6 +360,21 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenDetail, agentIdle, 
         </button>
       </header>
       <div className="subagent-panel-content">
+        {/* 停滞警示：主会话空闲时没有人能接收完成通知，提供自助唤醒入口 */}
+        {agentIdle && state.running.some((item) => item.stalled) ? (
+          <div className="maestro-panel-stale subagent-stall-banner">
+            <span>{t('subAgent.stallBanner', { count: state.running.filter((item) => item.stalled).length })}</span>
+            {onInsertPrompt ? (
+              <button
+                type="button"
+                className="maestro-panel-recover-btn"
+                onClick={() => onInsertPrompt(t('subAgent.stallPrompt'))}
+              >
+                {t('maestroPanel.fillRecovery')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <MaestroStateSections state={maestroState} collapsed={collapsedSections} onToggle={toggleSection} agentIdle={agentIdle} onInsertPrompt={onInsertPrompt} />
         {renderSection(t('subAgent.running'), t('subAgent.noRunning'), state.running)}
         <section className="subagent-section subagent-history-section">

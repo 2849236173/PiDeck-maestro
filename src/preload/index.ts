@@ -75,6 +75,7 @@ import type {
 	SessionSummary,
 	SubAgentStateUpdate,
 	MaestroGuiState,
+	AgentMessagesPayload,
 	TerminalDataEvent,
 	TerminalExitEvent,
 	TerminalTab,
@@ -862,8 +863,11 @@ const api = {
 		onFocusTarget: (callback: (target: { agentId: string }) => void) =>
 			subscribe(ipcChannels.petFocusAgentTarget, callback),
 		onMessages: (
-			callback: (payload: { agentId: string; messages: ChatMessage[] }) => void,
+			callback: (payload: AgentMessagesPayload) => void,
 		) => subscribe(ipcChannels.agentsMessage, callback),
+		/** 增量推送边界失配时拉取全量消息重同步 */
+		pullMessages: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.agentsPullMessages, agentId) as Promise<ChatMessage[]>,
 		onLog: (callback: (payload: { agentId: string; text: string }) => void) =>
 			subscribe(ipcChannels.agentsLog, callback),
 		onThinking: (

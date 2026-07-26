@@ -763,6 +763,7 @@ export function createPreviewApi(): PiDesktopApi {
 				setTimeout(() => callback({ agentId: "preview-agent", messages: getMessages() }), 0);
 				return () => undefined;
 			}) as any,
+			pullMessages: async () => getMessages(),
 			onLog: noop,
 			onThinking: noop,
 			onRpcLog: noop,
