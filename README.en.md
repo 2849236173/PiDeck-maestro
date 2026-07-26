@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-5** (2026-07-26)
+> **Latest compatibility release: v0.6.6-6** (2026-07-26)
+
+### v0.6.6-6 Maestro compatibility release
+
+- Added full-screen sub-agent details and recovery for unfinished workflow runs.
 
 ### v0.6.6-5 Maestro compatibility release
 

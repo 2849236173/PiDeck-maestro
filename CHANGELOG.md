@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-6 - 2026-07-26
+
+### Sub-agents and workflows
+
+- Added a full-screen sub-agent detail modal with Maestro `delegate` support.
+- Added recovery handling for unfinished workflow runs to reduce lost task state.
+
 ## v0.6.6-5 - 2026-07-26
 
 ### Interaction improvements
