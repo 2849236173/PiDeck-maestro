@@ -12,6 +12,8 @@ interface SubAgentPanelProps {
   onOpenDetail: (item: SubAgent) => void;
   /** 父会话是否空闲；用于标注未收尾的 workflow Run */
   agentIdle?: boolean;
+  /** 把恢复指令填入 composer */
+  onInsertPrompt?: (text: string) => void;
   /** 左侧边缘拖拽调宽的入口；宽度由 App 级 grid 列变量控制，面板只负责转发手势 */
   onResizeStart?: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
@@ -49,12 +51,14 @@ function SectionToggle(props: { title: string; count?: string; collapsed: boolea
 }
 
 /** maestro UCL 推送的目标/工作流/任务分区；字段形状由扩展决定，全部防御式解析，缺字段则不展示 */
-function MaestroStateSections({ state, collapsed, onToggle, agentIdle }: {
+function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertPrompt }: {
   state: MaestroGuiState;
   collapsed: Record<string, boolean>;
   onToggle: (key: string) => void;
   /** 父会话已空闲；Run 仍挂 active 时说明未正常收尾（run-control done 未被调用） */
   agentIdle?: boolean;
+  /** 把恢复指令填入 composer（不自动发送，用户确认后才走模型） */
+  onInsertPrompt?: (text: string) => void;
 }) {
   const [showAllTasks, setShowAllTasks] = useState(false);
   if (!state.connected) return null;
@@ -132,8 +136,22 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle }: {
                 {typeof activeRun.status === 'string' ? ` · ${activeRun.status}` : ''}
               </div>
             ) : null}
+            {typeof workflow.recoveryAction === 'string' && workflow.recoveryAction ? (
+              <div className="maestro-panel-meta">{t('maestroPanel.recoveryHint')}: {workflow.recoveryAction}</div>
+            ) : null}
             {activeRun && agentIdle ? (
-              <div className="maestro-panel-stale">{t('maestroPanel.runStale')}</div>
+              <div className="maestro-panel-stale">
+                <span>{t('maestroPanel.runStale')}</span>
+                {onInsertPrompt ? (
+                  <button
+                    type="button"
+                    className="maestro-panel-recover-btn"
+                    onClick={() => onInsertPrompt(t('maestroPanel.recoveryPrompt'))}
+                  >
+                    {t('maestroPanel.fillRecovery')}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
           )}
@@ -253,7 +271,7 @@ function SubAgentItem(props: { item: SubAgent; onOpenDetail: (item: SubAgent) =>
   );
 }
 
-export function SubAgentPanel({ agentId, api, onClose, onOpenDetail, agentIdle, onResizeStart }: SubAgentPanelProps) {
+export function SubAgentPanel({ agentId, api, onClose, onOpenDetail, agentIdle, onInsertPrompt, onResizeStart }: SubAgentPanelProps) {
   const [state, setState] = useState<SubAgentStateUpdate>(EMPTY_STATE);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   // 分区折叠状态持久化：面板内容变多后（目标/工作流/任务/运行中/历史）用户需要控制可见范围
@@ -338,7 +356,7 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenDetail, agentIdle, 
         </button>
       </header>
       <div className="subagent-panel-content">
-        <MaestroStateSections state={maestroState} collapsed={collapsedSections} onToggle={toggleSection} agentIdle={agentIdle} />
+        <MaestroStateSections state={maestroState} collapsed={collapsedSections} onToggle={toggleSection} agentIdle={agentIdle} onInsertPrompt={onInsertPrompt} />
         {renderSection(t('subAgent.running'), t('subAgent.noRunning'), state.running)}
         <section className="subagent-section subagent-history-section">
           <button type="button" className="subagent-history-toggle" onClick={() => setHistoryExpanded((expanded) => !expanded)} aria-expanded={historyExpanded}>

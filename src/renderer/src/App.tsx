@@ -8207,6 +8207,12 @@ export function App() {
           onClose={() => setSubAgentPanelVisible(false)}
           onOpenDetail={(item) => setSubAgentDetail({ agentId: activeAgentId, refId: item.id })}
           agentIdle={activeAgent?.status === "idle"}
+          onInsertPrompt={(text) => {
+            // 填入输入框由用户确认后发送；不自动发，避免意外触发模型调用
+            setPromptForAgent(activeAgentId, text);
+            setComposerCursor(text.length);
+            pendingComposerCaretRef.current = text.length;
+          }}
           onResizeStart={startSubAgentPanelResize}
         />
       )}

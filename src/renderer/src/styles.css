@@ -8459,12 +8459,35 @@ body.is-resizing .subagent-panel-resizer::before {
 }
 
 .maestro-panel-stale {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-panel));
   color: var(--color-warning);
   font-size: var(--font-size-micro);
   line-height: var(--line-height-micro);
+}
+
+.maestro-panel-recover-btn {
+  padding: 2px var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, var(--color-border-subtle));
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-warning);
+  font-size: var(--font-size-micro);
+  cursor: pointer;
+}
+
+.maestro-panel-recover-btn:hover {
+  background: color-mix(in srgb, var(--color-warning) 18%, var(--color-bg-panel));
+}
+
+.maestro-panel-recover-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .maestro-panel-todos {
