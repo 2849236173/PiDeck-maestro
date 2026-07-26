@@ -4565,6 +4565,202 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   color: var(--color-text-tertiary);
 }
 
+/* 工具结果中的图片（如 browser 截图）：默认缩略图，点击展开原尺寸 */
+.tool-card-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.tool-card-image {
+  max-height: 180px;
+  max-width: 100%;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: zoom-in;
+}
+
+.tool-card-image.zoomed {
+  max-height: none;
+  cursor: zoom-out;
+}
+
+/* Maestro 结构化工具卡片：todo 任务列表 / ask 问答结果 / 状态行 */
+.maestro-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-small);
+}
+
+.maestro-card-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-caption);
+}
+
+.maestro-todo-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.maestro-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  line-height: var(--line-height-body);
+}
+
+.maestro-todo-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+}
+
+.maestro-todo-status.completed {
+  color: var(--color-success);
+}
+
+.maestro-todo-status.in_progress {
+  color: var(--color-accent);
+}
+
+.maestro-todo-status.blocked {
+  color: var(--color-danger);
+}
+
+.maestro-todo-spinner {
+  animation: spin 1.2s linear infinite;
+}
+
+.maestro-todo-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.maestro-todo-item.completed .maestro-todo-subject {
+  color: var(--color-text-tertiary);
+}
+
+.maestro-todo-assignee {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-caption);
+}
+
+.maestro-todo-summary {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maestro-answer-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.maestro-answer-question {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.maestro-answer-header {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+}
+
+.maestro-answer-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.maestro-answer-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-success);
+}
+
+.maestro-answer-text {
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.maestro-tools-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.maestro-tools-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.maestro-tools-name {
+  font-family: var(--font-family-business);
+  color: var(--color-text-primary);
+  flex: 0 0 auto;
+}
+
+.maestro-tools-score {
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  color: var(--color-text-tertiary);
+  flex: 0 0 auto;
+}
+
+.maestro-tools-summary {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maestro-status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+.maestro-status-line svg {
+  color: var(--color-success);
+  flex: 0 0 auto;
+}
+
+.maestro-status-line.error,
+.maestro-status-line.error svg {
+  color: var(--color-danger);
+}
+
 /* Agent progress list - 显示工具调用的子代理进度 */
 .agent-progress-list {
   display: flex;

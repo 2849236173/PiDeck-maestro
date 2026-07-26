@@ -2797,7 +2797,7 @@ export class AgentManager {
 		toolStatus: "running" | "done" | "error",
 	) {
 		const toolName = String(event.toolName ?? "").toLowerCase();
-		if (toolName !== "teammate" && toolName !== "delegate" && toolName !== "explorer") return;
+		if (toolName !== "teammate" && toolName !== "delegate" && toolName !== "explorer" && toolName !== "maestro") return;
 
 		const subAgents = this.subAgentsByAgent.get(agentId);
 		if (!subAgents) return;
@@ -2814,9 +2814,27 @@ export class AgentManager {
 			...(Array.isArray(details?.childCalls) ? details.childCalls : []),
 		].filter((item) => item && typeof item === "object");
 
-		const taskArgs = Array.isArray(args?.tasks)
-			? args.tasks
-			: [{ agent: args?.agent ?? (toolName === "teammate" ? undefined : toolName), name: args?.name }];
+		let taskArgs: Array<{ agent?: string; name?: string }>;
+		if (toolName === "maestro") {
+			// maestro 路由到外部 CLI（gemini/codex），不落盘子会话文件也无结构化进度；
+			// 仅创建占位让面板可见，名称取 action 与提示词首行，终态由下方收敛逻辑给出。
+			const action = typeof args?.action === "string" ? args.action : "delegate";
+			const prompts: unknown[] = Array.isArray(args?.prompts) && args.prompts.length > 0
+				? args.prompts
+				: [args?.prompt];
+			taskArgs = prompts.map((prompt) => ({
+				agent: `maestro·${action}`,
+				name: typeof args?.name === "string" && args.name
+					? args.name
+					: typeof prompt === "string" && prompt.trim()
+						? prompt.trim().split(/\r?\n/, 1)[0]?.slice(0, 60)
+						: typeof args?.tool === "string" ? args.tool : undefined,
+			}));
+		} else {
+			taskArgs = Array.isArray(args?.tasks)
+				? args.tasks
+				: [{ agent: args?.agent ?? (toolName === "teammate" ? undefined : toolName), name: args?.name }];
+		}
 		const entries = snapshots.length > 0 ? snapshots : taskArgs;
 		const now = Date.now();
 
@@ -4141,6 +4159,16 @@ export class AgentManager {
 			}
 			return undefined;
 		})();
+		// 工具结果中的图片块（如 browser 截图）：提取到消息 images 字段供卡片展示；
+		// 终态/增量事件缺图时沿用上一份，避免完成后截图消失。
+		const resultImages = this.extractToolResultImages(result) ?? existing?.images;
+		// pi-maestro-flow 系列工具携带规整的 details，提取为结构化卡片避免退化成原始 JSON；
+		// 与 agentProgress 同策略：终态事件缺 details 时沿用运行期最后一份，防止完成后卡片突然消失。
+		const extractedMaestroCard = this.extractMaestroCard(toolName, result);
+		const previousMaestroCard = existing?.meta?._maestroCard;
+		const maestroCard = extractedMaestroCard ?? (
+			previousMaestroCard && typeof previousMaestroCard === "object" ? previousMaestroCard : undefined
+		);
 		// 提取结构化进度信息（子代理进度、子调用）。终态事件常只返回汇总文本，
 		// 因此没有新快照时保留运行期最后一份数据，避免工具完成后 UI 突然清空。
 		const extractedAgentProgress = this.extractAgentProgress(result);
@@ -4171,12 +4199,14 @@ export class AgentManager {
 			
 			...(askCard ? { _askCard: askCard } : {}),
 			...(agentProgress ? { _agentProgress: agentProgress } : {}),
+			...(maestroCard ? { _maestroCard: maestroCard } : {}),
 		};
 
 		if (existing) {
 			existing.text = text;
 			existing.timestamp = Date.now();
 			existing.meta = meta;
+			if (resultImages) existing.images = resultImages;
 		} else {
 			list.push({
 				id: messageId,
@@ -4185,6 +4215,7 @@ export class AgentManager {
 				text,
 				timestamp: Date.now(),
 				meta,
+				...(resultImages ? { images: resultImages } : {}),
 			});
 		}
 
@@ -4762,6 +4793,29 @@ export class AgentManager {
 		void this.emitRuntimeState(agentId);
 	}
 
+	/**
+	 * 提取工具结果 content 中的图片块（如 browser 工具截图）。
+	 * 限制数量与单图体积，避免 base64 大图撑爆 IPC 与会话元数据。
+	 */
+	private extractToolResultImages(result: unknown): ImageContent[] | undefined {
+		if (!result || typeof result !== "object") return undefined;
+		const content = (result as any).content;
+		if (!Array.isArray(content)) return undefined;
+		const images: ImageContent[] = [];
+		for (const item of content) {
+			if (images.length >= 3) break;
+			if (!item || item.type !== "image" || typeof item.data !== "string" || !item.data) continue;
+			// base64 长度约为原始字节的 4/3；这里放行约 3MB 原图
+			if (item.data.length > 4 * 1024 * 1024) continue;
+			images.push({
+				type: "image",
+				data: item.data,
+				mimeType: typeof item.mimeType === "string" && item.mimeType ? item.mimeType : "image/png",
+			});
+		}
+		return images.length > 0 ? images : undefined;
+	}
+
 	private extractToolResultText(result: unknown) {
 		if (!result || typeof result !== "object") return "";
 		const content = (result as any).content;
@@ -4770,6 +4824,110 @@ export class AgentManager {
 			.map((item) => (typeof item?.text === "string" ? item.text : ""))
 			.filter(Boolean)
 			.join("\n");
+	}
+
+	/**
+	 * 提取 pi-maestro-flow 系列工具的结构化 details，供渲染端专项卡片展示：
+	 * - todo → 全量任务快照列表；
+	 * - ask-user-question → 问答结果；
+	 * - run-control / plan-* → 简短状态行。
+	 * 未识别的工具返回 undefined，继续走默认 JSON 详情。字段均做裁剪，避免撑大 ChatMessage.meta。
+	 */
+	private extractMaestroCard(toolName: string, result: unknown): Record<string, unknown> | undefined {
+		if (!result || typeof result !== "object") return undefined;
+		const details = (result as any).details;
+		if (!details || typeof details !== "object") return undefined;
+		const name = toolName.toLowerCase();
+
+		if (name === "todo" && Array.isArray(details.tasks)) {
+			return {
+				kind: "todo",
+				...(typeof details.action === "string" ? { action: details.action } : {}),
+				...(typeof details.error === "string" ? { error: details.error } : {}),
+				tasks: details.tasks.slice(0, 30).map((task: any) => ({
+					...(typeof task?.id === "string" ? { id: task.id.slice(0, 8) } : {}),
+					subject: String(task?.subject ?? "").slice(0, 200),
+					status: typeof task?.status === "string" ? task.status : "pending",
+					// 非 root 执行人（teammate 子代理）才值得展示
+					...(typeof task?.assignee?.label === "string" && task.assignee.label !== "root"
+						? { assignee: task.assignee.label }
+						: {}),
+					...(typeof task?.summary === "string" ? { summary: task.summary.slice(0, 140) } : {}),
+				})),
+			};
+		}
+
+		if (name === "ask-user-question" && Array.isArray(details.answers)) {
+			return {
+				kind: "answers",
+				...(details.cancelled === true ? { cancelled: true } : {}),
+				answers: details.answers.slice(0, 8).map((answer: any) => ({
+					question: String(answer?.question ?? "").slice(0, 300),
+					...(typeof answer?.header === "string" ? { header: answer.header } : {}),
+					selected: Array.isArray(answer?.selected)
+						? answer.selected.slice(0, 8).map((value: unknown) => String(value).slice(0, 200))
+						: [],
+					...(typeof answer?.text === "string" ? { text: answer.text.slice(0, 300) } : {}),
+				})),
+			};
+		}
+
+		// search_tool_bm25：命中的工具清单比原始 JSON 更可读
+		if (name === "search_tool_bm25" && Array.isArray(details.tools)) {
+			return {
+				kind: "tools",
+				...(typeof details.query === "string" ? { query: details.query.slice(0, 200) } : {}),
+				tools: details.tools.slice(0, 12).map((tool: any) => ({
+					name: String(tool?.name ?? "").slice(0, 80),
+					...(typeof tool?.summary === "string" ? { summary: tool.summary.slice(0, 160) } : {}),
+					...(typeof tool?.score === "number" ? { score: Math.round(tool.score * 100) / 100 } : {}),
+				})),
+			};
+		}
+
+		// lsp：动作/服务器/结果计数状态行；搜索类结果正文仍有价值，保留原始详情
+		if (name === "lsp" && typeof details.action === "string") {
+			const output = details.output;
+			const lines = [
+				details.action,
+				...(typeof details.serverName === "string" ? [details.serverName] : []),
+				...(output && typeof output === "object" && typeof output.totalItems === "number"
+					? [`${output.shownItems ?? output.totalItems}/${output.totalItems}${output.truncated ? "+" : ""}`]
+					: []),
+			];
+			return { kind: "status", ok: details.success !== false, lines, keepDetail: true };
+		}
+
+		// smart_search：mode · query 状态行；结果 JSON 保留在详情中
+		if (name === "smart_search" && typeof details.mode === "string") {
+			const lines = [
+				details.mode,
+				...(typeof details.query === "string" ? [details.query.slice(0, 200)] : []),
+			];
+			return { kind: "status", ok: true, lines, keepDetail: true };
+		}
+
+		if (name === "run-control") {
+			const lines = [
+				...(typeof details.action === "string" ? [details.action] : []),
+				...(typeof details.message === "string" ? [details.message.slice(0, 300)] : []),
+			];
+			if (lines.length === 0) return undefined;
+			return { kind: "status", ok: details.ok !== false, lines };
+		}
+
+		if (name.startsWith("plan-") && typeof details.mode === "string") {
+			const lines = [
+				...(typeof details.action === "string" ? [details.action] : []),
+				`mode: ${details.mode}`,
+				...(typeof details.status === "string" ? [`status: ${details.status}`] : []),
+				...(typeof details.revision === "number" ? [`revision: ${details.revision}`] : []),
+				...(typeof details.error === "string" ? [`error: ${details.error.slice(0, 200)}`] : []),
+			];
+			return { kind: "status", ok: typeof details.error !== "string", lines };
+		}
+
+		return undefined;
 	}
 
 	/**

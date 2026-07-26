@@ -60,6 +60,10 @@ import {
 	AlertTriangle,
 	Brush,
 	Check,
+	CheckCircle2,
+	Circle,
+	CircleX,
+	LoaderCircle,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
@@ -1793,7 +1797,8 @@ function getToolSubtitle(message: ChatMessage): string {
 	// teammate 是新的子代理派发引擎（delegate/explore 底层亦走它），子代理运行时
 	// 同样通过 update 事件推送进度，需纳入白名单，否则派发多个子代理时进度不可见。
 	const toolName = typeof meta.toolName === "string" ? meta.toolName.toLowerCase() : "";
-	if (meta.status === "running" && (toolName === "maestro" || toolName === "delegate" || toolName === "explore" || toolName === "teammate")) {
+	// 白名单与 isAgentTool 保持一致：explore（maestro 子命令）与 explorer（teammate 角色）都要命中。
+	if (meta.status === "running" && (toolName === "maestro" || toolName === "delegate" || toolName === "explore" || toolName === "explorer" || toolName === "teammate")) {
 		const progress = typeof meta.result === "string" ? meta.result.trim() : "";
 		if (progress) {
 			const firstLine = progress.split(/\r?\n/, 1)[0]?.trim() ?? "";
@@ -1905,7 +1910,13 @@ const BUILT_IN_TOOLS = new Set(["bash", "edit", "find", "grep", "ls", "read", "w
  * 扩展工具中带下划线的名称，会被 MCP-direct 正则误匹配为形如 {server}_{tool}。
  * 在此登记后 getToolKind 将其归为 "extension" 而非 "mcp-direct"。
  */
-const NON_MCP_TOOLS = new Set(["ask_question"]);
+const NON_MCP_TOOLS = new Set([
+	"ask_question",
+	// pi-maestro-flow 系列扩展工具：名称带下划线但并非 MCP 直连，不登记会被误标为 "MCP·xxx" 徽标
+	"smart_search",
+	"search_tool_bm25",
+	"fast_context_fast_context_search",
+]);
 
 /**
  * 识别工具来源类型：
@@ -2023,6 +2034,111 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 	);
 });
 
+/** 主进程 extractMaestroCard 产出的结构化卡片数据（见 AgentManager.extractMaestroCard） */
+type MaestroCardData =
+	| {
+		kind: "todo";
+		action?: string;
+		error?: string;
+		tasks: Array<{ id?: string; subject: string; status: string; assignee?: string; summary?: string }>;
+	}
+	| {
+		kind: "answers";
+		cancelled?: boolean;
+		answers: Array<{ question: string; header?: string; selected: string[]; text?: string }>;
+	}
+	| { kind: "status"; ok?: boolean; lines: string[]; keepDetail?: boolean }
+	| {
+		kind: "tools";
+		query?: string;
+		tools: Array<{ name: string; summary?: string; score?: number }>;
+	};
+
+/** pi-maestro-flow 工具的结构化结果卡片：todo 任务列表、ask-user-question 问答、run-control/plan 状态行 */
+const MaestroCardView = memo(function MaestroCardView(props: { card: MaestroCardData }) {
+	const { card } = props;
+
+	if (card.kind === "todo") {
+		return (
+			<div className="maestro-card">
+				{card.error ? <div className="maestro-card-error">{card.error}</div> : null}
+				<ul className="maestro-todo-list">
+					{card.tasks.map((task, index) => (
+						<li key={task.id ?? index} className={`maestro-todo-item ${task.status}`}>
+							<span className={`maestro-todo-status ${task.status}`} aria-hidden="true">
+								{task.status === "completed"
+									? <CheckCircle2 size={13} />
+									: task.status === "in_progress"
+										? <LoaderCircle size={13} className="maestro-todo-spinner" />
+										: task.status === "blocked"
+											? <CircleX size={13} />
+											: <Circle size={13} />}
+							</span>
+							<span className="maestro-todo-main">
+								<span className="maestro-todo-subject">{task.subject}</span>
+								{task.assignee ? <span className="maestro-todo-assignee">@{task.assignee}</span> : null}
+								{task.status === "completed" && task.summary ? (
+									<span className="maestro-todo-summary">{task.summary}</span>
+								) : null}
+							</span>
+						</li>
+					))}
+				</ul>
+			</div>
+		);
+	}
+
+	if (card.kind === "answers") {
+		return (
+			<div className="maestro-card">
+				{card.cancelled ? <div className="maestro-card-error">{t("ask.unanswered")}</div> : null}
+				{card.answers.map((answer, index) => (
+					<div key={index} className="maestro-answer-item">
+						<div className="maestro-answer-question">
+							<MessageCircle size={13} aria-hidden="true" />
+							{answer.header ? <span className="maestro-answer-header">{answer.header}</span> : null}
+							<span>{answer.question}</span>
+						</div>
+						{answer.selected.length > 0 ? (
+							<div className="maestro-answer-selected">
+								{answer.selected.map((value, valueIndex) => (
+									<span key={valueIndex} className="maestro-answer-value"><Check size={12} aria-hidden="true" />{value}</span>
+								))}
+							</div>
+						) : null}
+						{answer.text ? <div className="maestro-answer-text">{answer.text}</div> : null}
+					</div>
+				))}
+			</div>
+		);
+	}
+
+	if (card.kind === "tools") {
+		return (
+			<div className="maestro-card">
+				<ul className="maestro-tools-list">
+					{card.tools.map((tool, index) => (
+						<li key={index} className="maestro-tools-item">
+							<span className="maestro-tools-name">{tool.name}</span>
+							{typeof tool.score === "number" ? <span className="maestro-tools-score">{tool.score}</span> : null}
+							{tool.summary ? <span className="maestro-tools-summary">{tool.summary}</span> : null}
+						</li>
+					))}
+				</ul>
+			</div>
+		);
+	}
+
+	return (
+		<div className="maestro-card">
+			<div className={`maestro-status-line${card.ok === false ? " error" : ""}`}>
+				{card.ok === false ? <CircleX size={13} aria-hidden="true" /> : <CheckCircle2 size={13} aria-hidden="true" />}
+				<span>{card.lines.join(" · ")}</span>
+			</div>
+		</div>
+	);
+});
+
 export const ToolCard = memo(function ToolCard(props: {
 	message: ChatMessage;
 	defaultOpen?: boolean;
@@ -2055,6 +2171,11 @@ export const ToolCard = memo(function ToolCard(props: {
 		| { question?: string; type?: string; answered?: boolean; answer?: unknown; answerLabel?: string; options?: string[] }
 		| undefined;
 	const isAskCard = Boolean(askCard?.question);
+	// pi-maestro-flow 工具的结构化卡片（todo 任务列表 / 问答结果 / 状态行），命中时替代原始 JSON 详情
+	const maestroCard = props.message.meta?._maestroCard as MaestroCardData | undefined;
+	// 工具结果中的图片（如 browser 截图）；点击在缩略图与原尺寸间切换
+	const resultImages = props.message.images;
+	const [zoomedImage, setZoomedImage] = useState<number | null>(null);
 	const agentProgress = props.message.meta?._agentProgress as Array<{
 		agent?: string;
 		name?: string;
@@ -2073,8 +2194,10 @@ const statusLabel =
 			? ""
 			: "";
 
-	// 自动展开逻辑：仅对 agent 类工具（teammate/delegate/explorer/maestro）运行中自动展开
-	const isAgentTool = /^(teammate|delegate|explorer|maestro)/.test(toolName);
+	// 自动展开逻辑：仅对真正派发子代理的工具运行中自动展开。
+	// 精确匹配而非前缀：teammate-send/list/watch/wait 等辅助工具没有进度流，
+	// 被前缀误命中只会展开一块原始 JSON。
+	const isAgentTool = /^(teammate|delegate|explorer|explore|maestro)$/.test(toolName);
 	useEffect(() => {
 		if (!isAgentTool) return;
 		if (userToggledRef.current) return;
@@ -2205,10 +2328,31 @@ const statusLabel =
 								</div>
 							)}
 						</div>
+					) : maestroCard ? (
+						<>
+							<MaestroCardView card={maestroCard} />
+							{/* 搜索/lsp 类工具的结果正文仍有阅读价值，状态行下方保留原始详情 */}
+							{maestroCard.kind === "status" && maestroCard.keepDetail ? (
+								<pre className="tool-card-detail">{detailText}</pre>
+							) : null}
+						</>
 					) : (
 						<>
 							{agentProgress && agentProgress.length > 0 && (
 								<AgentProgressList progress={agentProgress} t={t} />
+							)}
+							{resultImages && resultImages.length > 0 && (
+								<div className="tool-card-images">
+									{resultImages.map((img, index) => (
+										<img
+											key={index}
+											src={`data:${img.mimeType};base64,${img.data}`}
+											alt={t("app.imageAlt", { index: index + 1 })}
+											className={`tool-card-image${zoomedImage === index ? " zoomed" : ""}`}
+											onClick={() => setZoomedImage((current) => (current === index ? null : index))}
+										/>
+									))}
+								</div>
 							)}
 							<pre className="tool-card-detail">{detailText}</pre>
 						</>
