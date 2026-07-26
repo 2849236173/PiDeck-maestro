@@ -62,6 +62,8 @@ export class PiProcess extends EventEmitter {
     private readonly cwd: string,
     private readonly settings?: PiProcessSettings,
     private readonly locator: PiProcessLocator = new PiLocator(),
+    /** 额外环境变量（如 PI_GUI/PI_GUI_PORT）；在 createProcessEnv 基础上合并，不覆盖定位器逻辑 */
+    private readonly extraEnv?: Record<string, string>,
   ) {
     super();
   }
@@ -157,11 +159,23 @@ export class PiProcess extends EventEmitter {
     // 每个 agent 绑定独立 cwd，确保 pi 自己发现项目级 AGENTS.md、settings 和 session 分组。
     // 打包后的 Electron 不一定继承用户终端 PATH；这里补齐跨平台 Node 工具链常见 bin 目录，尽量让已安装 pi 的用户开箱即用。
     // Windows 下通过 PiLocator.createInvocation 显式包裹含空格的 npm shim 路径，避免 cmd 拆分路径导致 agent 启动失败。
+    const baseEnv = this.locator.createProcessEnv(this.settings, invocation.pathPrefix, invocation.wsl);
+    let spawnEnv = baseEnv;
+    if (this.extraEnv && Object.keys(this.extraEnv).length > 0) {
+      spawnEnv = { ...baseEnv, ...this.extraEnv };
+      // WSL 下环境变量默认不穿透到 distro，需通过 WSLENV 白名单透传（无需路径转换标志）。
+      if (invocation.wsl) {
+        const names = Object.keys(this.extraEnv).join(":");
+        const existing = typeof spawnEnv.WSLENV === "string" && spawnEnv.WSLENV ? `${spawnEnv.WSLENV}:` : "";
+        spawnEnv = { ...spawnEnv, WSLENV: `${existing}${names}` };
+      }
+    }
+
     this.proc = spawn(invocation.command, finalArgs, {
       cwd: spawnCwd,
       stdio: ["pipe", "pipe", "pipe"],
       shell: invocation.shell,
-      env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix, invocation.wsl),
+      env: spawnEnv,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
 

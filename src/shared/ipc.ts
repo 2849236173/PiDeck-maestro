@@ -131,6 +131,8 @@ export const ipcChannels = {
 	appUpdateProgress: "app:update-progress",
 	appFeedbackEnvironment: "app:feedback-environment",
 	appOpenExternal: "app:open-external",
+	/** 渲染进程 → 主进程：设置任务栏角标（Windows overlay icon / macOS・Linux badge count） */
+	appSetBadge: "app:set-badge",
 	appOpenInBrowser: "app:open-in-browser",
 	appRestart: "app:restart",
 	preloadReady: "preload:ready",
@@ -317,6 +319,12 @@ export const ipcChannels = {
 	subAgentsLoadDetail: "sub-agents:load-detail",
 	/** 渲染进程 → 主进程：拉取子代理当前状态快照（面板挂载/切换会话时立即展示，不等推送） */
 	subAgentsGetState: "sub-agents:get-state",
+
+	// ===== maestro UCL（GUI SSE）只读通道 =====
+	/** 主进程 → 渲染进程：推送 maestro 状态快照（goal/todos/workflow） */
+	maestroGuiStateUpdate: "maestro-gui:state-update",
+	/** 渲染进程 → 主进程：拉取当前 maestro 状态快照 */
+	maestroGuiGetState: "maestro-gui:get-state",
 	// ===== 系统文件选择器 =====
 	/** 打开系统原生文件/文件夹选择器，返回选中路径列表 */
 	dialogPickFiles: "dialog:pick-files",

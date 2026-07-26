@@ -453,6 +453,7 @@ export function createPreviewApi(): PiDesktopApi {
 				},
 			}),
 			openExternal: async () => undefined,
+			setBadge: async () => undefined,
 			restart: async () => undefined,
 			rendererLog: async (level, scope, message, detail) => {
 				console[level === "error" ? "error" : level === "warn" ? "warn" : "debug"](
@@ -775,6 +776,10 @@ export function createPreviewApi(): PiDesktopApi {
 			onState: noop,
 			loadDetail: async () => [],
 			getState: async () => ({ running: [], completed: [] }),
+		},
+		maestroGui: {
+			onState: noop,
+			getState: async () => ({ connected: false }),
 		},
 		pet: {
 			onState: noop,

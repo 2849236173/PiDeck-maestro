@@ -90,6 +90,9 @@ function loadAgentManager() {
 			if (id === "node:os") return { homedir: () => "C:\\Users\\tester" };
 			if (id === "../../shared/ipc") return { ipcChannels: {} };
 			if (id === "./PiProcess") return { PiProcess: class {} };
+			if (id === "./MaestroGuiChannel") {
+				return { MaestroGuiChannel: class { start() {} stop() {} getSnapshot() { return { connected: false }; } } };
+			}
 			if (id === "./bashResult") return { formatBashToolMessage: () => ({}) };
 			if (id === "./messageContent") return { extractMessageText: (value) => String(value ?? "") };
 			if (id === "./historyMessages") return { mergeHistoryWithPreservedMessages: (value) => value };

@@ -8232,6 +8232,80 @@ body.is-resizing .subagent-panel-resizer::before {
   padding: var(--space-3);
 }
 
+/* maestro UCL 推送的目标/工作流/任务分区 */
+.maestro-panel-section {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.maestro-panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-small);
+}
+
+.maestro-panel-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.maestro-panel-chip {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  text-transform: uppercase;
+}
+
+.maestro-panel-chip.active,
+.maestro-panel-chip.running,
+.maestro-panel-chip.in_progress {
+  color: var(--color-accent);
+}
+
+.maestro-panel-chip.completed,
+.maestro-panel-chip.done {
+  color: var(--color-success);
+}
+
+.maestro-panel-chip.failed,
+.maestro-panel-chip.blocked {
+  color: var(--color-danger);
+}
+
+.maestro-panel-meta {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maestro-panel-text {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-body);
+  word-break: break-word;
+}
+
+.maestro-panel-todos {
+  font-size: var(--font-size-small);
+}
+
+.maestro-todo-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 3px;
+  border: 1px solid var(--color-border-emphasis);
+  border-radius: 50%;
+}
+
 .subagent-section {
   margin-bottom: var(--space-4);
 }
@@ -10687,6 +10761,21 @@ body.is-resizing .subagent-panel-resizer::before {
     var(--color-border-subtle)
   );
   animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+/* 等待用户输入：区别于运行中的脉冲动画，用静态琥珀色提醒用户需要操作 */
+.agent-status-indicator.status-waiting {
+  color: var(--color-warning);
+  background: color-mix(
+    in srgb,
+    var(--color-warning) 14%,
+    var(--color-bg-panel)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--color-warning) 36%,
+    var(--color-border-subtle)
+  );
 }
 
 .agent-status-indicator.status-idle {

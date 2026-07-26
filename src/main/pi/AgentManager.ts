@@ -2,6 +2,7 @@ import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { open, readFile, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, statSync, watch, type FSWatcher } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { join, dirname, basename, relative } from "node:path";
 import { homedir } from "node:os";
 import type {
@@ -19,6 +20,7 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { PiProcess } from "./PiProcess";
+import { MaestroGuiChannel } from "./MaestroGuiChannel";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import { extractMessageText } from "./messageContent";
@@ -62,6 +64,29 @@ interface SubAgentScanState {
 	/** 最后一条 user/assistant 消息的角色，用于判断会话是否已产出最终回答 */
 	lastRole?: string;
 	lastHadToolUse: boolean;
+}
+
+/** 为 maestro UCL sidecar 分配一个空闲回环端口；失败时返回 undefined（功能降级，不阻塞 agent 启动） */
+async function allocateLoopbackPort(): Promise<number | undefined> {
+	return await new Promise((resolve) => {
+		try {
+			const server = createNetServer();
+			server.once("error", () => resolve(undefined));
+			server.listen(0, "127.0.0.1", () => {
+				const address = server.address();
+				const port = address && typeof address === "object" ? address.port : undefined;
+				server.close(() => resolve(port));
+			});
+		} catch {
+			resolve(undefined);
+		}
+	});
+}
+
+/** 构造注入 pi 进程的 UCL 环境变量；未分到端口时不启用，避免随机端口无法定位 */
+function buildGuiEnv(port: number | undefined): Record<string, string> | undefined {
+	if (!port) return undefined;
+	return { PI_GUI: "1", PI_GUI_PORT: String(port) };
 }
 
 /** 从消息 content 中提取纯文本预览；数组 content 只取 text 块，避免把 JSON 结构串显示到面板 */
@@ -190,6 +215,10 @@ export class AgentManager {
 	private readonly subAgentScanState = new Map<string, SubAgentScanState>();
 	/** 最近一次推送给前端的子代理状态签名：key 为主会话 agentId；用于跳过无变化的 IPC */
 	private readonly subAgentEmitSignatures = new Map<string, string>();
+	/** maestro UCL（GUI SSE）只读通道：key 为主会话 agentId */
+	private readonly maestroGuiChannels = new Map<string, MaestroGuiChannel>();
+	/** 最近一份 maestro 状态快照，供面板挂载时立即拉取 */
+	private readonly maestroGuiSnapshots = new Map<string, import('../../shared/types').MaestroGuiState>();
 
 	constructor(
 		private readonly getProject: (id: string) => Project | undefined,
@@ -773,20 +802,24 @@ export class AgentManager {
 		const t2 = Date.now();
 
 		void this.appLogger?.info("agent", "Agent pi process start", { agentId: id });
-		const process = new PiProcess(project.path, this.settingsStore.get());
+		// 为 maestro UCL sidecar 预分配回环端口；会话未装 maestro 时该环境变量无副作用。
+		const guiPort = await allocateLoopbackPort();
+		const process = new PiProcess(project.path, this.settingsStore.get(), undefined, buildGuiEnv(guiPort));
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
 				agentId: id,
 				...(payload && typeof payload === "object" ? payload : {}),
 			});
 		});
-		const runtime: AgentRuntime = { tab, process };
+		const runtime: AgentRuntime = { tab, process, ...(guiPort ? { guiPort } : {}) };
 		this.agents.set(id, runtime);
 		this.messages.set(id, []);
 		this.emitState();
 
 		const client = await process.start(input.sessionPath, trustOverride, input.noSession);
 		const t3 = Date.now();
+		// pi 进程存活后再启动 UCL 发现循环；未装 maestro 的会话会静默降级为不可用。
+		this.restartMaestroGuiChannel(id);
 		const diag = process.getDiagnostics();
 		void this.appLogger?.info("agent", "Pi process spawned", {
 			agentId: id,
@@ -1361,6 +1394,7 @@ export class AgentManager {
 			}
 			this.pendingUIRequests.delete(agentId);
 		}
+		this.syncAwaitingInput(agentId);
 		// abort 时必须清除所有流式状态，防止后续 pi 的延迟事件（text_delta、thinking_delta、tool_execution_* 等）
 		// 修改上次会话的旧消息，导致新会话消息混入被中止的旧输出。
 		this.activeAssistantMessageIds.delete(agentId);
@@ -1482,7 +1516,8 @@ export class AgentManager {
 			sessionPath,
 		});
 
-		const process = new PiProcess(project.path, this.settingsStore.get());
+		const reattachGuiPort = await allocateLoopbackPort();
+		const process = new PiProcess(project.path, this.settingsStore.get(), undefined, buildGuiEnv(reattachGuiPort));
 		const client = await process.start(sessionPath);
 		const restartDiag = process.getDiagnostics();
 		void this.appLogger?.info("agent", "Pi process restarted", {
@@ -1570,6 +1605,8 @@ export class AgentManager {
 
 		// 替换旧进程引用（但不修改 agents map 中的 key）
 		runtime.process = process;
+		runtime.guiPort = reattachGuiPort;
+		this.restartMaestroGuiChannel(agentId);
 
 		try {
 			const stateResponse = await client.request({ type: "get_state" });
@@ -2763,8 +2800,9 @@ export class AgentManager {
 		this.toolStateSequenceByAgent.delete(agentId);
 		// agent 关闭时自动关闭 RPC 日志记录
 		this.rpcLoggingAgents.delete(agentId);
-		// 停止子代理监控
+		// 停止子代理监控与 maestro UCL 通道
 		this.stopSubAgentMonitoring(agentId);
+		this.stopMaestroGuiChannel(agentId);
 		process.stop();
 		this.emitState();
 	}
@@ -2925,6 +2963,71 @@ export class AgentManager {
 		}
 
 		this.emitSubAgentState(agentId);
+	}
+
+	/** 启动/重启 maestro UCL（GUI SSE）通道；未分配端口时静默跳过 */
+	private restartMaestroGuiChannel(agentId: string) {
+		this.stopMaestroGuiChannel(agentId);
+		const runtime = this.agents.get(agentId);
+		if (!runtime?.guiPort) return;
+		const channel = new MaestroGuiChannel({
+			agentId,
+			cwd: runtime.tab.cwd,
+			port: runtime.guiPort,
+			onSnapshot: (snapshot) => {
+				this.maestroGuiSnapshots.set(agentId, snapshot);
+				this.emit(ipcChannels.maestroGuiStateUpdate, { agentId, state: snapshot });
+			},
+			onTeammateEvent: (eventName, payload) => this.applyTeammateGuiEvent(agentId, eventName, payload),
+		});
+		this.maestroGuiChannels.set(agentId, channel);
+		channel.start();
+	}
+
+	private stopMaestroGuiChannel(agentId: string) {
+		const channel = this.maestroGuiChannels.get(agentId);
+		if (channel) {
+			channel.stop();
+			this.maestroGuiChannels.delete(agentId);
+		}
+		this.maestroGuiSnapshots.delete(agentId);
+	}
+
+	/** 渲染端挂载/切换会话时拉取当前 maestro 状态快照 */
+	getMaestroGuiState(agentId: string): import('../../shared/types').MaestroGuiState {
+		return this.maestroGuiSnapshots.get(agentId) ?? { connected: false };
+	}
+
+	/**
+	 * UCL teammate.* 事件只做“增强”：按 correlationId 匹配既有子代理条目，
+	 * 补充 tokens/durationMs 等反推路径拿不到的字段；不替换主状态机，
+	 * 避免 SSE 与文件扫描双数据源互相打架。
+	 */
+	private applyTeammateGuiEvent(agentId: string, _eventName: string, payload: unknown) {
+		if (!payload || typeof payload !== "object") return;
+		const info = payload as Record<string, any>;
+		const correlationId = typeof info.correlationId === "string" ? info.correlationId : undefined;
+		if (!correlationId) return;
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+		for (const [id, subAgent] of subAgents.entries()) {
+			if (subAgent.correlationId !== correlationId) continue;
+			const tokens = typeof info.tokens === "number"
+				? info.tokens
+				: typeof info.inputTokens === "number" || typeof info.outputTokens === "number"
+					? (typeof info.inputTokens === "number" ? info.inputTokens : 0)
+						+ (typeof info.outputTokens === "number" ? info.outputTokens : 0)
+					: undefined;
+			const durationMs = typeof info.durationMs === "number" ? info.durationMs : undefined;
+			if (tokens === undefined && durationMs === undefined) return;
+			subAgents.set(id, {
+				...subAgent,
+				...(tokens !== undefined ? { tokens } : {}),
+				...(durationMs !== undefined ? { durationMs } : {}),
+			});
+			this.emitSubAgentState(agentId);
+			return;
+		}
 	}
 
 	/** 开始监控子代理目录 */
@@ -3301,8 +3404,9 @@ export class AgentManager {
 		// 应用退出时统一清理所有 pi 子进程，避免后台 agent 残留占用模型或文件句柄。
 		for (const runtime of this.agents.values()) {
 			this.userInitiatedStop.add(runtime.tab.id);
-			// 停止子代理监控
+			// 停止子代理监控与 maestro UCL 通道
 			this.stopSubAgentMonitoring(runtime.tab.id);
+			this.stopMaestroGuiChannel(runtime.tab.id);
 			runtime.process.stop();
 		}
 		this.agents.clear();
@@ -3735,6 +3839,7 @@ export class AgentManager {
 			this.pendingUIRequests.set(agentId, new Map());
 		}
 		this.pendingUIRequests.get(agentId)!.set(requestId, { method, title: request.title });
+		this.syncAwaitingInput(agentId);
 
 		// 插入 system 消息作为卡片占位
 		this.addMessage(agentId, "system", request.title, {
@@ -3775,6 +3880,7 @@ export class AgentManager {
 			pending.delete(requestId);
 			if (pending.size === 0) this.pendingUIRequests.delete(agentId);
 		}
+		this.syncAwaitingInput(agentId);
 
 		// 更新卡片消息状态为 answered 或 cancelled；cancelled 时从消息流移除，不留痕迹
 		const messages = this.messages.get(agentId);
@@ -4728,6 +4834,20 @@ export class AgentManager {
 		);
 	}
 
+	/**
+	 * 同步 tab.awaitingInput 与 pendingUIRequests：存在挂起的交互请求时，
+	 * 前端状态指示器应显示“等待输入”而非继续转圈的“运行中”。
+	 * 只改提示标记不改 status，abort 按钮等 running 判断不受影响。
+	 */
+	private syncAwaitingInput(agentId: string) {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return;
+		const waiting = (this.pendingUIRequests.get(agentId)?.size ?? 0) > 0;
+		if (Boolean(runtime.tab.awaitingInput) === waiting) return;
+		runtime.tab.awaitingInput = waiting;
+		this.emitState();
+	}
+
 	private scheduleUIRequestTimeout(agentId: string, requestId: string, timeout: unknown) {
 		if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0) return;
 
@@ -4737,6 +4857,7 @@ export class AgentManager {
 
 			pending.delete(requestId);
 			if (pending.size === 0) this.pendingUIRequests.delete(agentId);
+			this.syncAwaitingInput(agentId);
 
 			const messages = this.messages.get(agentId);
 			if (messages) {
@@ -5136,4 +5257,6 @@ export class AgentManager {
 type AgentRuntime = {
 	tab: AgentTab;
 	process: PiProcess;
+	/** 分配给 maestro UCL sidecar 的回环端口（通过 PI_GUI_PORT 注入）；未启用时为空 */
+	guiPort?: number;
 };

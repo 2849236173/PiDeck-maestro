@@ -74,6 +74,7 @@ import type {
 	SendPromptResult,
 	SessionSummary,
 	SubAgentStateUpdate,
+	MaestroGuiState,
 	TerminalDataEvent,
 	TerminalExitEvent,
 	TerminalTab,
@@ -520,6 +521,9 @@ const api = {
 			) as Promise<FeedbackEnvironment>,
 		openExternal: (url: string, forceSystem?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.appOpenExternal, url, forceSystem) as Promise<void>,
+		/** 设置任务栏角标：count=0 清除；dataUrl 为渲染端画好的角标图；flash 请求闪烁任务栏提醒 */
+		setBadge: (payload: { count: number; dataUrl?: string | null; description?: string; flash?: boolean }) =>
+			ipcRenderer.invoke(ipcChannels.appSetBadge, payload) as Promise<void>,
 		onOpenInBrowser: (callback: (url: string) => void) =>
 			subscribe(ipcChannels.appOpenInBrowser, callback),
 		restart: () => ipcRenderer.invoke(ipcChannels.appRestart) as Promise<void>,
@@ -897,6 +901,14 @@ const api = {
 		/** 拉取当前状态快照；面板挂载/切换会话时立即展示，避免等待下一次推送的空白窗口。 */
 		getState: (agentId: string) =>
 			ipcRenderer.invoke(ipcChannels.subAgentsGetState, agentId) as Promise<SubAgentStateUpdate>,
+	},
+	maestroGui: {
+		/** 监听 maestro UCL（GUI SSE）状态快照推送；payload 携带父 Agent id。 */
+		onState: (callback: (payload: { agentId: string; state: MaestroGuiState }) => void) =>
+			subscribe(ipcChannels.maestroGuiStateUpdate, callback),
+		/** 拉取当前 maestro 状态快照；未连接时 connected=false。 */
+		getState: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.maestroGuiGetState, agentId) as Promise<MaestroGuiState>,
 	},
 	pet: {
 		/** 宠物窗监听主进程推送的聚合状态 */

@@ -1069,6 +1069,17 @@ export function App() {
   const [compacting, setCompacting] = useState(false);
   const [drawer, setDrawer] = useState<DrawerPanel | null>(null);
   const [subAgentPanelVisible, setSubAgentPanelVisible] = useState(true);
+  // maestro UCL 实时任务可用时，隐藏 setWidget 推来的 todo-panel 文本卡片，避免双源重复展示
+  const [maestroLiveTodosByAgent, setMaestroLiveTodosByAgent] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    return api.maestroGui.onState(({ agentId, state }) => {
+      const hasLiveTodos = Boolean(state.connected && Array.isArray(state.todos) && state.todos.length > 0);
+      setMaestroLiveTodosByAgent((prev) => {
+        if (Boolean(prev[agentId]) === hasLiveTodos) return prev;
+        return { ...prev, [agentId]: hasLiveTodos };
+      });
+    });
+  }, [api]);
   // 子代理面板宽度可拖拽调整并持久化；280px 对详情阅读偏窄，允许用户自己权衡
   const [subAgentPanelWidth, setSubAgentPanelWidth] = useState(() => {
     try {
@@ -2908,6 +2919,78 @@ export function App() {
       agentStatusByAgentRef.current[agent.id] = agent.status;
     }
   }, [displayAgents, activeAgentId, modifiedFiles, messagesByAgent]);
+
+  // ── 任务栏角标：等待输入 + 完成未读 ──
+  const [windowFocused, setWindowFocused] = useState(() => document.hasFocus());
+  useEffect(() => {
+    const onFocus = () => setWindowFocused(true);
+    const onBlur = () => setWindowFocused(false);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  const [unreadCompletedByAgent, setUnreadCompletedByAgent] = useState<Record<string, boolean>>({});
+  const badgeStatusRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    for (const agent of displayAgents) {
+      const prev = badgeStatusRef.current[agent.id];
+      // running→idle 视为一轮完成；用户没在看（非活跃会话或窗口失焦）才计未读
+      if (prev === "running" && agent.status === "idle" && (agent.id !== activeAgentId || !windowFocused)) {
+        setUnreadCompletedByAgent((current) => (current[agent.id] ? current : { ...current, [agent.id]: true }));
+      }
+      badgeStatusRef.current[agent.id] = agent.status;
+    }
+  }, [displayAgents, activeAgentId, windowFocused]);
+
+  // 用户查看过（活跃会话 + 窗口聚焦）即清除未读
+  useEffect(() => {
+    if (!activeAgentId || !windowFocused) return;
+    setUnreadCompletedByAgent((current) => {
+      if (!current[activeAgentId]) return current;
+      const next = { ...current };
+      delete next[activeAgentId];
+      return next;
+    });
+  }, [activeAgentId, windowFocused]);
+
+  const waitingAgentCount = displayAgents.filter((agent) => agent.awaitingInput).length;
+  const unreadCompletedCount = displayAgents.filter((agent) => unreadCompletedByAgent[agent.id]).length;
+  const prevWaitingCountRef = useRef(0);
+  useEffect(() => {
+    const total = waitingAgentCount + unreadCompletedCount;
+    const flash = waitingAgentCount > prevWaitingCountRef.current;
+    prevWaitingCountRef.current = waitingAgentCount;
+    if (total === 0) {
+      void api.app.setBadge({ count: 0, dataUrl: null, description: "" }).catch(() => undefined);
+      return;
+    }
+    // 角标是位图而非 DOM，无法用语义 token；固定色值与 --color-warning/--color-success 对齐。
+    // 等待输入优先用琥珀色（需要用户操作），否则绿色（完成待查看）。
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const badgeCtx = canvas.getContext("2d");
+    if (!badgeCtx) return;
+    badgeCtx.fillStyle = waitingAgentCount > 0 ? "#d97706" : "#16a34a";
+    badgeCtx.beginPath();
+    badgeCtx.arc(16, 16, 15, 0, Math.PI * 2);
+    badgeCtx.fill();
+    badgeCtx.fillStyle = "#ffffff";
+    badgeCtx.font = "bold 19px sans-serif";
+    badgeCtx.textAlign = "center";
+    badgeCtx.textBaseline = "middle";
+    badgeCtx.fillText(total > 9 ? "9+" : String(total), 16, 17);
+    void api.app.setBadge({
+      count: total,
+      dataUrl: canvas.toDataURL("image/png"),
+      description: t("app.badgeDescription", { waiting: waitingAgentCount, completed: unreadCompletedCount }),
+      flash,
+    }).catch(() => undefined);
+  }, [waitingAgentCount, unreadCompletedCount]);
 
   // 已删除内置 goal 完成检测。
 
@@ -6436,8 +6519,10 @@ export function App() {
                           <div className="conversation-body">
                             <div className="conversation-title">
                               {agent.status && (
-                                <span className={`agent-status-indicator status-${agent.status}`}>
-                                  {t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}
+                                <span className={`agent-status-indicator status-${agent.awaitingInput ? "waiting" : agent.status}`}>
+                                  {agent.awaitingInput
+                                    ? t("app.statusWaiting")
+                                    : t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}
                                 </span>
                               )}
                               <strong>{agent.title}</strong>
@@ -6652,7 +6737,7 @@ export function App() {
                                   <span className="agent-node-marker" aria-hidden="true" />
                                   <div className="conversation-body">
                                     <div className="conversation-title">
-                                      {agent.status && (<span className={`agent-status-indicator status-${agent.status}`}>{t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}</span>)}
+                                      {agent.status && (<span className={`agent-status-indicator status-${agent.awaitingInput ? "waiting" : agent.status}`}>{agent.awaitingInput ? t("app.statusWaiting") : t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}</span>)}
                                       <strong>{agent.title}</strong>
                                       {agent.noSession && (
                                         <span
@@ -7338,6 +7423,8 @@ export function App() {
               <div className="extension-widgets-container" key="widgets-container">
                 {!widgetsCollapsed && entries.filter(([key]) =>
                   widgetSessionKey && !(agentDismissedWidgets[widgetSessionKey]?.includes(key))
+                  // UCL 实时任务面板已覆盖 todo-panel widget 的内容，避免重复
+                  && !(key === "todo-panel" && maestroLiveTodosByAgent[activeAgentId])
                 ).map(([widgetKey, widgetLines]) => (
                   <ExtensionWidgetCard
                     key={widgetKey}

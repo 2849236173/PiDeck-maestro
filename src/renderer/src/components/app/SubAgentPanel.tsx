@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { CheckCircle2, ChevronDown, ChevronRight, CircleX, Copy, LoaderCircle, X } from 'lucide-react';
 import type { PiDesktopApi } from '../../../../preload';
-import type { ChatMessage, SubAgent, SubAgentStateUpdate } from '../../../../shared/types';
+import type { ChatMessage, MaestroGuiState, SubAgent, SubAgentStateUpdate } from '../../../../shared/types';
 import { t } from '../../i18n';
 import { showNotice } from '../../utils/notice';
 import { IconButton } from '../ui/IconButton';
@@ -18,6 +18,104 @@ interface SubAgentPanelProps {
 }
 
 const EMPTY_STATE: SubAgentStateUpdate = { running: [], completed: [] };
+const EMPTY_MAESTRO_STATE: MaestroGuiState = { connected: false };
+
+/** token 计数紧凑显示：1234 → 1.2k */
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}m`;
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+  return String(tokens);
+}
+
+/** maestro UCL 推送的目标/工作流/任务分区；字段形状由扩展决定，全部防御式解析，缺字段则不展示 */
+function MaestroStateSections({ state }: { state: MaestroGuiState }) {
+  if (!state.connected) return null;
+
+  const goal = state.goal && typeof state.goal === 'object' ? state.goal as Record<string, unknown> : undefined;
+  const goalText = goal && typeof goal.text === 'string' ? goal.text : '';
+  const goalStatus = goal && typeof goal.status === 'string' ? goal.status : '';
+  const goalTokensUsed = goal && typeof goal.tokensUsed === 'number' ? goal.tokensUsed : undefined;
+  const goalTokenBudget = goal && typeof goal.tokenBudget === 'number' ? goal.tokenBudget : undefined;
+
+  const workflow = state.workflow && typeof state.workflow === 'object' ? state.workflow as Record<string, any> : undefined;
+  const workflowLabel = workflow && typeof workflow.sessionLabel === 'string' ? workflow.sessionLabel : '';
+  const workflowStatus = workflow && typeof workflow.status === 'string' ? workflow.status : '';
+  const workflowRuns: any[] = workflow && Array.isArray(workflow.runs) ? workflow.runs : [];
+  const activeRun = workflow && workflow.activeRun && typeof workflow.activeRun === 'object' ? workflow.activeRun : undefined;
+  const completedRuns = workflowRuns.filter((run) => run && (run.status === 'completed' || run.status === 'done')).length;
+
+  const todos = Array.isArray(state.todos)
+    ? state.todos.filter((task): task is Record<string, any> => Boolean(task) && typeof task === 'object')
+    : [];
+
+  return (
+    <>
+      {goalText ? (
+        <section className="subagent-section maestro-panel-section">
+          <h3 className="subagent-section-title">{t('maestroPanel.goal')}</h3>
+          <div className="maestro-panel-block">
+            <div className="maestro-panel-line">
+              {goalStatus ? <span className={`maestro-panel-chip ${goalStatus}`}>{goalStatus}</span> : null}
+              {goalTokensUsed !== undefined ? (
+                <span className="maestro-panel-meta">
+                  {formatTokenCount(goalTokensUsed)}{goalTokenBudget ? ` / ${formatTokenCount(goalTokenBudget)}` : ''} {t('subAgent.tokens')}
+                </span>
+              ) : null}
+            </div>
+            <div className="maestro-panel-text">{goalText}</div>
+          </div>
+        </section>
+      ) : null}
+      {workflow ? (
+        <section className="subagent-section maestro-panel-section">
+          <h3 className="subagent-section-title">{t('maestroPanel.workflow')}{workflowRuns.length > 0 ? ` (${completedRuns}/${workflowRuns.length})` : ''}</h3>
+          <div className="maestro-panel-block">
+            <div className="maestro-panel-line">
+              {workflowStatus ? <span className={`maestro-panel-chip ${workflowStatus}`}>{workflowStatus}</span> : null}
+              {workflowLabel ? <span className="maestro-panel-meta">{workflowLabel}</span> : null}
+            </div>
+            {activeRun && typeof activeRun.command === 'string' ? (
+              <div className="maestro-panel-text">
+                {typeof activeRun.sequence === 'number' ? `#${activeRun.sequence} ` : ''}{activeRun.command}
+                {typeof activeRun.status === 'string' ? ` · ${activeRun.status}` : ''}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+      {todos.length > 0 ? (
+        <section className="subagent-section maestro-panel-section">
+          <h3 className="subagent-section-title">{t('maestroPanel.tasks')} ({todos.length})</h3>
+          <ul className="maestro-todo-list maestro-panel-todos">
+            {todos.slice(0, 20).map((task, index) => {
+              const status = typeof task.status === 'string' ? task.status : 'pending';
+              const assignee = task.assignee && typeof task.assignee === 'object' && typeof task.assignee.label === 'string' && task.assignee.label !== 'root'
+                ? task.assignee.label
+                : undefined;
+              return (
+                <li key={typeof task.id === 'string' ? task.id : index} className={`maestro-todo-item ${status}`}>
+                  <span className={`maestro-todo-status ${status}`} aria-hidden="true">
+                    {status === 'completed'
+                      ? <CheckCircle2 size={13} />
+                      : status === 'in_progress'
+                        ? <LoaderCircle size={13} className="maestro-todo-spinner" />
+                        : status === 'blocked'
+                          ? <CircleX size={13} />
+                          : <span className="maestro-todo-dot" />}
+                  </span>
+                  <span className="maestro-todo-main">
+                    <span className="maestro-todo-subject">{typeof task.subject === 'string' ? task.subject : ''}</span>
+                    {assignee ? <span className="maestro-todo-assignee">@{assignee}</span> : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+    </>
+  );
+}
 
 function formatElapsed(startTime: number, endTime?: number) {
   const seconds = Math.max(0, Math.round(((endTime ?? Date.now()) - startTime) / 1000));
@@ -133,6 +231,7 @@ function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopAp
             {item.agent && item.name ? <span>{item.agent}</span> : null}
             <span>{formatElapsed(item.startTime, item.endTime)}</span>
             {typeof item.toolCount === 'number' ? <span>{item.toolCount} {t('subAgent.tools')}</span> : null}
+            {typeof item.tokens === 'number' && item.tokens > 0 ? <span>{formatTokenCount(item.tokens)} {t('subAgent.tokens')}</span> : null}
           </span>
           {item.lastMessage ? <span className="subagent-item-preview">{item.lastMessage}</span> : null}
         </span>
@@ -214,6 +313,23 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking 
     };
   }, [agentId, api]);
 
+  // maestro UCL（GUI SSE）状态：目标/工作流/任务分区；未连接时不展示任何内容
+  const [maestroState, setMaestroState] = useState<MaestroGuiState>(EMPTY_MAESTRO_STATE);
+  useEffect(() => {
+    setMaestroState(EMPTY_MAESTRO_STATE);
+    const unsubscribe = api.maestroGui.onState((payload) => {
+      if (payload.agentId === agentId) setMaestroState(payload.state);
+    });
+    let cancelled = false;
+    void api.maestroGui.getState(agentId).then((snapshot) => {
+      if (!cancelled && snapshot) setMaestroState(snapshot);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [agentId, api]);
+
   // 主进程已对无变化状态去重推送；运行中条目的耗时需要本地计时器驱动重渲染才能每秒跳动。
   const hasRunning = state.running.length > 0;
   const [, setElapsedTick] = useState(0);
@@ -247,6 +363,7 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking 
         </button>
       </header>
       <div className="subagent-panel-content">
+        <MaestroStateSections state={maestroState} />
         {renderSection(t('subAgent.running'), t('subAgent.noRunning'), state.running)}
         <section className="subagent-section subagent-history-section">
           <button type="button" className="subagent-history-toggle" onClick={() => setHistoryExpanded((expanded) => !expanded)} aria-expanded={historyExpanded}>

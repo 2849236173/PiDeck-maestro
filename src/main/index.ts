@@ -2522,6 +2522,31 @@ function registerIpc() {
 			pi,
 		};
 	});
+	// 任务栏角标：Windows 用 overlay icon（渲染端画好的计数小圆），macOS/Linux 用原生 badge count；
+	// count=0 清除；flash 在需要用户注意时闪烁任务栏（窗口聚焦时系统自动停止）。
+	ipcMain.handle(
+		ipcChannels.appSetBadge,
+		(_event, payload: { count: number; dataUrl?: string | null; description?: string; flash?: boolean }) => {
+			if (!mainWindow || mainWindow.isDestroyed()) return;
+			if (process.platform === "win32") {
+				if (payload.count > 0 && payload.dataUrl) {
+					try {
+						mainWindow.setOverlayIcon(nativeImage.createFromDataURL(payload.dataUrl), payload.description ?? "");
+					} catch {
+						// dataURL 异常时静默忽略，不影响主流程
+					}
+				} else {
+					mainWindow.setOverlayIcon(null, "");
+				}
+			} else {
+				try { app.setBadgeCount(payload.count); } catch { /* 部分 Linux 环境不支持 */ }
+			}
+			if (payload.flash && !mainWindow.isFocused()) {
+				mainWindow.flashFrame(true);
+			}
+		},
+	);
+
 	ipcMain.handle(ipcChannels.appOpenExternal, async (_event, url: string, forceSystem?: boolean) => {
 		// 外部链接统一经主进程打开，避免 renderer 直接依赖 shell 权限，并遵守用户设置的打开方式。
 		// forceSystem 为 true 时绕过 linkOpenMode 检查，始终用系统默认浏览器。
@@ -3297,6 +3322,10 @@ function registerIpc() {
 
 	ipcMain.handle(ipcChannels.subAgentsGetState, (_event, agentId: string) =>
 		agentManager.getSubAgentState(agentId),
+	);
+
+	ipcMain.handle(ipcChannels.maestroGuiGetState, (_event, agentId: string) =>
+		agentManager.getMaestroGuiState(agentId),
 	);
 
 	ipcMain.handle(ipcChannels.terminalList, (_event, agentId: string) =>

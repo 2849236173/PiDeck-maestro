@@ -69,6 +69,8 @@ export type AgentTab = {
 	compactionCount?: number;
 	/** 瞬时会话（--no-session），不保存记录，关闭即丢失 */
 	noSession?: boolean;
+	/** 存在挂起的交互式 UI 请求（ask_question 等）；此时不应继续展示“运行中”，而是“等待输入” */
+	awaitingInput?: boolean;
 };
 
 export type TerminalShell = "pwsh" | "powershell" | "cmd" | "zsh" | "bash" | "fish" | "sh";
@@ -129,6 +131,21 @@ export type SubAgent = {
 	toolCount?: number;      // 工具调用数量
 	lastMessage?: string;    // 最后一条消息摘要
 	cached: boolean;         // 是否已缓存完整数据（completed 后设为 true）
+	tokens?: number;         // 累计 token 用量（来自 maestro UCL teammate 事件的增强字段）
+	durationMs?: number;     // 运行耗时（来自 UCL 增强字段，比文件 mtime 推算更准）
+};
+
+/**
+ * maestro UCL（GUI SSE）状态快照。
+ * todos/goal/workflow 的字段形状由 pi-maestro-flow 决定，渲染端防御式解析，
+ * schema 变化时只退化为不展示而非报错。
+ */
+export type MaestroGuiState = {
+	connected: boolean;
+	todos?: unknown[];
+	goal?: unknown;
+	workflow?: unknown;
+	lastRun?: { runId?: string; from?: string; to?: string; command?: string; at: number };
 };
 
 /** 子代理状态更新事件 */
