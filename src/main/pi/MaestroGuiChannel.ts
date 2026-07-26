@@ -39,6 +39,8 @@ const DISCOVER_FAST_WINDOW_MS = 2 * 60 * 1000;
 const RECONNECT_DELAY_MS = 2000;
 const FETCH_TIMEOUT_MS = 5000;
 const REFETCH_DEBOUNCE_MS = 300;
+/** 周期性安全刷新：兼容事件丢失/上游未发事件的状态变化（如 run 被外部收尾） */
+const SAFETY_REFRESH_MS = 30_000;
 
 export class MaestroGuiChannel {
 	private token: string | null = null;
@@ -46,6 +48,7 @@ export class MaestroGuiChannel {
 	private discoverTimer: NodeJS.Timeout | null = null;
 	private discoverStartedAt = 0;
 	private sseRequest: ClientRequest | null = null;
+	private safetyTimer: NodeJS.Timeout | null = null;
 	private readonly refetchTimers = new Map<string, NodeJS.Timeout>();
 	private readonly snapshot: MaestroGuiSnapshot = { connected: false };
 
@@ -61,6 +64,8 @@ export class MaestroGuiChannel {
 		this.stopped = true;
 		if (this.discoverTimer) clearTimeout(this.discoverTimer);
 		this.discoverTimer = null;
+		if (this.safetyTimer) clearInterval(this.safetyTimer);
+		this.safetyTimer = null;
 		for (const timer of this.refetchTimers.values()) clearTimeout(timer);
 		this.refetchTimers.clear();
 		this.teardownSse();
@@ -131,6 +136,9 @@ export class MaestroGuiChannel {
 
 		this.snapshot.connected = true;
 		this.emitSnapshot();
+
+		if (this.safetyTimer) clearInterval(this.safetyTimer);
+		this.safetyTimer = setInterval(() => { void this.refreshAllState(); }, SAFETY_REFRESH_MS);
 
 		let buffer = "";
 		response.setEncoding("utf-8");
@@ -209,6 +217,8 @@ export class MaestroGuiChannel {
 	private handleDisconnect() {
 		if (this.stopped) return;
 		this.teardownSse();
+		if (this.safetyTimer) clearInterval(this.safetyTimer);
+		this.safetyTimer = null;
 		if (this.snapshot.connected) {
 			this.snapshot.connected = false;
 			this.emitSnapshot();

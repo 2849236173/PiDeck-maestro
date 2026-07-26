@@ -143,6 +143,7 @@ import {
   type SessionModifiedFile,
 } from "./components/app/AppParts";
 import { SubAgentPanel } from "./components/app/SubAgentPanel";
+import { SubAgentDetailModal } from "./components/app/SubAgentDetailModal";
 import { GitPanel } from "./components/app/GitPanel";
 import { BrowserPanel, moduleState, navigateTo } from "./components/app/BrowserPanel";
 import {
@@ -1069,6 +1070,8 @@ export function App() {
   const [compacting, setCompacting] = useState(false);
   const [drawer, setDrawer] = useState<DrawerPanel | null>(null);
   const [subAgentPanelVisible, setSubAgentPanelVisible] = useState(true);
+  // 子代理全屏详情弹层：面板条目与对话流内嵌卡片共用；refId 为面板 id 或 correlationId
+  const [subAgentDetail, setSubAgentDetail] = useState<{ agentId: string; refId: string } | null>(null);
   // maestro UCL 实时任务可用时，隐藏 setWidget 推来的 todo-panel 文本卡片，避免双源重复展示
   const [maestroLiveTodosByAgent, setMaestroLiveTodosByAgent] = useState<Record<string, boolean>>({});
   useEffect(() => {
@@ -7244,6 +7247,9 @@ export function App() {
                       onOpenExternal={(url) => api.app.openExternal(url)}
                       onOpenFile={openFilePath}
                       onDiffFile={diffFilePath}
+                      onOpenSubAgent={(correlationId) =>
+                        activeAgentId && setSubAgentDetail({ agentId: activeAgentId, refId: correlationId })
+                      }
                       onEditMessage={editMessage}
                       onDeleteMessage={deleteMessage}
                       onEnterMultiSelect={() => setMultiSelectOpen(true)}
@@ -8199,8 +8205,8 @@ export function App() {
           agentId={activeAgentId}
           api={api}
           onClose={() => setSubAgentPanelVisible(false)}
-          onOpenFile={openFilePath}
-          showThinking={settings.showThinking}
+          onOpenDetail={(item) => setSubAgentDetail({ agentId: activeAgentId, refId: item.id })}
+          agentIdle={activeAgent?.status === "idle"}
           onResizeStart={startSubAgentPanelResize}
         />
       )}
@@ -9123,6 +9129,16 @@ filePath={gitDrawerDiff.filePath}
         <ImagePreviewModal
           image={previewImage}
           onClose={() => setPreviewImage(null)}
+        />
+      )}
+      {subAgentDetail && (
+        <SubAgentDetailModal
+          api={api}
+          agentId={subAgentDetail.agentId}
+          refId={subAgentDetail.refId}
+          onClose={() => setSubAgentDetail(null)}
+          onOpenFile={openFilePath}
+          showThinking={settings.showThinking}
         />
       )}
       {codexImportProject && (

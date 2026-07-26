@@ -3143,6 +3143,16 @@ export class AgentManager {
 				if (candidate.sessionFile) knownSessionFiles.add(candidate.sessionFile);
 				else if (candidate.correlationId) pendingRuntimeEntries.push(candidate);
 			}
+			// maestro explore/delegate/moa 经 runTeammate 落盘会话文件，但工具事件不携带
+			// correlationId/onProgress，无法走常规合并；回退：把新文件按时序绑定到最早的
+			// 活跃 maestro 占位，消除重复条目并让详情可点击。仅限 agent 以 maestro· 开头的
+			// 占位，不会误吞 teammate 工具的文件（它们的占位很快会获得 correlationId）。
+			const maestroPlaceholders = [...subAgents.values()]
+				.filter((candidate) =>
+					!candidate.sessionFile && !candidate.correlationId &&
+					typeof candidate.agent === 'string' && candidate.agent.startsWith('maestro·') &&
+					(candidate.status === 'pending' || candidate.status === 'running' || candidate.status === 'finalizing'))
+				.sort((a, b) => a.startTime - b.startTime);
 
 			for (const sessionFile of sessionFiles) {
 				const relativePath = relative(subAgentDir, sessionFile).replace(/\\/g, '/');
@@ -3155,9 +3165,12 @@ export class AgentManager {
 
 				const stat = statSync(sessionFile);
 				const pathSegments = relativePath.split('/');
-				const runtimeEntry = pendingRuntimeEntries.find((candidate) =>
+				let runtimeEntry = pendingRuntimeEntries.find((candidate) =>
 					!candidate.sessionFile && candidate.correlationId && pathSegments.includes(candidate.correlationId),
 				);
+				if (!runtimeEntry && maestroPlaceholders.length > 0 && stat.birthtimeMs >= maestroPlaceholders[0].startTime - 10_000) {
+					runtimeEntry = maestroPlaceholders.shift();
+				}
 				const subAgent: import('../../shared/types').SubAgent = runtimeEntry ?? {
 					id: subAgentId,
 					status: 'running',
@@ -3373,7 +3386,9 @@ export class AgentManager {
 		const subAgents = this.subAgentsByAgent.get(agentId);
 		if (!subAgents) return [];
 
-		const subAgent = subAgents.get(subAgentId);
+		// 先按面板 id 寻址；对话流内嵌卡片只有 correlationId，回退按它匹配
+		const subAgent = subAgents.get(subAgentId)
+			?? [...subAgents.values()].find((candidate) => candidate.correlationId === subAgentId);
 		if (!subAgent?.sessionFile) return [];
 
 		try {
@@ -5068,6 +5083,7 @@ export class AgentManager {
 	private extractAgentProgress(result: unknown): Array<{
 		agent?: string;
 		name?: string;
+		correlationId?: string;
 		status?: string;
 		recentTools?: Array<{ name: string; status?: string }>;
 		toolCount?: number;
@@ -5088,6 +5104,8 @@ export class AgentManager {
 				progress.push({
 					agent: p.agent,
 					name: p.name,
+					// 携带 correlationId，对话流卡片点击时用它寻址到子代理会话
+					correlationId: typeof p.correlationId === "string" ? p.correlationId : undefined,
 					status: p.status,
 					recentTools: Array.isArray(p.recentTools)
 						? p.recentTools.slice(0, 3).map((t: any) => ({
@@ -5110,6 +5128,7 @@ export class AgentManager {
 				progress.push({
 					agent: c.agent,
 					name: c.name,
+					correlationId: typeof c.correlationId === "string" ? c.correlationId : undefined,
 					status: c.status,
 					recentTools: Array.isArray(c.recentTools)
 						? c.recentTools.slice(0, 3).map((t: any) => ({

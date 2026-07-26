@@ -5,13 +5,15 @@ import test from "node:test";
 test("sub-agent panel is connected to preload state and detail APIs", () => {
   const preload = readFileSync("src/preload/index.ts", "utf8");
   const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
+  // 详情加载已从面板内嵌展开迁移到全屏弹层 SubAgentDetailModal
+  const detailModal = readFileSync("src/renderer/src/components/app/SubAgentDetailModal.tsx", "utf8");
 
   assert.match(preload, /subAgents:\s*\{/);
   assert.match(preload, /subAgentsStateUpdate/);
   assert.match(preload, /subAgentsLoadDetail/);
   assert.match(panel, /api\.subAgents\.onState/);
   assert.match(panel, /payload\.agentId === agentId/);
-  assert.match(panel, /api\.subAgents\.loadDetail/);
+  assert.match(detailModal, /api\.subAgents\.loadDetail/);
   assert.doesNotMatch(panel, /running'\)} \(0\)/);
 });
 
@@ -50,10 +52,12 @@ test("teammate lifecycle creates immediate placeholders and does not complete on
 
 test("sub-agent details reuse rich assistant rendering and separate active count from history", () => {
   const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
+  // 详情渲染已迁移到全屏弹层；富文本渲染断言改查 SubAgentDetailModal
+  const detailModal = readFileSync("src/renderer/src/components/app/SubAgentDetailModal.tsx", "utf8");
 
   // AssistantText 与 ThinkingBlock/ToolCard 已合并为同一条 import；只断言它确实来自 AppParts
-  assert.match(panel, /import \{[^}]*AssistantText[^}]*\} from '\.\/AppParts'/);
-  assert.match(panel, /<AssistantText[\s\S]*?text=\{message\.text\}/);
+  assert.match(detailModal, /import \{[^}]*AssistantText[^}]*\} from '\.\/AppParts'/);
+  assert.match(detailModal, /<AssistantText[\s\S]*?text=\{message\.text\}/);
   assert.match(panel, /subAgent\.activeCount/);
   assert.match(panel, /subAgent\.history/);
   assert.match(panel, /historyExpanded &&/);

@@ -1965,11 +1965,13 @@ const LiveDuration = memo(function LiveDuration(props: { startedAt: number }) {
 	return <span className="tool-card-duration" title={t("tool.durationTitle")}>{formatDuration(elapsed)}</span>;
 });
 
-/** 子代理进度列表，渲染 meta._agentProgress 中的结构化进度信息 */
+/** 子代理进度列表，渲染 meta._agentProgress 中的结构化进度信息；
+ *  条目带 correlationId 且提供 onOpenSubAgent 时可点击打开子代理全屏详情（Codex App 式体验） */
 const AgentProgressList = memo(function AgentProgressList(props: {
 	progress: Array<{
 		agent?: string;
 		name?: string;
+		correlationId?: string;
 		status?: string;
 		recentTools?: Array<{ name: string; status?: string }>;
 		toolCount?: number;
@@ -1978,6 +1980,7 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 		error?: string;
 	}>;
 	t: (key: TranslationKey) => string;
+	onOpenSubAgent?: (correlationId: string) => void;
 }) {
 	if (props.progress.length === 0) return null;
 
@@ -1989,11 +1992,21 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 				const lastTool = item.recentTools && item.recentTools.length > 0
 					? item.recentTools[item.recentTools.length - 1]
 					: undefined;
+				const clickable = Boolean(item.correlationId && props.onOpenSubAgent);
 
 				return (
 					<div
 						key={idx}
-						className={`agent-progress-item${isRunning ? " running" : ""}${hasError ? " error" : ""}`}
+						className={`agent-progress-item${isRunning ? " running" : ""}${hasError ? " error" : ""}${clickable ? " clickable" : ""}`}
+						role={clickable ? "button" : undefined}
+						tabIndex={clickable ? 0 : undefined}
+						onClick={clickable ? () => props.onOpenSubAgent?.(item.correlationId!) : undefined}
+						onKeyDown={clickable ? (event) => {
+							if (event.key === "Enter" || event.key === " ") {
+								event.preventDefault();
+								props.onOpenSubAgent?.(item.correlationId!);
+							}
+						} : undefined}
 					>
 						<div className="agent-progress-header">
 							{isRunning && <span className="agent-progress-spinner" aria-hidden="true" />}
@@ -2226,6 +2239,8 @@ export const ToolCard = memo(function ToolCard(props: {
 	onDiffFile?: DiffFileHandler;
 	/** 全局 lightbox 预览；未提供时（如子代理面板）回退为 inline 缩放 */
 	onPreviewImage?: (image: ImageContent) => void;
+	/** 点击子代理进度条目打开全屏详情；参数为 correlationId */
+	onOpenSubAgent?: (correlationId: string) => void;
 }) {
 	const [expanded, setExpanded] = useState(props.defaultOpen ?? false);
 	const userToggledRef = useRef(false);
@@ -2272,6 +2287,7 @@ export const ToolCard = memo(function ToolCard(props: {
 	const agentProgress = props.message.meta?._agentProgress as Array<{
 		agent?: string;
 		name?: string;
+		correlationId?: string;
 		status?: string;
 		recentTools?: Array<{ name: string; status?: string }>;
 		toolCount?: number;
@@ -2432,7 +2448,7 @@ const statusLabel =
 					) : (
 						<>
 							{agentProgress && agentProgress.length > 0 && (
-								<AgentProgressList progress={agentProgress} t={t} />
+								<AgentProgressList progress={agentProgress} t={t} onOpenSubAgent={props.onOpenSubAgent} />
 							)}
 							{resultImages && resultImages.length > 0 && (
 								<div className="tool-card-images">
@@ -2480,12 +2496,13 @@ export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	group: ToolGroupItem;
 	onDiffFile?: DiffFileHandler;
 	onPreviewImage?: (image: ImageContent) => void;
+	onOpenSubAgent?: (correlationId: string) => void;
 }) {
 	return (
 		<section className="tool-group-card flat" data-message-id={props.group.id}>
 			<div className="tool-group-card-list">
 				{props.group.messages.map((message) => (
-					<ToolCard key={message.id} message={message} onDiffFile={props.onDiffFile} onPreviewImage={props.onPreviewImage} />
+					<ToolCard key={message.id} message={message} onDiffFile={props.onDiffFile} onPreviewImage={props.onPreviewImage} onOpenSubAgent={props.onOpenSubAgent} />
 				))}
 			</div>
 		</section>
@@ -3124,6 +3141,7 @@ export const TurnRow = memo(function TurnRow(props: {
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 	onDiffFile?: DiffFileHandler;
+	onOpenSubAgent?: (correlationId: string) => void;
 	onResendUserMessage?: (message: ChatMessage) => void;
 	onDeleteMessage?: (messageId: string) => void;
 	onEditMessage?: (messageId: string, newText: string) => void;
@@ -3273,7 +3291,7 @@ export const TurnRow = memo(function TurnRow(props: {
 			);
 		}
 		if (item.kind === "tool-group") {
-			return <ToolGroupCard key={item.id} group={item} onDiffFile={props.onDiffFile} onPreviewImage={props.onPreviewImage} />;
+			return <ToolGroupCard key={item.id} group={item} onDiffFile={props.onDiffFile} onPreviewImage={props.onPreviewImage} onOpenSubAgent={props.onOpenSubAgent} />;
 		}
 		if (item.kind === "message" && item.message.role === "assistant") {
 			const txt = stripThinkingTags(stripAnsi(item.message.text)).trim();

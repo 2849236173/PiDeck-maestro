@@ -4876,6 +4876,20 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
+.agent-progress-item.clickable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.agent-progress-item.clickable:hover {
+  background: var(--color-bg-hover);
+}
+
+.agent-progress-item.clickable:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .agent-progress-item {
   display: flex;
   flex-direction: column;
@@ -8338,6 +8352,51 @@ body.is-resizing .subagent-panel-resizer::before {
   padding: var(--space-3);
 }
 
+/* 子代理全屏详情弹层：头部概览 + 完整消息时间线 */
+.subagent-detail-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.subagent-detail-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.subagent-detail-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subagent-detail-titles strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-title);
+  line-height: var(--line-height-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.subagent-detail-messages {
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0;
+}
+
 /* maestro UCL 推送的目标/工作流/任务分区 */
 .maestro-panel-section {
   padding-bottom: var(--space-2);
@@ -8397,6 +8456,15 @@ body.is-resizing .subagent-panel-resizer::before {
   color: var(--color-text-secondary);
   line-height: var(--line-height-body);
   word-break: break-word;
+}
+
+.maestro-panel-stale {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-panel));
+  color: var(--color-warning);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-micro);
 }
 
 .maestro-panel-todos {
