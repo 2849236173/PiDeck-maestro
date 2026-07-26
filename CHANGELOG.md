@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-3 - 2026-07-26
+
+### Sub-agent panel
+
+- Reused the main conversation Markdown, tool-card, and thinking renderers for sub-agent details.
+- Fixed `toolCall/toolResult` entries being displayed as raw JSON.
+
 ## v0.6.6-2 - 2026-07-26
 
 ### Stability fix

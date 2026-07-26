@@ -2,7 +2,11 @@
 
 完整更新日志仍维护在仓库根目录：
 
-当前兼容发行线为 `v0.6.6-2`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+当前兼容发行线为 `v0.6.6-3`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+
+## v0.6.6-3
+
+子代理详情统一使用主对话的 Markdown、工具卡片和思考内容渲染，修复工具调用原始 JSON 展示问题。
 
 ## v0.6.6-2
 

@@ -3,13 +3,14 @@ import { CheckCircle2, ChevronDown, ChevronRight, CircleX, LoaderCircle, X } fro
 import type { PiDesktopApi } from '../../../../preload';
 import type { ChatMessage, SubAgent, SubAgentStateUpdate } from '../../../../shared/types';
 import { t } from '../../i18n';
-import { AssistantText } from './AppParts';
+import { AssistantText, ThinkingBlock, ToolCard } from './AppParts';
 
 interface SubAgentPanelProps {
   agentId: string;
   api: PiDesktopApi;
   onClose: () => void;
   onOpenFile?: (path: string) => void;
+  showThinking?: boolean;
 }
 
 const EMPTY_STATE: SubAgentStateUpdate = { running: [], completed: [] };
@@ -22,8 +23,8 @@ function formatElapsed(startTime: number, endTime?: number) {
   return `${minutes}m ${remainder}s`;
 }
 
-function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopApi; onOpenFile?: (path: string) => void }) {
-  const { agentId, item, api, onOpenFile } = props;
+function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopApi; onOpenFile?: (path: string) => void; showThinking?: boolean }) {
+  const { agentId, item, api, onOpenFile, showThinking = true } = props;
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
@@ -96,13 +97,20 @@ function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopAp
                 <article key={message.id} className={`subagent-message ${message.role}`}>
                   <header>{message.role === 'assistant' ? t('subAgent.assistant') : message.role === 'user' ? t('subAgent.user') : message.role}</header>
                   {message.role === 'assistant' ? (
-                    <AssistantText
-                      text={message.text}
-                      images={message.images}
-                      onPreviewImage={() => undefined}
-                      onOpenExternal={(url) => void api.app.openExternal(url)}
-                      onOpenFile={onOpenFile}
-                    />
+                    <>
+                      {message.thinking ? <ThinkingBlock text={message.thinking} showThinking={showThinking} /> : null}
+                      {message.text.trim() ? (
+                        <AssistantText
+                          text={message.text}
+                          images={message.images}
+                          onPreviewImage={() => undefined}
+                          onOpenExternal={(url) => void api.app.openExternal(url)}
+                          onOpenFile={onOpenFile}
+                        />
+                      ) : null}
+                    </>
+                  ) : message.role === 'tool' ? (
+                    <ToolCard message={message} />
                   ) : (
                     <div className="subagent-message-plain">{message.text}</div>
                   )}
@@ -116,7 +124,7 @@ function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopAp
   );
 }
 
-export function SubAgentPanel({ agentId, api, onClose, onOpenFile }: SubAgentPanelProps) {
+export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking = true }: SubAgentPanelProps) {
   const [state, setState] = useState<SubAgentStateUpdate>(EMPTY_STATE);
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
@@ -134,7 +142,7 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile }: SubAgentPan
       {items.length === 0 ? (
         <div className="subagent-empty">{emptyText}</div>
       ) : (
-        items.map((item) => <SubAgentItem key={item.id} agentId={agentId} item={item} api={api} onOpenFile={onOpenFile} />)
+        items.map((item) => <SubAgentItem key={item.id} agentId={agentId} item={item} api={api} onOpenFile={onOpenFile} showThinking={showThinking} />)
       )}
     </section>
   );
@@ -158,7 +166,7 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile }: SubAgentPan
           </button>
           {historyExpanded && (state.completed.length === 0
             ? <div className="subagent-empty">{t('subAgent.noCompleted')}</div>
-            : state.completed.map((item) => <SubAgentItem key={item.id} agentId={agentId} item={item} api={api} onOpenFile={onOpenFile} />))}
+            : state.completed.map((item) => <SubAgentItem key={item.id} agentId={agentId} item={item} api={api} onOpenFile={onOpenFile} showThinking={showThinking} />))}
         </section>
       </div>
     </aside>

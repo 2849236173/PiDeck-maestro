@@ -3135,47 +3135,22 @@ export class AgentManager {
 		try {
 			const content = await readFile(subAgent.sessionFile, 'utf-8');
 			const lines = content.trim().split('\n').filter(line => line.trim());
-
-			const messages: ChatMessage[] = [];
-
+			const rawMessages: unknown[] = [];
 			for (const line of lines) {
 				try {
 					const record = JSON.parse(line);
 					const entry = record?.message && typeof record.message === 'object' ? record.message : record;
-
-					// 转换为 ChatMessage 格式
-					if (entry.role === 'user' || entry.role === 'assistant') {
-						const message: ChatMessage = {
-							id: `${subAgentId}-${messages.length}`,
-							agentId: subAgentId,
-							role: entry.role,
-							text: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content),
-							timestamp: Date.now(), // 无法从 .jsonl 获取精确时间戳
-						};
-
-						// 如果是 assistant 消息且有 tool_use，提取工具调用
-						if (entry.role === 'assistant' && Array.isArray(entry.content)) {
-							for (const block of entry.content) {
-								if (block.type === 'tool_use') {
-									if (!message.meta) message.meta = {};
-									if (!message.meta.toolCalls) message.meta.toolCalls = [];
-									(message.meta.toolCalls as Array<{id: string; name: string; input: unknown}>).push({
-										id: block.id,
-										name: block.name,
-										input: block.input,
-									});
-								}
-							}
-						}
-
-						messages.push(message);
+					if (entry?.role === 'user' || entry?.role === 'assistant' || entry?.role === 'toolResult') {
+						rawMessages.push(entry);
 					}
 				} catch {
 					// 跳过无效行
 				}
 			}
 
-			return messages;
+			// 子代理和主会话共用 pi JSONL 格式，统一走主会话转换器，
+			// 这样 toolCall/toolResult、thinking、工具详情和错误状态不会退化为原始 JSON。
+			return this.convertAgentMessages(subAgentId, rawMessages);
 		} catch (error) {
 			return [];
 		}

@@ -8056,6 +8056,7 @@ export function App() {
           api={api}
           onClose={() => setSubAgentPanelVisible(false)}
           onOpenFile={openFilePath}
+          showThinking={settings.showThinking}
         />
       )}
 

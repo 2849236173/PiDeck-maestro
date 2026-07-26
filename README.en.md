@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-2** (2026-07-26)
+> **Latest compatibility release: v0.6.6-3** (2026-07-26)
+
+### v0.6.6-3 Maestro compatibility release
+
+- Improved sub-agent details with the same Markdown, tool-card, and thinking renderers used by the main conversation.
 
 ### v0.6.6-2 Maestro compatibility release
 
