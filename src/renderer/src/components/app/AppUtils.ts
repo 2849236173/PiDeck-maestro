@@ -192,6 +192,20 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 	let runEndedAt = 0;
 	/** 当前回合的触发用户消息时间戳，用于替代 assistant/tool 时间戳作为回合起点 */
 	let lastUserTimestamp = 0;
+	/**
+	 * 回合进行中收到的 system 提示（ask 卡片、自动重试/连接失败等）。
+	 * 不能立即 push 到 result：当前 run 尚未 flush，先入列会把提示提升到
+	 * 整个回合上方；缓冲到 run flush 之后再插入，保证提示始终渲染在消息底部。
+	 */
+	let pendingSystemMessages: ChatMessage[] = [];
+
+	function flushPendingSystem() {
+		if (pendingSystemMessages.length === 0) return;
+		for (const message of pendingSystemMessages) {
+			result.push({ kind: "message", message });
+		}
+		pendingSystemMessages = [];
+	}
 
 	function isThinkingOnly(message: ChatMessage) {
 		return (
@@ -244,7 +258,10 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 	function flushRun() {
 		flushTools();
 		flushThinking();
-		if (currentRun.length === 0) return;
+		if (currentRun.length === 0) {
+			flushPendingSystem();
+			return;
+		}
 
 		// 合并连续的 assistant 文本消息，避免同一轮回答被拆成多个气泡
 		const merged: Array<MessageItem | ToolGroupItem | ThinkingGroupItem> = [];
@@ -281,6 +298,7 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 		runStartedAt = 0;
 		runEndedAt = 0;
 		lastUserTimestamp = 0;
+		flushPendingSystem();
 	}
 
 	function appendRunMessage(message: ChatMessage) {
@@ -326,16 +344,20 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 			if (currentRun.length === 0) runStartedAt = message.timestamp;
 			currentTools.push(message);
 		} else if (message.role === "system") {
-			// System 消息（如 askQuestion 卡片）不应中断当前 agent run。
-			// 工具、thinking 和后续 assistant 消息应合并为同一轮回答，
-			// 否则会被拆成两个独立的折叠区域。
-			// 若已有暂存 run（前一次 ask_question 未合并），先 flush 掉。
-			if (pendingRun) {
-				currentRun.push(...pendingRun);
-				pendingRun = null;
-				flushRun();
+			// System 消息（如 askQuestion 卡片、自动重试提示）不应中断当前 agent run。
+			// 工具、thinking 和后续 assistant 消息应合并为同一轮回答。
+			// 回合进行中时不能立即入列（会被提升到整个回合上方），
+			// 缓冲到 run flush 之后再插入，保证提示始终显示在消息底部。
+			if (
+				currentRun.length > 0 ||
+				currentTools.length > 0 ||
+				currentThinking.length > 0 ||
+				pendingRun
+			) {
+				pendingSystemMessages.push(message);
+			} else {
+				result.push({ kind: "message", message });
 			}
-			result.push({ kind: "message", message });
 		} else {
 			// 若已有暂存 run（前一次 ask_question 未合并），先 flush 掉
 			if (pendingRun) {

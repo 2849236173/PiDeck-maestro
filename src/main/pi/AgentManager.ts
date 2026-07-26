@@ -4462,6 +4462,15 @@ export class AgentManager {
 		const list = this.messages.get(agentId) ?? [];
 		let messageId = this.retryStatusMessageIds.get(agentId);
 		let message = messageId ? list.find((item) => item.id === messageId) : undefined;
+		if (message) {
+			// 会话继续推进后再次重试时，把状态消息挪到列表末尾；
+			// 否则“连接失败/正在重试”会停留在历史中间，用户在底部看不到。
+			const index = list.indexOf(message);
+			if (index !== -1 && index !== list.length - 1) {
+				list.splice(index, 1);
+				list.push(message);
+			}
+		}
 		if (!message) {
 			messageId = randomUUID();
 			message = {
