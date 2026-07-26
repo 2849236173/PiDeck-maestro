@@ -4565,6 +4565,112 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   color: var(--color-text-tertiary);
 }
 
+/* bash 工具专属视图：命令行 + 输出分离 + exit code 徽标 */
+.bash-tool-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.bash-tool-command {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+.bash-tool-prompt {
+  color: var(--color-text-tertiary);
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.bash-tool-exit {
+  flex: 0 0 auto;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-bg-panel));
+  color: var(--color-danger);
+  font-size: var(--font-size-micro);
+}
+
+.bash-tool-output {
+  margin: 0;
+  padding: var(--space-2);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.bash-tool-empty {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+.bash-tool-expand {
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-2);
+  border: 1px dashed var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+  cursor: pointer;
+}
+
+.bash-tool-expand:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-emphasis);
+}
+
+.bash-tool-expand:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 工具参数表格：key-value 替代原始 JSON，可读性更好 */
+.tool-params-table {
+  margin: var(--space-2) var(--space-3) 0;
+  border-collapse: collapse;
+  font-size: var(--font-size-caption);
+  width: calc(100% - var(--space-3) * 2);
+}
+
+.tool-params-table td {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.tool-params-table tr:last-child td {
+  border-bottom: none;
+}
+
+.tool-param-key {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  white-space: nowrap;
+  width: 1%;
+}
+
+.tool-param-value {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 /* 工具结果中的图片（如 browser 截图）：默认缩略图，点击展开原尺寸 */
 .tool-card-images {
   display: flex;
@@ -10761,6 +10867,39 @@ body.is-resizing .subagent-panel-resizer::before {
     var(--color-border-subtle)
   );
   animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+/* 其它会话等待输入时 composer 上方的跳转提示条 */
+.waiting-input-banner {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 auto var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 36%, var(--color-border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-panel));
+  color: var(--color-warning);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.waiting-input-banner:hover {
+  background: color-mix(in srgb, var(--color-warning) 20%, var(--color-bg-panel));
+}
+
+.waiting-input-banner:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.waiting-input-banner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  flex: 0 0 auto;
 }
 
 /* 等待用户输入：区别于运行中的脉冲动画，用静态琥珀色提醒用户需要操作 */

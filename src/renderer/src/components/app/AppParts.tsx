@@ -2034,6 +2034,87 @@ const AgentProgressList = memo(function AgentProgressList(props: {
 	);
 });
 
+/** bash 工具专属展示：命令行 + 输出分离 + exit code 徽标 + 长输出折叠。
+ *  result 有两种形态：用户 `!` 命令路径为 {output, exitCode} 对象，模型调用路径为文本。 */
+const BASH_OUTPUT_COLLAPSE_LINES = 30;
+
+const BashToolView = memo(function BashToolView(props: { message: ChatMessage }) {
+	const meta = props.message.meta;
+	const [outputExpanded, setOutputExpanded] = useState(false);
+	if (!meta) return null;
+	const args = parseToolArgs(meta.args);
+	const command = typeof args?.command === "string"
+		? args.command
+		: typeof meta.command === "string" ? meta.command : "";
+	const result = meta.result;
+	const rawOutput = result && typeof result === "object"
+		? (typeof (result as { output?: unknown }).output === "string" ? (result as { output: string }).output : "")
+		: typeof result === "string" ? result : "";
+	const output = stripAnsi(rawOutput).trim();
+	const exitCode = getToolExitCode(props.message);
+	const lines = output ? output.split("\n") : [];
+	const collapsed = !outputExpanded && lines.length > BASH_OUTPUT_COLLAPSE_LINES;
+	// 长输出默认只显尾部：bash 的结论（错误/结果）通常在最后几行
+	const visibleOutput = collapsed ? lines.slice(-BASH_OUTPUT_COLLAPSE_LINES).join("\n") : output;
+
+	return (
+		<div className="bash-tool-view">
+			{command ? (
+				<div className="bash-tool-command">
+					<span className="bash-tool-prompt" aria-hidden="true">$</span>
+					<span>{command}</span>
+					{typeof exitCode === "number" && exitCode !== 0 ? (
+						<span className="bash-tool-exit">exit {exitCode}</span>
+					) : null}
+				</div>
+			) : null}
+			{collapsed ? (
+				<button
+					type="button"
+					className="bash-tool-expand"
+					onClick={() => setOutputExpanded(true)}
+				>
+					{t("tool.showFullOutput", { count: lines.length })}
+				</button>
+			) : null}
+			{output ? (
+				<pre className="bash-tool-output">{visibleOutput}</pre>
+			) : (
+				<div className="bash-tool-empty">{t("tool.noOutput")}</div>
+			)}
+		</div>
+	);
+});
+
+/** 参数表格化：浅层 key-value 比原始 JSON 可读得多；不可解析时返回 null 由调用方回退 */
+function formatParamValue(value: unknown): string {
+	let text: string;
+	if (typeof value === "string") text = value;
+	else {
+		try { text = JSON.stringify(value); } catch { text = String(value); }
+	}
+	return text.length > 400 ? `${text.slice(0, 400)}…` : text;
+}
+
+function ToolParamsTable(props: { message: ChatMessage }) {
+	const args = parseToolArgs(props.message.meta?.args);
+	if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+	const entries = Object.entries(args).slice(0, 16);
+	if (entries.length === 0) return null;
+	return (
+		<table className="tool-params-table">
+			<tbody>
+				{entries.map(([key, value]) => (
+					<tr key={key}>
+						<td className="tool-param-key">{key}</td>
+						<td className="tool-param-value">{formatParamValue(value)}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	);
+}
+
 /** 主进程 extractMaestroCard 产出的结构化卡片数据（见 AgentManager.extractMaestroCard） */
 type MaestroCardData =
 	| {
@@ -2173,6 +2254,16 @@ export const ToolCard = memo(function ToolCard(props: {
 	const isAskCard = Boolean(askCard?.question);
 	// pi-maestro-flow 工具的结构化卡片（todo 任务列表 / 问答结果 / 状态行），命中时替代原始 JSON 详情
 	const maestroCard = props.message.meta?._maestroCard as MaestroCardData | undefined;
+	// bash 走专属视图；其余工具 args 可解析时用参数表格替代原始 JSON，结果正文单独展示
+	const isBashTool = toolName.includes("bash") || toolName.includes("shell");
+	const parsedArgsForTable = parseToolArgs(props.message.meta?.args);
+	const hasParamsTable = Boolean(
+		parsedArgsForTable && typeof parsedArgsForTable === "object" &&
+		!Array.isArray(parsedArgsForTable) && Object.keys(parsedArgsForTable).length > 0,
+	);
+	const resultOnlyText = typeof props.message.meta?.result === "string"
+		? stripAnsi(props.message.meta.result).trim()
+		: "";
 	// 工具结果中的图片（如 browser 截图）；点击在缩略图与原尺寸间切换
 	const resultImages = props.message.images;
 	const [zoomedImage, setZoomedImage] = useState<number | null>(null);
@@ -2354,7 +2445,16 @@ const statusLabel =
 									))}
 								</div>
 							)}
-							<pre className="tool-card-detail">{detailText}</pre>
+							{isBashTool ? (
+								<BashToolView message={props.message} />
+							) : hasParamsTable ? (
+								<>
+									<ToolParamsTable message={props.message} />
+									{resultOnlyText ? <pre className="tool-card-detail">{resultOnlyText}</pre> : null}
+								</>
+							) : (
+								<pre className="tool-card-detail">{detailText}</pre>
+							)}
 						</>
 					)}
 					<button

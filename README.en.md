@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-3** (2026-07-26)
+> **Latest compatibility release: v0.6.6-4** (2026-07-26)
+
+### v0.6.6-4 Maestro compatibility release
+
+- Improved Maestro UCL, waiting-for-input state, taskbar badges, and sub-agent panel behavior.
 
 ### v0.6.6-3 Maestro compatibility release
 

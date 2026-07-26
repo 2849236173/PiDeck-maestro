@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.6-4 - 2026-07-26
+
+### Maestro workflow and sub-agents
+
+- Added the Maestro UCL read-only channel, waiting-for-input state, and taskbar badge.
+- Improved sub-agent panel performance, structured tool rendering, and interaction behavior.
+- Fixed system messages consistently staying at the bottom of the conversation.
+
 ## v0.6.6-3 - 2026-07-26
 
 ### Sub-agent panel
