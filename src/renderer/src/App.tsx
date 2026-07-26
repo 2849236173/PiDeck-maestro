@@ -2958,6 +2958,8 @@ export function App() {
   }, [activeAgentId, windowFocused]);
 
   const waitingAgentCount = displayAgents.filter((agent) => agent.awaitingInput).length;
+  // 其它会话在等待输入时，在 composer 上方给一个可点击的跳转提示（不重排列表，避免跳动）
+  const waitingOtherAgents = displayAgents.filter((agent) => agent.awaitingInput && agent.id !== activeAgentId);
   const unreadCompletedCount = displayAgents.filter((agent) => unreadCompletedByAgent[agent.id]).length;
   const prevWaitingCountRef = useRef(0);
   useEffect(() => {
@@ -6940,11 +6942,15 @@ export function App() {
                   {activeAgent.compactionCount}
                 </span>
               ) : null}
-              {activeAgentId && Object.values(extensionStatusByAgent[activeAgentId] ?? {}).filter(Boolean).length > 0 && (
-                <span className="chat-extension-status" role="status">
-                  {Object.values(extensionStatusByAgent[activeAgentId] ?? {}).filter(Boolean).join(" · ")}
-                </span>
-              )}
+              {activeAgentId && Object.values(extensionStatusByAgent[activeAgentId] ?? {}).filter(Boolean).length > 0 && (() => {
+                // 多个 statusKey 拼接后可能超出 max-width 被省略，title 提供完整内容
+                const statusText = Object.values(extensionStatusByAgent[activeAgentId] ?? {}).filter(Boolean).join(" · ");
+                return (
+                  <span className="chat-extension-status" role="status" title={statusText}>
+                    {statusText}
+                  </span>
+                );
+              })()}
             </div>
           </div>
           <div
@@ -7446,6 +7452,20 @@ export function App() {
               </div>
             );
           })()}
+          {waitingOtherAgents.length > 0 && (
+            <button
+              type="button"
+              className="waiting-input-banner"
+              onClick={() => {
+                const next = waitingOtherAgents[0];
+                setActiveProjectId(next.projectId);
+                setActiveAgentId(next.id);
+              }}
+            >
+              <span className="waiting-input-banner-dot" aria-hidden="true" />
+              {t("app.waitingBannerJump", { count: waitingOtherAgents.length })}
+            </button>
+          )}
           {activeQueuedPrompts.length > 0 && activeAgentId && (
             <div
               ref={queuedTrackRef}

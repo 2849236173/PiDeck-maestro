@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-5 - 2026-07-26
+
+### Interaction improvements
+
+- Added a jump banner for other sessions waiting for input.
+- Tool-result images can now open in the global preview window.
+
 ## v0.6.6-4 - 2026-07-26
 
 ### Maestro workflow and sub-agents

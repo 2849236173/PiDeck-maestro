@@ -27,8 +27,35 @@ function formatTokenCount(tokens: number): string {
   return String(tokens);
 }
 
+const SECTION_COLLAPSE_KEY = 'pideck-subagent-sections';
+
+function loadCollapsedSections(): Record<string, boolean> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SECTION_COLLAPSE_KEY) ?? '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 可折叠分区标题；样式复用历史分区的 toggle */
+function SectionToggle(props: { title: string; count?: string; collapsed: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="subagent-history-toggle" onClick={props.onToggle} aria-expanded={!props.collapsed}>
+      {props.collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+      <span>{props.title}</span>
+      {props.count ? <span>{props.count}</span> : null}
+    </button>
+  );
+}
+
 /** maestro UCL 推送的目标/工作流/任务分区；字段形状由扩展决定，全部防御式解析，缺字段则不展示 */
-function MaestroStateSections({ state }: { state: MaestroGuiState }) {
+function MaestroStateSections({ state, collapsed, onToggle }: {
+  state: MaestroGuiState;
+  collapsed: Record<string, boolean>;
+  onToggle: (key: string) => void;
+}) {
+  const [showAllTasks, setShowAllTasks] = useState(false);
   if (!state.connected) return null;
 
   const goal = state.goal && typeof state.goal === 'object' ? state.goal as Record<string, unknown> : undefined;
@@ -52,7 +79,8 @@ function MaestroStateSections({ state }: { state: MaestroGuiState }) {
     <>
       {goalText ? (
         <section className="subagent-section maestro-panel-section">
-          <h3 className="subagent-section-title">{t('maestroPanel.goal')}</h3>
+          <SectionToggle title={t('maestroPanel.goal')} collapsed={Boolean(collapsed.goal)} onToggle={() => onToggle('goal')} />
+          {collapsed.goal ? null : (
           <div className="maestro-panel-block">
             <div className="maestro-panel-line">
               {goalStatus ? <span className={`maestro-panel-chip ${goalStatus}`}>{goalStatus}</span> : null}
@@ -64,12 +92,35 @@ function MaestroStateSections({ state }: { state: MaestroGuiState }) {
             </div>
             <div className="maestro-panel-text">{goalText}</div>
           </div>
+          )}
         </section>
       ) : null}
       {workflow ? (
         <section className="subagent-section maestro-panel-section">
-          <h3 className="subagent-section-title">{t('maestroPanel.workflow')}{workflowRuns.length > 0 ? ` (${completedRuns}/${workflowRuns.length})` : ''}</h3>
+          <SectionToggle
+            title={t('maestroPanel.workflow')}
+            count={workflowRuns.length > 0 ? `${completedRuns}/${workflowRuns.length}` : undefined}
+            collapsed={Boolean(collapsed.workflow)}
+            onToggle={() => onToggle('workflow')}
+          />
+          {collapsed.workflow ? null : (
           <div className="maestro-panel-block">
+            {workflowRuns.length > 1 ? (
+              <div className="maestro-run-dots">
+                {workflowRuns.slice(0, 30).map((run, index) => {
+                  const status = typeof run?.status === 'string' ? run.status : '';
+                  const kind = status === 'completed' || status === 'done'
+                    ? 'done'
+                    : status === 'running' || status === 'active' || status === 'in_progress'
+                      ? 'active'
+                      : status === 'failed' || status === 'blocked'
+                        ? 'failed'
+                        : 'pending';
+                  const label = `${typeof run?.sequence === 'number' ? `#${run.sequence} ` : ''}${typeof run?.command === 'string' ? run.command : ''}${status ? ` · ${status}` : ''}`.trim();
+                  return <span key={index} className={`maestro-run-dot ${kind}`} title={label} />;
+                })}
+              </div>
+            ) : null}
             <div className="maestro-panel-line">
               {workflowStatus ? <span className={`maestro-panel-chip ${workflowStatus}`}>{workflowStatus}</span> : null}
               {workflowLabel ? <span className="maestro-panel-meta">{workflowLabel}</span> : null}
@@ -81,13 +132,21 @@ function MaestroStateSections({ state }: { state: MaestroGuiState }) {
               </div>
             ) : null}
           </div>
+          )}
         </section>
       ) : null}
       {todos.length > 0 ? (
         <section className="subagent-section maestro-panel-section">
-          <h3 className="subagent-section-title">{t('maestroPanel.tasks')} ({todos.length})</h3>
+          <SectionToggle
+            title={t('maestroPanel.tasks')}
+            count={String(todos.length)}
+            collapsed={Boolean(collapsed.tasks)}
+            onToggle={() => onToggle('tasks')}
+          />
+          {collapsed.tasks ? null : (
+          <>
           <ul className="maestro-todo-list maestro-panel-todos">
-            {todos.slice(0, 20).map((task, index) => {
+            {(showAllTasks ? todos : todos.slice(0, 20)).map((task, index) => {
               const status = typeof task.status === 'string' ? task.status : 'pending';
               const assignee = task.assignee && typeof task.assignee === 'object' && typeof task.assignee.label === 'string' && task.assignee.label !== 'root'
                 ? task.assignee.label
@@ -111,6 +170,13 @@ function MaestroStateSections({ state }: { state: MaestroGuiState }) {
               );
             })}
           </ul>
+          {!showAllTasks && todos.length > 20 ? (
+            <button type="button" className="subagent-load-earlier" onClick={() => setShowAllTasks(true)}>
+              {t('maestroPanel.showRemaining', { count: todos.length - 20 })}
+            </button>
+          ) : null}
+          </>
+          )}
         </section>
       ) : null}
     </>
@@ -295,6 +361,15 @@ function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopAp
 export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking = true, onResizeStart }: SubAgentPanelProps) {
   const [state, setState] = useState<SubAgentStateUpdate>(EMPTY_STATE);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  // 分区折叠状态持久化：面板内容变多后（目标/工作流/任务/运行中/历史）用户需要控制可见范围
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(loadCollapsedSections);
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem(SECTION_COLLAPSE_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     // IPC 事件携带父 Agent id；切换会话时先清空，避免短暂展示上一个会话的子代理。
@@ -341,8 +416,13 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking 
 
   const renderSection = (title: string, emptyText: string, items: SubAgent[]) => (
     <section className="subagent-section">
-      <h3 className="subagent-section-title">{title} ({items.length})</h3>
-      {items.length === 0 ? (
+      <SectionToggle
+        title={title}
+        count={String(items.length)}
+        collapsed={Boolean(collapsedSections.running)}
+        onToggle={() => toggleSection('running')}
+      />
+      {collapsedSections.running ? null : items.length === 0 ? (
         <div className="subagent-empty">{emptyText}</div>
       ) : (
         items.map((item) => <SubAgentItem key={item.id} agentId={agentId} item={item} api={api} onOpenFile={onOpenFile} showThinking={showThinking} />)
@@ -363,7 +443,7 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking 
         </button>
       </header>
       <div className="subagent-panel-content">
-        <MaestroStateSections state={maestroState} />
+        <MaestroStateSections state={maestroState} collapsed={collapsedSections} onToggle={toggleSection} />
         {renderSection(t('subAgent.running'), t('subAgent.noRunning'), state.running)}
         <section className="subagent-section subagent-history-section">
           <button type="button" className="subagent-history-toggle" onClick={() => setHistoryExpanded((expanded) => !expanded)} aria-expanded={historyExpanded}>

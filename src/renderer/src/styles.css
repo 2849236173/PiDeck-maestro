@@ -8403,6 +8403,38 @@ body.is-resizing .subagent-panel-resizer::before {
   font-size: var(--font-size-small);
 }
 
+/* workflow run 链横向步骤点；title 提示每步命令与状态 */
+.maestro-run-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.maestro-run-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-emphasis);
+  background: transparent;
+}
+
+.maestro-run-dot.done {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}
+
+.maestro-run-dot.active {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+.maestro-run-dot.failed {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}
+
 .maestro-todo-dot {
   display: inline-block;
   width: 7px;

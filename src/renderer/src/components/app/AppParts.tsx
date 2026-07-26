@@ -2224,6 +2224,8 @@ export const ToolCard = memo(function ToolCard(props: {
 	message: ChatMessage;
 	defaultOpen?: boolean;
 	onDiffFile?: DiffFileHandler;
+	/** 全局 lightbox 预览；未提供时（如子代理面板）回退为 inline 缩放 */
+	onPreviewImage?: (image: ImageContent) => void;
 }) {
 	const [expanded, setExpanded] = useState(props.defaultOpen ?? false);
 	const userToggledRef = useRef(false);
@@ -2440,7 +2442,10 @@ const statusLabel =
 											src={`data:${img.mimeType};base64,${img.data}`}
 											alt={t("app.imageAlt", { index: index + 1 })}
 											className={`tool-card-image${zoomedImage === index ? " zoomed" : ""}`}
-											onClick={() => setZoomedImage((current) => (current === index ? null : index))}
+											onClick={() => {
+												if (props.onPreviewImage) props.onPreviewImage(img);
+												else setZoomedImage((current) => (current === index ? null : index));
+											}}
 										/>
 									))}
 								</div>
@@ -2474,12 +2479,13 @@ const statusLabel =
 export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	group: ToolGroupItem;
 	onDiffFile?: DiffFileHandler;
+	onPreviewImage?: (image: ImageContent) => void;
 }) {
 	return (
 		<section className="tool-group-card flat" data-message-id={props.group.id}>
 			<div className="tool-group-card-list">
 				{props.group.messages.map((message) => (
-					<ToolCard key={message.id} message={message} onDiffFile={props.onDiffFile} />
+					<ToolCard key={message.id} message={message} onDiffFile={props.onDiffFile} onPreviewImage={props.onPreviewImage} />
 				))}
 			</div>
 		</section>
@@ -3267,7 +3273,7 @@ export const TurnRow = memo(function TurnRow(props: {
 			);
 		}
 		if (item.kind === "tool-group") {
-			return <ToolGroupCard key={item.id} group={item} onDiffFile={props.onDiffFile} />;
+			return <ToolGroupCard key={item.id} group={item} onDiffFile={props.onDiffFile} onPreviewImage={props.onPreviewImage} />;
 		}
 		if (item.kind === "message" && item.message.role === "assistant") {
 			const txt = stripThinkingTags(stripAnsi(item.message.text)).trim();

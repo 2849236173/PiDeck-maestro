@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-4** (2026-07-26)
+> **Latest compatibility release: v0.6.6-5** (2026-07-26)
+
+### v0.6.6-5 Maestro compatibility release
+
+- Added quick navigation for sessions waiting for input and global preview for tool-result images.
 
 ### v0.6.6-4 Maestro compatibility release
 
