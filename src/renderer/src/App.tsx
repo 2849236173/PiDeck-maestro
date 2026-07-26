@@ -1069,6 +1069,14 @@ export function App() {
   const [compacting, setCompacting] = useState(false);
   const [drawer, setDrawer] = useState<DrawerPanel | null>(null);
   const [subAgentPanelVisible, setSubAgentPanelVisible] = useState(true);
+  // 子代理面板宽度可拖拽调整并持久化；280px 对详情阅读偏窄，允许用户自己权衡
+  const [subAgentPanelWidth, setSubAgentPanelWidth] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem("pideck-subagent-panel-width"));
+      if (Number.isFinite(raw) && raw >= 240 && raw <= 520) return raw;
+    } catch { /* localStorage 不可用时用默认宽度 */ }
+    return 280;
+  });
 
   useEffect(() => {
     // 详情仍在抽屉模式时，用户切换到其他面板应关闭快照，并且即使内容尚未返回也要废弃在途读取；
@@ -5837,6 +5845,35 @@ export function App() {
     window.addEventListener("pointerup", onUp);
   }
 
+  function startSubAgentPanelResize(event: PointerEvent) {
+    const startX = event.clientX;
+    const startWidth = subAgentPanelWidth;
+    let latest = startWidth;
+    let frame = 0;
+
+    function onMove(moveEvent: globalThis.PointerEvent) {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // 面板位于主区右侧，向左拖动意味着变宽
+        const next = Math.min(520, Math.max(240, startWidth - (moveEvent.clientX - startX)));
+        latest = next;
+        setSubAgentPanelWidth(next);
+      });
+    }
+
+    function onUp() {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("is-resizing");
+      try { localStorage.setItem("pideck-subagent-panel-width", String(latest)); } catch { /* 忽略 */ }
+    }
+
+    document.body.classList.add("is-resizing");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   function startComposerResize(event: PointerEvent) {
     const startY = event.clientY;
     const startHeight = resolvedComposerHeight;
@@ -5929,7 +5966,7 @@ export function App() {
           "--drawer-width": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
           "--drawer-col-w": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
           "--drawer-splitter-w": `${drawer && !drawerCollapsed ? 6 : 0}px`,
-          "--subagent-panel-col-w": `${subAgentPanelVisible ? 280 : 0}px`,
+          "--subagent-panel-col-w": `${subAgentPanelVisible ? subAgentPanelWidth : 0}px`,
         } as React.CSSProperties
       }
     >
@@ -8057,6 +8094,7 @@ export function App() {
           onClose={() => setSubAgentPanelVisible(false)}
           onOpenFile={openFilePath}
           showThinking={settings.showThinking}
+          onResizeStart={startSubAgentPanelResize}
         />
       )}
 

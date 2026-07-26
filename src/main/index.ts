@@ -3295,6 +3295,10 @@ function registerIpc() {
 		return await agentManager.loadSubAgentDetail(agentId, subAgentId);
 	});
 
+	ipcMain.handle(ipcChannels.subAgentsGetState, (_event, agentId: string) =>
+		agentManager.getSubAgentState(agentId),
+	);
+
 	ipcMain.handle(ipcChannels.terminalList, (_event, agentId: string) =>
 		terminalManager.list(agentId),
 	);

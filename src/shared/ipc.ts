@@ -315,6 +315,8 @@ export const ipcChannels = {
 	subAgentsStateUpdate: "sub-agents:state-update",
 	/** 渲染进程 → 主进程：请求加载子代理详细数据（点击已完成的子代理） */
 	subAgentsLoadDetail: "sub-agents:load-detail",
+	/** 渲染进程 → 主进程：拉取子代理当前状态快照（面板挂载/切换会话时立即展示，不等推送） */
+	subAgentsGetState: "sub-agents:get-state",
 	// ===== 系统文件选择器 =====
 	/** 打开系统原生文件/文件夹选择器，返回选中路径列表 */
 	dialogPickFiles: "dialog:pick-files",

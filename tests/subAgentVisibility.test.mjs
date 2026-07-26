@@ -51,7 +51,8 @@ test("teammate lifecycle creates immediate placeholders and does not complete on
 test("sub-agent details reuse rich assistant rendering and separate active count from history", () => {
   const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
 
-  assert.match(panel, /import \{ AssistantText \} from '\.\/AppParts'/);
+  // AssistantText 与 ThinkingBlock/ToolCard 已合并为同一条 import；只断言它确实来自 AppParts
+  assert.match(panel, /import \{[^}]*AssistantText[^}]*\} from '\.\/AppParts'/);
   assert.match(panel, /<AssistantText[\s\S]*?text=\{message\.text\}/);
   assert.match(panel, /subAgent\.activeCount/);
   assert.match(panel, /subAgent\.history/);

@@ -774,6 +774,7 @@ export function createPreviewApi(): PiDesktopApi {
 		subAgents: {
 			onState: noop,
 			loadDetail: async () => [],
+			getState: async () => ({ running: [], completed: [] }),
 		},
 		pet: {
 			onState: noop,

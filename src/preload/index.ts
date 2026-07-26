@@ -894,6 +894,9 @@ const api = {
 		/** 加载子代理完整会话，供面板展开查看详情。 */
 		loadDetail: (agentId: string, subAgentId: string) =>
 			ipcRenderer.invoke(ipcChannels.subAgentsLoadDetail, agentId, subAgentId) as Promise<ChatMessage[]>,
+		/** 拉取当前状态快照；面板挂载/切换会话时立即展示，避免等待下一次推送的空白窗口。 */
+		getState: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.subAgentsGetState, agentId) as Promise<SubAgentStateUpdate>,
 	},
 	pet: {
 		/** 宠物窗监听主进程推送的聚合状态 */

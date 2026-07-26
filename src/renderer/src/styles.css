@@ -7949,6 +7949,33 @@ body.is-composer-resizing .composer-resize-handle::after {
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* 子代理面板左缘拖拽把手；视觉上只在 hover/拖拽时显现一条细线，避免常驻分割线噪声 */
+.subagent-panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.subagent-panel-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.subagent-panel-resizer:hover::before,
+body.is-resizing .subagent-panel-resizer::before {
+  background: var(--color-border-emphasis);
+}
+
 .subagent-panel-header {
   height: 55px;
   flex: 0 0 55px;
@@ -8205,6 +8232,46 @@ body.is-composer-resizing .composer-resize-handle::after {
 
 .subagent-detail-state.error {
   color: var(--color-danger);
+}
+
+.subagent-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-1);
+}
+
+.subagent-copy-btn {
+  width: 24px;
+  height: 24px;
+  color: var(--color-text-tertiary);
+}
+
+.subagent-copy-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.subagent-load-earlier {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px dashed var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+  cursor: pointer;
+}
+
+.subagent-load-earlier:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-emphasis);
+  background: var(--color-bg-secondary);
+}
+
+.subagent-load-earlier:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .subagent-message-list {

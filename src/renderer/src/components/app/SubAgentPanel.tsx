@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronRight, CircleX, LoaderCircle, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { CheckCircle2, ChevronDown, ChevronRight, CircleX, Copy, LoaderCircle, X } from 'lucide-react';
 import type { PiDesktopApi } from '../../../../preload';
 import type { ChatMessage, SubAgent, SubAgentStateUpdate } from '../../../../shared/types';
 import { t } from '../../i18n';
+import { showNotice } from '../../utils/notice';
+import { IconButton } from '../ui/IconButton';
 import { AssistantText, ThinkingBlock, ToolCard } from './AppParts';
 
 interface SubAgentPanelProps {
@@ -11,6 +13,8 @@ interface SubAgentPanelProps {
   onClose: () => void;
   onOpenFile?: (path: string) => void;
   showThinking?: boolean;
+  /** 左侧边缘拖拽调宽的入口；宽度由 App 级 grid 列变量控制，面板只负责转发手势 */
+  onResizeStart?: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
 const EMPTY_STATE: SubAgentStateUpdate = { running: [], completed: [] };
@@ -23,37 +27,84 @@ function formatElapsed(startTime: number, endTime?: number) {
   return `${minutes}m ${remainder}s`;
 }
 
+const DETAIL_PAGE_SIZE = 24;
+
 function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopApi; onOpenFile?: (path: string) => void; showThinking?: boolean }) {
   const { agentId, item, api, onOpenFile, showThinking = true } = props;
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(DETAIL_PAGE_SIZE);
+  // 静默刷新不能与手动加载并发，用 ref 做互斥，避免反复 setState 闪烁
+  const refreshingRef = useRef(false);
 
   useEffect(() => {
     setExpanded(false);
     setMessages(null);
     setLoadFailed(false);
+    setVisibleCount(DETAIL_PAGE_SIZE);
   }, [agentId, item.id]);
+
+  const loadDetail = useCallback(async (silent: boolean) => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    if (!silent) {
+      setLoading(true);
+      setLoadFailed(false);
+    }
+    try {
+      setMessages(await api.subAgents.loadDetail(agentId, item.id));
+      if (!silent) setLoadFailed(false);
+    } catch {
+      if (!silent) setLoadFailed(true);
+    } finally {
+      refreshingRef.current = false;
+      if (!silent) setLoading(false);
+    }
+  }, [agentId, api, item.id]);
 
   const toggle = async () => {
     if (!item.sessionFile) return;
     const nextExpanded = !expanded;
     setExpanded(nextExpanded);
     if (!nextExpanded || messages || loading) return;
-
-    setLoading(true);
-    setLoadFailed(false);
-    try {
-      setMessages(await api.subAgents.loadDetail(agentId, item.id));
-    } catch {
-      setLoadFailed(true);
-    } finally {
-      setLoading(false);
-    }
+    await loadDetail(false);
   };
 
   const isActive = item.status === 'pending' || item.status === 'running' || item.status === 'finalizing';
+
+  // 子代理无法单独取消（pi RPC 只有整轮 abort），但结果应可一键带走：
+  // 优先复制最后一条 assistant 回答，未加载详情时先拉取再复制。
+  const copyFinalReply = async () => {
+    try {
+      let source = messages;
+      if (!source) {
+        source = await api.subAgents.loadDetail(agentId, item.id);
+        setMessages(source);
+      }
+      const lastAssistant = [...source].reverse().find((message) => message.role === 'assistant' && message.text.trim());
+      const text = lastAssistant?.text.trim() || item.lastMessage;
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      showNotice(t('subAgent.copied'), 1200);
+    } catch {
+      showNotice(t('copy.failed'), 2000);
+    }
+  };
+
+  // 展开的运行中子代理定时静默刷新详情，避免用户盯着一份陈旧快照；
+  // 转入终态时再补一次，拿到最终回答。
+  useEffect(() => {
+    if (!expanded || !item.sessionFile) return;
+    if (!isActive) {
+      if (messages) void loadDetail(true);
+      return;
+    }
+    const timer = setInterval(() => { void loadDetail(true); }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, isActive, item.sessionFile, loadDetail]);
   const statusIcon = isActive
     ? <LoaderCircle size={15} className="subagent-status-spinner" aria-hidden="true" />
     : item.status === 'completed'
@@ -89,11 +140,29 @@ function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopAp
       </button>
       {expanded && (
         <div className="subagent-item-details">
+          <div className="subagent-detail-actions">
+            <IconButton
+              label={t('subAgent.copyLastMessage')}
+              className="subagent-copy-btn"
+              onClick={() => void copyFinalReply()}
+            >
+              <Copy size={14} aria-hidden="true" />
+            </IconButton>
+          </div>
           {loading ? <div className="subagent-detail-state">{t('subAgent.loading')}</div> : null}
           {loadFailed ? <div className="subagent-detail-state error">{t('subAgent.loadFailed')}</div> : null}
+          {messages && messages.length > visibleCount ? (
+            <button
+              type="button"
+              className="subagent-load-earlier"
+              onClick={() => setVisibleCount((count) => count + DETAIL_PAGE_SIZE)}
+            >
+              {t('subAgent.showEarlier', { count: messages.length - visibleCount })}
+            </button>
+          ) : null}
           {messages && messages.length > 0 ? (
             <div className="subagent-message-list">
-              {messages.slice(-24).map((message) => (
+              {messages.slice(-visibleCount).map((message) => (
                 <article key={message.id} className={`subagent-message ${message.role}`}>
                   <header>{message.role === 'assistant' ? t('subAgent.assistant') : message.role === 'user' ? t('subAgent.user') : message.role}</header>
                   {message.role === 'assistant' ? (
@@ -124,17 +193,35 @@ function SubAgentItem(props: { agentId: string; item: SubAgent; api: PiDesktopAp
   );
 }
 
-export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking = true }: SubAgentPanelProps) {
+export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking = true, onResizeStart }: SubAgentPanelProps) {
   const [state, setState] = useState<SubAgentStateUpdate>(EMPTY_STATE);
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
   useEffect(() => {
     // IPC 事件携带父 Agent id；切换会话时先清空，避免短暂展示上一个会话的子代理。
     setState(EMPTY_STATE);
-    return api.subAgents.onState((payload) => {
+    const unsubscribe = api.subAgents.onState((payload) => {
       if (payload.agentId === agentId) setState(payload.update);
     });
+    // 主动拉一次快照：推送已去重，无变化时不会再发事件，不拉取会一直空白。
+    let cancelled = false;
+    void api.subAgents.getState(agentId).then((snapshot) => {
+      if (!cancelled && snapshot) setState(snapshot);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [agentId, api]);
+
+  // 主进程已对无变化状态去重推送；运行中条目的耗时需要本地计时器驱动重渲染才能每秒跳动。
+  const hasRunning = state.running.length > 0;
+  const [, setElapsedTick] = useState(0);
+  useEffect(() => {
+    if (!hasRunning) return;
+    const timer = setInterval(() => setElapsedTick((tick) => tick + 1), 1000);
+    return () => clearInterval(timer);
+  }, [hasRunning]);
 
   const renderSection = (title: string, emptyText: string, items: SubAgent[]) => (
     <section className="subagent-section">
@@ -149,6 +236,9 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenFile, showThinking 
 
   return (
     <aside className="subagent-panel" aria-label={t('subAgent.title')}>
+      {onResizeStart ? (
+        <div className="subagent-panel-resizer" onPointerDown={onResizeStart} aria-hidden="true" />
+      ) : null}
       <header className="subagent-panel-header">
         <strong>{t('subAgent.title')}</strong>
         <span className="subagent-active-count">{t('subAgent.activeCount', { count: state.running.length })}</span>
