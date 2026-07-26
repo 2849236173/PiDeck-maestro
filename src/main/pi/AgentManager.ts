@@ -123,6 +123,18 @@ export class AgentManager {
 	private readonly userInitiatedStop = new Set<string>();
 	/** 已尝试过自动重连的 agent（防止无限循环），重连成功后清除 */
 	private readonly autoRestartAttempted = new Set<string>();
+	/** Deck 级流读取错误重试次数；仅允许一次，避免重复执行用户请求。 */
+	private readonly deckStreamRetryAttempts = new Map<string, number>();
+	/** 当前 agent 最近一次 prompt 的原始投递信息，用于安全地截断并重发。 */
+	private readonly lastPromptByAgent = new Map<string, {
+		messageId: string;
+		agentMessage: string;
+		images?: ImageContent[];
+	}>();
+	/** 当前 agent 这一轮是否已经执行过工具；有副作用时禁止 Deck 自动重发。 */
+	private readonly runHadToolCalls = new Set<string>();
+	/** 等待 Deck 重试结果的 agent，用于把重试状态消息更新为成功。 */
+	private readonly pendingDeckStreamRetries = new Set<string>();
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, options }>。
@@ -1100,13 +1112,23 @@ export class AgentManager {
 		// 乐观更新：在等待 RPC 返回前先把用户消息写入会话，让用户立即看到自己的消息。
 		// 只展示用户原文；agentMessage 里的宿主指令不进 UI 气泡。
 		// 如果后续 RPC 失败，再追加错误消息；用户消息本身仍保留在聊天中（用户确已发送）。
-		this.addMessage(
+		const userMessageId = this.addMessage(
 			input.agentId,
 			"user",
 			trimmed || "[图片]",
 			promptDeliveryBehavior ? { streamingBehavior: promptDeliveryBehavior } : undefined,
 			input.images,
 		);
+		this.lastPromptByAgent.set(input.agentId, {
+			messageId: userMessageId,
+			agentMessage,
+			...(input.images?.length ? { images: input.images } : {}),
+		});
+		// 新一轮用户请求重新获得一次 Deck 级 stream_read_error 重试机会；
+		// 自动重试本身仍保留计数，避免异常再次触发无限循环。
+		if (!this.pendingDeckStreamRetries.has(input.agentId)) {
+			this.deckStreamRetryAttempts.delete(input.agentId);
+		}
 
 		// streamingBehavior 只在 agent 忙碌时需要；UI 可以显式传 steer/followUp 以复用 pi 队列语义。
 		// 当前端排队 flush 连续发送多条消息时，第一条会触发 agent_start 使 agent 变忙碌，
@@ -3198,6 +3220,11 @@ export class AgentManager {
 		}
 
 		if (typed.type === "agent_start" && runtime) {
+			if (this.pendingDeckStreamRetries.has(agentId)) {
+				this.pendingDeckStreamRetries.delete(agentId);
+				this.upsertRetryStatusMessage(agentId, { attempt: 1, maxAttempts: 1 }, "success");
+			}
+			this.runHadToolCalls.delete(agentId);
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
 			this.toolMessageIds.delete(agentId);
@@ -3304,7 +3331,25 @@ export class AgentManager {
 				(typeof contentError?.message === "string"
 					? contentError.message
 					: undefined);
-			if (typed.willRetry === true) {
+			const canDeckRetry =
+				errorMsg && /stream[_ ]read[_ ]error/i.test(String(errorMsg)) &&
+				!typed.willRetry &&
+				!this.runHadToolCalls.has(agentId) &&
+				(this.deckStreamRetryAttempts.get(agentId) ?? 0) < 1;
+			if (canDeckRetry) {
+				this.deckStreamRetryAttempts.set(agentId, 1);
+				this.pendingDeckStreamRetries.add(agentId);
+				this.upsertRetryStatusMessage(
+					agentId,
+					{ attempt: 1, maxAttempts: 1, errorMessage: String(errorMsg), delayMs: 800 },
+					"running",
+				);
+				if (runtime) {
+					runtime.tab.status = "running";
+					this.emitState();
+				}
+				void this.retryLastPromptAfterStreamError(agentId);
+			} else if (typed.willRetry === true) {
 				// agent_end.willRetry 表示 pi 已判定本次错误会进入自动重试；
 				// 此时不写入最终错误，避免用户误以为会话已经失败。
 				if (errorMsg && !this.retryStatusMessageIds.has(agentId)) {
@@ -3389,6 +3434,7 @@ export class AgentManager {
 		}
 
 		if (typed.type === "tool_execution_start") {
+			this.runHadToolCalls.add(agentId);
 			this.upsertToolMessage(agentId, typed, "running");
 			this.syncSubAgentsFromToolEvent(agentId, typed, "running");
 			// 并行工具会先连续发多个 start；按 toolCallId 追踪，只有最后一个 end 才能表示工具阶段完成。
@@ -4055,9 +4101,10 @@ export class AgentManager {
 		meta?: Record<string, unknown>,
 		images?: ImageContent[],
 	) {
+		const messageId = randomUUID();
 		const list = this.messages.get(agentId) ?? [];
 		list.push({
-			id: randomUUID(),
+			id: messageId,
 			agentId,
 			role,
 			text,
@@ -4068,6 +4115,7 @@ export class AgentManager {
 		this.messages.set(agentId, list);
 		if (role === "user" || role === "assistant") this.refreshAutoTitle(agentId);
 		this.scheduleMessageEmit(agentId, true);
+		return messageId;
 	}
 
 	private refreshAutoTitle(agentId: string) {
@@ -4105,6 +4153,58 @@ export class AgentManager {
 		const text = value?.replace(/\s+/g, " ").trim();
 		if (!text || /^untitled$/i.test(text)) return undefined;
 		return text.length > 32 ? `${text.slice(0, 32)}…` : text;
+	}
+
+	/**
+	 * stream_read_error 的 Deck 级兜底重试。
+	 * 复用同文件截断重发，确保失败 run 产生的 assistant/tool 后代不会留在上下文中；
+	 * 调用前已确认本轮没有 tool_execution_start，因此不会重复执行已产生副作用的请求。
+	 */
+	private async retryLastPromptAfterStreamError(agentId: string): Promise<void> {
+		const original = this.lastPromptByAgent.get(agentId);
+		if (!original) {
+			this.pendingDeckStreamRetries.delete(agentId);
+			this.addDetailedErrorMessage(agentId, "stream_read_error（找不到原始请求，无法自动重试）");
+			const runtime = this.agents.get(agentId);
+			if (runtime) runtime.tab.status = "error";
+			this.emitState();
+			return;
+		}
+
+		try {
+			// agent_end 后 pi 可能还在发 agent_settled；短暂等待让 JSONL 和 runtime state 稳定。
+			await new Promise((resolve) => setTimeout(resolve, 800));
+			const prepared = await this.prepareResendFromMessage(agentId, original.messageId);
+			// prepareResend 已确认 pi 可编辑并完成 switch_session；恢复 idle，
+			// 让 sendPrompt 走普通 prompt，而不是把自动重试误当成 steer。
+			const runtime = this.agents.get(agentId);
+			if (runtime && runtime.tab.status === "running") {
+				runtime.tab.status = "idle";
+			}
+			const result = await this.sendPrompt({
+				agentId,
+				message: prepared.text,
+				agentMessage: original.agentMessage,
+				images: prepared.images ?? original.images,
+			});
+			if (!result.accepted) {
+				throw new Error(result.error ?? "重试请求未被 Agent 接受");
+			}
+			// agent_start 会把 pending 状态更新为 success；这里保持 running，
+			// 避免重试 RPC 尚未开始时 UI 提前显示完成。
+		} catch (error) {
+			this.pendingDeckStreamRetries.delete(agentId);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.upsertRetryStatusMessage(
+				agentId,
+				{ attempt: 1, maxAttempts: 1, errorMessage },
+				"error",
+			);
+			this.addDetailedErrorMessage(agentId, `stream_read_error（自动重试失败）\n${errorMessage}`);
+			const runtime = this.agents.get(agentId);
+			if (runtime) runtime.tab.status = "error";
+			this.emitState();
+		}
 	}
 
 	private addDetailedErrorMessage(agentId: string, errorMessage: string) {
