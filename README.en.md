@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-8** (2026-07-27)
+> **Latest compatibility release: v0.6.6-9** (2026-07-27)
+
+### v0.6.6-9 Maestro compatibility release
+
+- Enlarged the sub-agent detail window and fixed the extension uninstall flow and related layout issues.
 
 ### v0.6.6-8 Maestro compatibility release
 

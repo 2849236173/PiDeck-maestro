@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-9 - 2026-07-27
+
+### Sub-agents and extensions
+
+- Enlarged the sub-agent detail window for easier viewing of long content.
+- Fixed the extension uninstall flow and related layout issues.
+
 ## v0.6.6-8 - 2026-07-27
 
 ### Extensions and sub-agents
