@@ -43,6 +43,18 @@ function loadExtensionManager(fsOverrides = {}) {
 	return { ...sandbox.exports, wslPaths };
 }
 
+test("legacy built-ins are removable and no longer auto-deployed", () => {
+	const manager = readFileSync("src/main/extensions/ExtensionManager.ts", "utf8");
+	const main = readFileSync("src/main/index.ts", "utf8");
+	const tab = readFileSync("src/renderer/src/config/ExtensionsTab.tsx", "utf8");
+
+	assert.match(manager, /await rm\(target, \{ force: true \}\)/);
+	assert.match(manager, /await this\.ensureBuiltInDefaultsDisabled\(merged\)/);
+	assert.doesNotMatch(main, /function ensurePiDeckExtension/);
+	assert.doesNotMatch(main, /deployExtensionsTo/);
+	assert.doesNotMatch(tab, /!extension\.builtIn && \(\s*<button[\s\S]*?config-icon-btn danger/);
+});
+
 test("reads an installed WSL npm extension version through its canonical host path", async () => {
 	const fixtureDir = mkdtempSync(join(tmpdir(), "pideck-extension-version-"));
 	const fixturePath = join(fixtureDir, "package.json");
@@ -72,6 +84,61 @@ test("reads an installed WSL npm extension version through its canonical host pa
 	} finally {
 		rmSync(fixtureDir, { recursive: true, force: true });
 	}
+});
+
+test("defaults installed legacy built-ins to disabled only once", async () => {
+	let settingsContent = JSON.stringify({ disabledExtensions: ["custom.ts"] });
+	let migrated = false;
+	const writes = [];
+	const { ExtensionManager } = loadExtensionManager({
+		readFile: async (filePath) => {
+			if (String(filePath).endsWith(".pideck-extension-defaults-v1")) {
+				if (!migrated) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+				return "disabled\n";
+			}
+			return settingsContent;
+		},
+		writeFile: async (filePath, content) => {
+			writes.push(String(filePath));
+			if (String(filePath).endsWith("settings.json")) settingsContent = String(content);
+			if (String(filePath).endsWith(".pideck-extension-defaults-v1")) migrated = true;
+		},
+	});
+	const manager = new ExtensionManager({}, () => ({}));
+	const extensions = [
+		{ source: "pi-deck-todo.ts", builtIn: true },
+		{ source: "pi-deck-plan-mode.ts", builtIn: true },
+		{ source: "custom.ts", builtIn: false },
+	];
+
+	await manager.ensureBuiltInDefaultsDisabled(extensions);
+	const settings = JSON.parse(settingsContent);
+	assert.deepEqual(settings.disabledExtensions, ["custom.ts", "pi-deck-todo.ts", "pi-deck-plan-mode.ts"]);
+	assert.equal(migrated, true);
+
+	const writesAfterMigration = writes.length;
+	settingsContent = JSON.stringify({ disabledExtensions: [] }); // 模拟用户之后手动启用
+	await manager.ensureBuiltInDefaultsDisabled(extensions);
+	assert.equal(writes.length, writesAfterMigration);
+	assert.deepEqual(JSON.parse(settingsContent).disabledExtensions, []);
+});
+
+test("removes a legacy built-in file and keeps it disabled", async () => {
+	let settingsContent = JSON.stringify({ disabledExtensions: [] });
+	const removed = [];
+	const { ExtensionManager } = loadExtensionManager({
+		readFile: async () => settingsContent,
+		writeFile: async (_filePath, content) => { settingsContent = String(content); },
+		rm: async (filePath, options) => { removed.push({ filePath: String(filePath), options }); },
+	});
+	const manager = new ExtensionManager({}, () => ({}));
+
+	await manager.uninstall("pi-deck-todo.ts");
+
+	assert.equal(removed.length, 1);
+	assert.match(removed[0].filePath.replace(/\\/g, "/"), /\/\.pi\/agent\/extensions\/pi-deck-todo\.ts$/);
+	assert.equal(removed[0].options.force, true);
+	assert.deepEqual(JSON.parse(settingsContent).disabledExtensions, ["pi-deck-todo.ts"]);
 });
 
 test("reads and writes extension enablement in the active WSL HOME", async () => {

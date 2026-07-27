@@ -120,7 +120,7 @@ export function SubAgentDetailModal({ api, agentId, refId, onClose, onOpenFile, 
 			: <CircleX size={16} aria-hidden="true" />;
 
 	return (
-		<Modal open onClose={onClose} size="full" contentClassName="subagent-detail-modal">
+		<Modal open onClose={onClose} size="medium" contentClassName="subagent-detail-modal">
 			<header className="subagent-detail-header">
 				<span className={`subagent-item-status ${item?.status ?? 'running'}`}>{statusIcon}</span>
 				<div className="subagent-detail-titles">

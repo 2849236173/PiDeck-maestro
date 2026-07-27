@@ -2922,7 +2922,9 @@ export class AgentManager {
 				agent: item.agent ?? taskArgs[taskIndex]?.agent ?? existing?.agent,
 				status,
 				lastUpdate: now,
-				toolCount: typeof item.toolCount === "number" ? item.toolCount : existing?.toolCount,
+				toolCount: typeof item.toolCount === "number"
+					? Math.max(item.toolCount, existing?.toolCount ?? 0)
+					: existing?.toolCount,
 				lastMessage: typeof item.lastMessage === "string"
 					? item.lastMessage.slice(0, 100)
 					: typeof lastTool?.name === "string" ? lastTool.name : existing?.lastMessage,
@@ -3183,6 +3185,14 @@ export class AgentManager {
 				subAgent.lastUpdate = stat.mtimeMs;
 
 				await this.extractSubAgentInfo(subAgent);
+				// 首次历史扫描也可能直接读到最终回答；立即冻结终态时间，不能等下一次文件变更轮询。
+				if (
+					(subAgent.status === 'completed' || subAgent.status === 'failed' || subAgent.status === 'cancelled') &&
+					!subAgent.endTime
+				) {
+					subAgent.cached = true;
+					subAgent.endTime = stat.mtimeMs;
+				}
 				subAgents.set(subAgent.id, subAgent);
 				knownSessionFiles.add(sessionFile);
 			}
@@ -3295,12 +3305,17 @@ export class AgentManager {
 							state.lastRole = entry.role;
 							state.lastHadToolUse = entry.role === 'assistant'
 								&& Array.isArray(entry.content)
-								&& entry.content.some((block: any) => block?.type === 'tool_use');
+								&& entry.content.some((block: any) =>
+									block?.type === 'toolCall' || block?.type === 'tool_call' || block?.type === 'tool_use');
 						}
 
 						if (entry.role === 'assistant' && Array.isArray(entry.content)) {
 							for (const block of entry.content) {
-								if (block?.type === 'tool_use') state.toolCount++;
+								// Pi 当前 JSONL 使用 toolCall；兼容 OpenAI tool_call 与 Anthropic tool_use。
+								// toolResult 是调用结果，不重复计数。
+								if (block?.type === 'toolCall' || block?.type === 'tool_call' || block?.type === 'tool_use') {
+									state.toolCount++;
+								}
 							}
 						}
 
@@ -3350,6 +3365,9 @@ export class AgentManager {
 				const stalled = Boolean(subAgent.sessionFile) && now - subAgent.lastUpdate > AgentManager.SUB_AGENT_STALL_MS;
 				running.push(stalled ? { ...subAgent, stalled: true } : subAgent);
 			} else {
+				// 历史扫描可能从最终 assistant 消息直接识别出终态，旧路径没有写 endTime；
+				// 快照层统一用最后文件更新时间冻结耗时，避免已完成条目继续按 Date.now() 增长。
+				if (!subAgent.endTime) subAgent.endTime = subAgent.lastUpdate || now;
 				completed.push(subAgent);
 			}
 		}

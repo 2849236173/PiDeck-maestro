@@ -76,8 +76,18 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertP
   const activeRun = workflow && workflow.activeRun && typeof workflow.activeRun === 'object' ? workflow.activeRun : undefined;
   const completedRuns = workflowRuns.filter((run) => run && (run.status === 'completed' || run.status === 'done')).length;
 
+  // UCL 在初始化/恢复窗口中可能短暂返回空对象或空 subject 占位项。
+  // 渲染前统一标题字段并丢弃无可显示内容的记录，避免出现只有状态圆点的“空任务”；
+  // title/name/description/command 兼容旧版本或其它 provider 的任务形状。
   const todos = Array.isArray(state.todos)
-    ? state.todos.filter((task): task is Record<string, any> => Boolean(task) && typeof task === 'object')
+    ? state.todos.flatMap((task): Array<Record<string, any> & { displaySubject: string }> => {
+        if (!task || typeof task !== 'object') return [];
+        const record = task as Record<string, any>;
+        const candidate = [record.subject, record.title, record.name, record.description, record.command]
+          .find((value) => typeof value === 'string' && value.trim());
+        if (typeof candidate !== 'string') return [];
+        return [{ ...record, displaySubject: candidate.trim() }];
+      })
     : [];
 
   return (
@@ -185,7 +195,7 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertP
                           : <span className="maestro-todo-dot" />}
                   </span>
                   <span className="maestro-todo-main">
-                    <span className="maestro-todo-subject">{typeof task.subject === 'string' ? task.subject : ''}</span>
+                    <span className="maestro-todo-subject">{task.displaySubject}</span>
                     {assignee ? <span className="maestro-todo-assignee">@{assignee}</span> : null}
                   </span>
                 </li>
@@ -207,10 +217,10 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertP
 
 export function formatElapsed(startTime: number, endTime?: number) {
   const seconds = Math.max(0, Math.round(((endTime ?? Date.now()) - startTime) / 1000));
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return t('subAgent.durationSeconds', { seconds });
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
-  return `${minutes}m ${remainder}s`;
+  return t('subAgent.durationMinutesSeconds', { minutes, seconds: remainder });
 }
 
 const DETAIL_PAGE_SIZE = 24;

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
@@ -8,7 +8,7 @@ import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 
 type SettingsProvider = () => AppSettings;
 
-/** PiDeck 内置扩展列表，用于在扫描不到时仍展示在扩展管理页中。 */
+/** 与 pi-maestro-flow 功能重复的旧 PiDeck 内置扩展；用于默认禁用迁移和本地文件删除。 */
 const BUILT_IN_EXTENSIONS = [
 	"pi-deck-ask-question.ts",
 	"pi-deck-nul-redirect-fix.ts",
@@ -108,19 +108,9 @@ export class ExtensionManager {
 			}
 		}
 
-		// 补充：将已禁用/文件缺失的内置扩展也纳入列表，确保用户可在 UI 中重新启用。
-		const existingSources = new Set(merged.map((ext) => ext.source));
-		for (const builtIn of BUILT_IN_EXTENSIONS) {
-			if (!existingSources.has(builtIn)) {
-				merged.push({
-					id: `local:${builtIn}`,
-					source: builtIn,
-					path: undefined,
-					scope: "user",
-					builtIn: true,
-				});
-			}
-		}
+		// 首次迁移：这些功能已由 pi-maestro-flow 提供，已安装的 PiDeck 重复扩展默认禁用。
+		// 迁移标记保证只执行一次，用户之后手动启用不会在下次启动时再次被强制关闭。
+		await this.ensureBuiltInDefaultsDisabled(merged);
 
 		// 读取 disabledExtensions 列表，标记扩展启用/禁用状态
 		const disabledExts = await this.getDisabledExtensions();
@@ -184,9 +174,14 @@ export class ExtensionManager {
 	async uninstall(source: string, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
 		const normalized = source.trim();
 		if (!normalized) throw new Error("扩展来源不能为空");
-		// 阻止卸载 PiDeck 内置扩展（如 pi-deck-file-capture）
-		if (source.startsWith("pi-deck-")) {
-			throw new Error("PiDeck 内置扩展不可卸载");
+		if ((BUILT_IN_EXTENSIONS as readonly string[]).includes(normalized)) {
+			// 内置扩展是用户目录中的普通本地文件。删除文件并保留禁用记录，
+			// 防止旧配置残留或后续扫描再次把它当作启用扩展。
+			const target = join(this.homeDir, ".pi", "agent", "extensions", normalized);
+			await rm(target, { force: true });
+			await this.setEnabled(normalized, false);
+			this.invalidateListCache();
+			return;
 		}
 		await this.runPi([
 			"remove",
@@ -309,6 +304,36 @@ export class ExtensionManager {
 		}
 		return 0;
 	}
+
+	/** 对当前已安装的重复内置扩展做一次默认禁用迁移。 */
+	private async ensureBuiltInDefaultsDisabled(extensions: PiExtensionSummary[]): Promise<void> {
+		const agentDir = join(this.homeDir, ".pi", "agent");
+		const settingsPath = join(agentDir, "settings.json");
+		const migrationPath = join(agentDir, ".pideck-extension-defaults-v1");
+		try {
+			await readFile(migrationPath, "utf8");
+			return;
+		} catch {
+			// 无迁移标记，继续执行一次性默认禁用。
+		}
+
+		let settings: Record<string, unknown> = {};
+		try {
+			settings = JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
+		} catch {
+			// 已安装本地扩展时 agent 目录必然存在；缺 settings.json 时从空配置创建。
+		}
+		const installedBuiltIns = extensions
+			.filter((extension) => extension.builtIn && (BUILT_IN_EXTENSIONS as readonly string[]).includes(extension.source))
+			.map((extension) => extension.source);
+		const disabled = Array.isArray(settings.disabledExtensions)
+			? settings.disabledExtensions.filter((value): value is string => typeof value === "string")
+			: [];
+		settings.disabledExtensions = [...new Set([...disabled, ...installedBuiltIns])];
+		await writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+		await writeFile(migrationPath, "disabled\n", "utf8");
+	}
+
 
 	async setEnabled(source: string, enabled: boolean): Promise<void> {
 		const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");

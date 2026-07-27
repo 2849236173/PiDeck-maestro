@@ -3073,13 +3073,6 @@ function registerIpc() {
 		return result;
 	});
 	ipcMain.handle(ipcChannels.extensionsToggle, async (_event, source: string, enabled: boolean) => {
-		if (source.startsWith("pi-deck-") && source.endsWith(".ts")) {
-			if (enabled) {
-				// 启用：确保 .ts 文件存在（处理老版本误删文件的恢复场景）
-				await ensurePiDeckExtension(source, activeWslEnvironment?.windowsHome);
-			}
-			// 禁用时不删除 .ts 文件：通过 settings.json 的 disabledExtensions 控制 pi 加载即可
-		}
 		await extensionManager.setEnabled(source, enabled);
 		void appLogger.info("extension", "Extension toggled", { source, enabled });
 	});
@@ -3622,29 +3615,12 @@ app.whenReady().then(async () => {
  * 这些工作不影响首帧可见，但会拖慢 packaged app 的“点击图标 → 窗口出来”。
  */
 async function runPostWindowStartupTasks(): Promise<void> {
-	// 自动部署 PiDeck 内置扩展：这些扩展提供桌面端差异预览、提问卡片和 Plan Mode。
-	// Windows 和 WSL 环境各自部署一份，保证切换 pi 来源后扩展仍然可用。
-	const deployExtensionsTo = async (homeDir: string) => {
-		const extDisabledPath = join(homeDir, ".pi", "agent", "settings.json");
-		const disabledExtList: string[] = await readFile(extDisabledPath, "utf-8")
-			.then((raw: string) => JSON.parse(raw).disabledExtensions ?? [])
-			.catch(() => [] as string[]);
-		const disabledBuiltIn = new Set<string>(disabledExtList);
-		for (const extensionName of ["pi-deck-ask-question.ts", "pi-deck-nul-redirect-fix.ts", "pi-deck-plan-mode.ts", "pi-deck-todo.ts"]) {
-			if (disabledBuiltIn.has(extensionName)) continue;
-			await ensurePiDeckExtension(extensionName, homeDir).catch((error) => {
-				console.error(`Failed to install ${extensionName}:`, error);
-			});
-		}
-	};
-
+	// PiDeck 旧版内置扩展与 pi-maestro-flow 功能重复，不再自动部署；
+	// ExtensionManager 会对用户目录中已存在的旧文件做一次默认禁用迁移，且允许用户删除。
 	// 并行做无依赖的后台初始化，缩短窗口出现后的空闲等待。
 	await Promise.all([
 		syncWslEnvironment(settingsStore.get()).catch((error) => {
 			console.error("Failed to sync WSL config:", error);
-		}),
-		deployExtensionsTo(app.getPath("home")).catch((error) => {
-			console.error("Failed to deploy extensions:", error);
 		}),
 		applyDesktopProxy(settingsStore.get()).catch((error) => {
 			console.error("Failed to apply desktop proxy:", error);
@@ -3656,13 +3632,6 @@ async function runPostWindowStartupTasks(): Promise<void> {
 			installationType: settingsStore.get().installationType,
 		}),
 	]);
-
-	// WSL 启用时额外部署到动态解析出的 HOME。
-	if (activeWslEnvironment) {
-		void deployExtensionsTo(activeWslEnvironment.windowsHome).catch(() => {
-			console.warn("[PiDeck] Failed to deploy extensions to WSL, skipping");
-		});
-	}
 
 	// 补齐 pi settings.json 缺失的默认配置项，新安装或精简配置的用户无需手动添加。
 	void ensureAllPiSettingsDefaults().catch((error) => {
@@ -3731,36 +3700,6 @@ async function runPostWindowStartupTasks(): Promise<void> {
 			void appLogger.warn("settings", "Failed to ensure rpcTimeout minimum", error);
 		});
 	}, 0);
-}
-
-/**
- * 将 PiDeck 内置的 pi 扩展部署到用户扩展目录，使 pi 自动加载。
- * 仅在目标文件不存在或内容不一致时覆盖写入，避免不必要的磁盘操作。
- */
-async function ensurePiDeckExtension(extensionName: string, wslHome?: string): Promise<void> {
-	const home = wslHome ?? app.getPath("home");
-	const extensionsDir = join(home, ".pi", "agent", "extensions");
-	const targetPath = join(extensionsDir, extensionName);
-
-	// 获取源文件路径：开发模式下在 resources/ 目录，打包后通过 process.resourcesPath 访问
-	const sourcePath = is.dev
-		? join(app.getAppPath(), "resources", "extensions", extensionName)
-		: join(process.resourcesPath, "extensions", extensionName);
-
-	// 检查源文件是否存在
-	const sourceContent = await readFile(sourcePath, "utf-8").catch(() => null);
-	if (!sourceContent) {
-		console.warn(`[PiDeck] Extension source not found: ${sourcePath}`);
-		return;
-	}
-
-	// 读取目标文件，只在内容不一致时覆盖（兼顾首次安装和版本更新）
-	const existingContent = await readFile(targetPath, "utf-8").catch(() => null);
-	if (existingContent === sourceContent) return;
-
-	await mkdir(extensionsDir, { recursive: true });
-	await writeFile(targetPath, sourceContent, "utf-8");
-	console.log(`[PiDeck] Installed extension: ${targetPath}`);
 }
 
 /**

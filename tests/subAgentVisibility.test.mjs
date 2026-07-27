@@ -5,7 +5,7 @@ import test from "node:test";
 test("sub-agent panel is connected to preload state and detail APIs", () => {
   const preload = readFileSync("src/preload/index.ts", "utf8");
   const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
-  // 详情加载已从面板内嵌展开迁移到全屏弹层 SubAgentDetailModal
+  // 详情加载已从面板内嵌展开迁移到独立弹层 SubAgentDetailModal
   const detailModal = readFileSync("src/renderer/src/components/app/SubAgentDetailModal.tsx", "utf8");
 
   assert.match(preload, /subAgents:\s*\{/);
@@ -44,6 +44,8 @@ test("teammate lifecycle creates immediate placeholders and does not complete on
   assert.match(manager, /syncSubAgentsFromToolEvent\(agentId, typed, "running"\)/);
   assert.match(manager, /`tool:\$\{toolCallId\}:\$\{taskIndex\}`/);
   assert.match(manager, /subAgent\.parentToolCallId \? 'finalizing'/);
+  assert.match(manager, /subAgent\.endTime = stat\.mtimeMs/);
+  assert.match(manager, /if \(!subAgent\.endTime\) subAgent\.endTime = subAgent\.lastUpdate \|\| now/);
   assert.match(manager, /candidate\.correlationId && pathSegments\.includes\(candidate\.correlationId\)/);
   assert.match(types, /'pending' \| 'running' \| 'finalizing' \| 'completed'/);
   assert.match(panel, /t\('subAgent\.finalizing'\)/);
@@ -52,7 +54,7 @@ test("teammate lifecycle creates immediate placeholders and does not complete on
 
 test("sub-agent details reuse rich assistant rendering and separate active count from history", () => {
   const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
-  // 详情渲染已迁移到全屏弹层；富文本渲染断言改查 SubAgentDetailModal
+  // 详情渲染已迁移到独立弹层；富文本渲染断言改查 SubAgentDetailModal
   const detailModal = readFileSync("src/renderer/src/components/app/SubAgentDetailModal.tsx", "utf8");
 
   // AssistantText 与 ThinkingBlock/ToolCard 已合并为同一条 import；只断言它确实来自 AppParts
@@ -61,6 +63,24 @@ test("sub-agent details reuse rich assistant rendering and separate active count
   assert.match(panel, /subAgent\.activeCount/);
   assert.match(panel, /subAgent\.history/);
   assert.match(panel, /historyExpanded &&/);
+  assert.match(panel, /state\.todos\.flatMap/);
+  assert.match(panel, /record\.subject, record\.title, record\.name, record\.description, record\.command/);
+  assert.match(panel, /if \(typeof candidate !== 'string'\) return \[\]/);
+  assert.match(panel, /task\.displaySubject/);
+  assert.doesNotMatch(panel, /typeof task\.subject === 'string' \? task\.subject : ''/);
+});
+
+test("sub-agent detail stays content-sized and tool counting supports Pi session records", () => {
+  const detailModal = readFileSync("src/renderer/src/components/app/SubAgentDetailModal.tsx", "utf8");
+  const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+  const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+  const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
+
+  assert.match(detailModal, /size="medium" contentClassName="subagent-detail-modal"/);
+  assert.match(styles, /\.subagent-detail-body\s*\{[\s\S]*?flex:\s*0 1 auto[\s\S]*?max-height:/);
+  assert.match(manager, /block\?\.type === 'toolCall'/);
+  assert.match(manager, /Math\.max\(item\.toolCount, existing\?\.toolCount \?\? 0\)/);
+  assert.match(panel, /subAgent\.durationMinutesSeconds/);
 });
 
 test("sub-agent panel occupies the dedicated grid column in expanded and collapsed layouts", () => {

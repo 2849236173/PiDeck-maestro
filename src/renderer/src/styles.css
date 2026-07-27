@@ -8381,8 +8381,10 @@ body.is-resizing .subagent-panel-resizer::before {
   padding: var(--space-3);
 }
 
-/* 子代理全屏详情弹层：头部概览 + 完整消息时间线 */
+/* 子代理详情弹层：短会话按内容自适应，长会话只让正文滚动，避免固定全屏高度产生大块空白 */
 .subagent-detail-modal {
+  width: min(860px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
 }
@@ -8414,8 +8416,9 @@ body.is-resizing .subagent-panel-resizer::before {
 }
 
 .subagent-detail-body {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
+  max-height: min(620px, calc(100vh - 140px));
   overflow-y: auto;
   padding: var(--space-4);
 }

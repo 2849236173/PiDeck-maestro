@@ -331,16 +331,14 @@ function ExtensionCard(props: {
 					>
 						{extension.enabled !== false ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
 					</button>
-					{!extension.builtIn && (
-						<button
-							className="config-icon-btn danger"
-							disabled={props.uninstalling}
-							onClick={() => props.onUninstall(extension)}
-							title={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}
-						>
-							<Trash2 size={14} strokeWidth={1.8} />
-						</button>
-					)}
+					<button
+						className="config-icon-btn danger"
+						disabled={props.uninstalling}
+						onClick={() => props.onUninstall(extension)}
+						title={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}
+					>
+						<Trash2 size={14} strokeWidth={1.8} />
+					</button>
 				</div>
 			</div>
 		</article>
