@@ -141,18 +141,20 @@ export class ExtensionManager {
 			const fullPath = join(extensionsDir, entry);
 			let name = entry;
 			let source = entry;
+			let currentVersion: string | undefined;
 
 			// 处理目录扩展（目录/index.ts）
 			if (entry.endsWith(".ts")) {
-				// 单文件扩展，去掉 .ts 后缀作为显示名
+				// 单文件扩展没有可靠的独立包根目录，不从共享父目录猜测版本。
 				name = entry.slice(0, -3);
 				source = entry;
 			} else {
-				// 目录扩展，检查是否有 index.ts
+				// 目录扩展，检查是否有 index.ts，并从该目录自己的 package.json 读取版本。
 				try {
 					await readFile(join(fullPath, "index.ts"), "utf-8");
 					name = entry;
 					source = entry;
+					currentVersion = await this.readPackageVersion(fullPath);
 				} catch {
 					continue; // 没有 index.ts，跳过
 				}
@@ -162,9 +164,10 @@ export class ExtensionManager {
 			result.push({
 				id: `local:${source}`,
 				source,
-				path: extensionsDir,
+				path: fullPath,
 				scope: "user",
 				builtIn: isBuiltIn,
+				currentVersion,
 			});
 		}
 
@@ -259,9 +262,20 @@ export class ExtensionManager {
 		const hostPath = this.wslEnvironment
 			? toWindowsHostPath(path, this.wslEnvironment)
 			: path;
-		const raw = await readFile(join(hostPath, "package.json"), "utf8");
-		const parsed = JSON.parse(raw) as { version?: string };
-		return parsed.version;
+		return this.readPackageVersion(hostPath);
+	}
+
+	/** package.json 缺失或无合法 version 时保持静默，本地扩展仍可正常使用。 */
+	private async readPackageVersion(packageDir: string): Promise<string | undefined> {
+		try {
+			const raw = await readFile(join(packageDir, "package.json"), "utf8");
+			const parsed = JSON.parse(raw) as { version?: unknown };
+			return typeof parsed.version === "string" && parsed.version.trim()
+				? parsed.version.trim()
+				: undefined;
+		} catch {
+			return undefined;
+		}
 	}
 
 	private npmViewVersion(packageName: string) {

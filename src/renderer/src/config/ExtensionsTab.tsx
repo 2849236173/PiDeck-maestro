@@ -309,12 +309,14 @@ function ExtensionCard(props: {
 						</div>
 					</div>
 					<small>{extension.source}</small>
-					{!extension.builtIn && (
+					{!extension.builtIn && (extension.currentVersion || extension.latestVersion) && (
 						<small>
-							{t("config.extensionVersions", {
-								current: extension.currentVersion ?? "-",
-								latest: extension.latestVersion ?? "-",
-							})}
+							{extension.latestVersion
+								? t("config.extensionVersions", {
+									current: extension.currentVersion ?? "-",
+									latest: extension.latestVersion,
+								})
+								: t("config.extensionCurrentVersion", { version: extension.currentVersion ?? "-" })}
 							{extension.hasUpdate ? ` · ${t("config.extensionUpdateAvailable")}` : ""}
 						</small>
 					)}

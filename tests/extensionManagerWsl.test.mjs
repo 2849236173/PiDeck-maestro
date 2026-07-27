@@ -25,13 +25,18 @@ function loadWslPaths() {
 	return sandbox.exports;
 }
 
-function loadPiAgentPaths() {
-	const sandbox = { exports: {}, require, process };
+function loadPiAgentPaths(pathModule = require("node:path")) {
+	const sandbox = {
+		exports: {},
+		require: (id) => id === "node:path" ? pathModule : require(id),
+		process,
+	};
 	vm.runInNewContext(transpile("src/main/pi/PiAgentPaths.ts"), sandbox, { filename: "PiAgentPaths.ts" });
 	return sandbox.exports;
 }
 
-function loadExtensionManager(fsOverrides = {}, piAgentPaths = loadPiAgentPaths()) {
+function loadExtensionManager(fsOverrides = {}, piAgentPaths, pathModule = require("node:path")) {
+	const resolvedPiAgentPaths = piAgentPaths ?? loadPiAgentPaths(pathModule);
 	const wslPaths = loadWslPaths();
 	const sandbox = {
 		exports: {},
@@ -39,8 +44,9 @@ function loadExtensionManager(fsOverrides = {}, piAgentPaths = loadPiAgentPaths(
 			if (id === "node:fs/promises") {
 				return { ...require(id), ...fsOverrides };
 			}
+			if (id === "node:path") return pathModule;
 			if (id === "../wsl/WslPaths") return wslPaths;
-			if (id === "../pi/PiAgentPaths") return piAgentPaths;
+			if (id === "../pi/PiAgentPaths") return resolvedPiAgentPaths;
 			return require(id);
 		},
 	};
@@ -113,9 +119,16 @@ test("uses PI_CODING_AGENT_DIR instead of assuming the system drive", async () =
 	const { ExtensionManager } = loadExtensionManager({
 		readdir: async (directory) => {
 			reads.push(String(directory));
-			return ["drive-extension.ts"];
+			return ["drive-extension"];
 		},
-		readFile: async () => settingsContent,
+		readFile: async (filePath) => {
+			const normalized = String(filePath).replace(/\\/g, "/");
+			if (normalized.endsWith("/drive-extension/index.ts")) return "export default function extension() {}";
+			if (normalized.endsWith("/drive-extension/package.json")) {
+				return JSON.stringify({ name: "drive-extension", version: "2.4.6" });
+			}
+			return settingsContent;
+		},
 		writeFile: async (filePath, content) => {
 			writes.push(String(filePath));
 			settingsContent = String(content);
@@ -128,10 +141,43 @@ test("uses PI_CODING_AGENT_DIR instead of assuming the system drive", async () =
 
 	assert.equal(reads[0], join("D:\\pi-data\\agent", "extensions"));
 	assert.equal(extensions.length, 1);
-	assert.equal(extensions[0].source, "drive-extension.ts");
-	assert.equal(extensions[0].path, join("D:\\pi-data\\agent", "extensions"));
+	assert.equal(extensions[0].source, "drive-extension");
+	assert.equal(extensions[0].path, join("D:\\pi-data\\agent", "extensions", "drive-extension"));
+	assert.equal(extensions[0].currentVersion, "2.4.6");
 	assert.equal(writes[0], join("D:\\pi-data\\agent", "settings.json"));
 	assert.deepEqual(JSON.parse(settingsContent).disabledExtensions, ["custom-extension.ts"]);
+});
+
+test("reads local extension versions with native Linux POSIX paths", async () => {
+	const pathModule = require("node:path").posix;
+	const paths = loadPiAgentPaths(pathModule);
+	assert.equal(paths.resolveLocalPiAgentDir({}, "/home/dev"), "/home/dev/.pi/agent");
+	assert.equal(
+		paths.resolveLocalPiAgentDir({ PI_CODING_AGENT_DIR: "/opt/pi-agent" }, "/home/dev"),
+		"/opt/pi-agent",
+	);
+
+	const requestedPaths = [];
+	const { ExtensionManager } = loadExtensionManager({
+		readdir: async (directory) => {
+			requestedPaths.push(String(directory));
+			return ["linux-extension"];
+		},
+		readFile: async (filePath) => {
+			requestedPaths.push(String(filePath));
+			if (String(filePath).endsWith("/index.ts")) return "export default function extension() {}";
+			if (String(filePath).endsWith("/package.json")) return JSON.stringify({ version: "3.1.4" });
+			throw new Error("unexpected path");
+		},
+	}, { resolvePiAgentDir: () => "/opt/pi-agent" }, pathModule);
+	const manager = new ExtensionManager({}, () => ({}));
+
+	const extensions = await manager.scanLocalExtensions();
+
+	assert.equal(requestedPaths[0], "/opt/pi-agent/extensions");
+	assert.equal(extensions.length, 1);
+	assert.equal(extensions[0].path, "/opt/pi-agent/extensions/linux-extension");
+	assert.equal(extensions[0].currentVersion, "3.1.4");
 });
 
 test("defaults installed legacy built-ins to disabled only once", async () => {
