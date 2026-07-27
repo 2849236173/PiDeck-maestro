@@ -74,6 +74,8 @@ import type {
 	SendPromptResult,
 	SessionSummary,
 	SubAgentStateUpdate,
+	MaestroConfigSaveRequest,
+	MaestroConfigSnapshot,
 	MaestroGuiState,
 	AgentMessagesPayload,
 	TerminalDataEvent,
@@ -677,12 +679,11 @@ const api = {
 				parsed: Record<string, unknown>;
 				diagnostic?: ConfigFileDiagnostic;
 			}>,
-		getMaestroCliTools: () =>
-			ipcRenderer.invoke(ipcChannels.configGetMaestroCliTools) as Promise<{
-				raw: string;
-				parsed: any;
-				diagnostic?: ConfigFileDiagnostic;
-			}>,
+		getMaestroCliTools: (workspacePath?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.configGetMaestroCliTools,
+				workspacePath,
+			) as Promise<MaestroConfigSnapshot>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -698,8 +699,11 @@ const api = {
 				valid: boolean;
 				error?: string;
 			}>,
-		saveMaestroCliTools: (data: any) =>
-			ipcRenderer.invoke(ipcChannels.configSaveMaestroCliTools, data) as Promise<{
+		saveMaestroCliTools: (request: MaestroConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveMaestroCliTools,
+				request,
+			) as Promise<{
 				valid: boolean;
 				error?: string;
 			}>,

@@ -557,6 +557,64 @@ export type ConfigFileReadResult<T> = {
 	diagnostic?: ConfigFileDiagnostic;
 };
 
+export const MAESTRO_DELEGATE_ROLES = [
+	"analyze",
+	"explore",
+	"review",
+	"implement",
+	"plan",
+	"brainstorm",
+	"research",
+] as const;
+
+export type MaestroDelegateRole = (typeof MAESTRO_DELEGATE_ROLES)[number];
+export type MaestroConfigScope = "global" | "workspace";
+export type MaestroReasoningEffort = "low" | "medium" | "high" | "max";
+
+export type MaestroCliToolConfig = {
+	enabled?: boolean;
+	primaryModel?: string;
+	secondaryModel?: string;
+	reasoningEffort?: MaestroReasoningEffort;
+	tags?: string[];
+	type?: string;
+	[key: string]: unknown;
+};
+
+export type MaestroRoleMapping = {
+	tool?: string;
+	fallbackChain?: string[];
+	[key: string]: unknown;
+};
+
+export type MaestroCliToolsFile = {
+	version?: string;
+	tools?: Record<string, MaestroCliToolConfig>;
+	roles?: Record<string, MaestroRoleMapping>;
+	[key: string]: unknown;
+};
+
+export type MaestroConfigSource = ConfigFileReadResult<MaestroCliToolsFile> & {
+	scope: MaestroConfigScope;
+	path: string;
+	exists: boolean;
+};
+
+export type MaestroConfigSnapshot = {
+	global: MaestroConfigSource;
+	workspace?: MaestroConfigSource;
+	effective: MaestroCliToolsFile;
+};
+
+export type MaestroConfigSaveRequest = {
+	scope: MaestroConfigScope;
+	workspacePath?: string;
+	config: MaestroCliToolsFile;
+	/** Explicit entry deletion is used to restore workspace inheritance. */
+	removeTools?: string[];
+	removeRoles?: MaestroDelegateRole[];
+};
+
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents";
 	label: string;

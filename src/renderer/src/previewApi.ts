@@ -646,7 +646,41 @@ export function createPreviewApi(): PiDesktopApi {
 			getAuth: async () => ({ raw: "{}", parsed: {} }),
 			getSettings: async () => ({ raw: "{}", parsed: {} }),
 			getTrust: async () => ({ raw: "{}", parsed: {} }),
-			getMaestroCliTools: async () => ({ raw: "", parsed: {} }),
+			getMaestroCliTools: async (workspacePath) => ({
+				global: {
+					scope: "global" as const,
+					path: "C:/Users/14012/.maestro/cli-tools.json",
+					exists: true,
+					raw: "{}",
+					parsed: {
+						version: "1.1.0",
+						tools: {
+							claude: { enabled: true, primaryModel: "claude-sonnet-4-6", tags: ["fullstack"], type: "builtin" },
+							codex: { enabled: true, primaryModel: "gpt-5.5", reasoningEffort: "high" as const, tags: ["backend"], type: "builtin" },
+						},
+						roles: { analyze: { fallbackChain: ["claude", "codex"] } },
+					},
+				},
+				...(workspacePath
+					? {
+						workspace: {
+							scope: "workspace" as const,
+							path: `${workspacePath}/.maestro/cli-tools.json`,
+							exists: false,
+							raw: "",
+							parsed: {},
+						},
+					}
+					: {}),
+				effective: {
+					version: "1.1.0",
+					tools: {
+						claude: { enabled: true, primaryModel: "claude-sonnet-4-6", tags: ["fullstack"], type: "builtin" },
+						codex: { enabled: true, primaryModel: "gpt-5.5", reasoningEffort: "high" as const, tags: ["backend"], type: "builtin" },
+					},
+					roles: { analyze: { fallbackChain: ["claude", "codex"] } },
+				},
+			}),
 			saveModels: async () => ({ valid: true }),
 			saveAuth: async () => ({ valid: true }),
 			saveSettings: async () => ({ valid: true }),

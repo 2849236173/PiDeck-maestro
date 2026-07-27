@@ -41,6 +41,16 @@ function loadConfigManager() {
 			if (id === "node:path") return path.win32;
 			if (id === "node:os") return { homedir: () => "C:\\Users\\tester" };
 			if (id === "electron") return { net: {} };
+			if (id === "./baseUrlPath") {
+				return {
+					ensureOpenAiVersionPath: (value) => value,
+					needsSessionBaseUrlVersionHint: () => false,
+					suggestNormalizedBaseUrl: () => undefined,
+				};
+			}
+			if (id === "../wsl/WslPaths") {
+				return { toWindowsHostPath: (value) => value };
+			}
 			return require(id);
 		},
 	};

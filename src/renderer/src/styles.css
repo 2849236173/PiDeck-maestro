@@ -21496,3 +21496,266 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .app-notice.app-notice-warning {
   border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
 }
+
+/* ── Maestro model routing ───────────────────────────── */
+.config-maestro-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.maestro-config-heading,
+.maestro-config-toolbar,
+.maestro-config-footer,
+.maestro-routing-card > header,
+.maestro-fallback-row {
+  display: flex;
+  align-items: center;
+}
+
+.maestro-config-heading {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.maestro-config-heading h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-title);
+}
+
+.maestro-config-heading p {
+  max-width: 760px;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+}
+
+.maestro-config-toolbar {
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-panel);
+}
+
+.maestro-scope-select {
+  width: min(520px, 62%);
+}
+
+.maestro-scope-select .ui-field-description {
+  overflow: hidden;
+  font-family: var(--font-family-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maestro-config-view-switch {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.maestro-scope-note {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.maestro-config-diagnostic {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 42%, var(--color-border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--color-bg-panel));
+  color: var(--color-danger);
+}
+
+.maestro-config-diagnostic > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.maestro-config-diagnostic > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.maestro-config-diagnostic span,
+.maestro-config-diagnostic small {
+  color: var(--color-text-secondary);
+}
+
+.maestro-config-diagnostic pre {
+  max-height: 132px;
+  overflow: auto;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  background: var(--color-code-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-micro);
+}
+
+.maestro-routing-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+.maestro-routing-card {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-panel);
+}
+
+.maestro-routing-card > header {
+  min-height: 42px;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.maestro-routing-card > header > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.maestro-routing-card > header strong,
+.maestro-routing-card > header code {
+  color: var(--color-text-primary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-control);
+}
+
+.maestro-role-card > header code {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+}
+
+.maestro-inherited-badge {
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+}
+
+.maestro-tool-fields,
+.maestro-role-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, 0.6fr);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  align-items: start;
+}
+
+.maestro-role-fields {
+  grid-template-columns: minmax(180px, 0.45fr) minmax(300px, 1fr);
+}
+
+.maestro-card-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.maestro-resolved-tool {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-caption);
+}
+
+.maestro-fallback-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.maestro-fallback-row {
+  min-height: 34px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-muted);
+}
+
+.maestro-fallback-row > span {
+  width: 18px;
+  color: var(--color-text-tertiary);
+  text-align: right;
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+}
+
+.maestro-fallback-row > code {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maestro-fallback-row > div {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+
+.maestro-config-footer {
+  position: sticky;
+  bottom: 0;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-app);
+}
+
+.maestro-config-footer > span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+@media (max-width: 900px) {
+  .maestro-config-toolbar,
+  .maestro-config-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .maestro-scope-select {
+    width: 100%;
+  }
+
+  .maestro-config-view-switch > button {
+    flex: 1;
+  }
+
+  .maestro-tool-fields,
+  .maestro-role-fields {
+    grid-template-columns: 1fr;
+  }
+}

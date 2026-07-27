@@ -9336,6 +9336,7 @@ filePath={gitDrawerDiff.filePath}
       <Suspense fallback={null}>
       <ConfigModal
         open={configOpen}
+        projectPath={activeProject?.path}
         onClose={() => setConfigOpen(false)}
         onSaved={() => {
           // 配置保存后不再自动 reload,用户可通过 Restart 按钮手动重载

@@ -1,36 +1,28 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { normalize, join, dirname } from "node:path";
+import { normalize, join, dirname, isAbsolute } from "node:path";
 import { dirname as posixDirname, normalize as posixNormalize } from "node:path/posix";
 import { homedir } from "node:os";
 import { net } from "electron";
-import type { ConfigFileDiagnostic, ConfigFileReadResult } from "../../shared/types";
+import type {
+	ConfigFileDiagnostic,
+	ConfigFileReadResult,
+	MaestroCliToolsFile,
+	MaestroConfigSaveRequest,
+	MaestroConfigSnapshot,
+	MaestroConfigSource,
+	MaestroRoleMapping,
+} from "../../shared/types";
 import {
 	ensureOpenAiVersionPath,
 	needsSessionBaseUrlVersionHint,
 	suggestNormalizedBaseUrl,
 } from "./baseUrlPath";
-import type { WslEnvironment } from "../wsl/WslPaths";
+import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const MAESTRO_DIR = join(homedir(), ".maestro");
-
-// ── Maestro 配置文件类型 ──────────────────────────────
-export type MaestroCliToolConfig = {
-	enabled?: boolean;
-	primaryModel?: string;
-	tags?: string[];
-	type?: string;
-	auth?: Record<string, unknown>;
-	[key: string]: unknown;
-};
-
-export type MaestroCliToolsFile = {
-	version?: string;
-	tools?: Record<string, MaestroCliToolConfig>;
-	roles?: Record<string, { fallbackChain?: string[]; [key: string]: unknown }>;
-	[key: string]: unknown;
-};
+const MAESTRO_CONFIG_FILE = "cli-tools.json";
 
 // ── models.json 结构 ──────────────────────────────────
 // { providers: { [providerName]: { baseUrl, api, apiKey, models: [...] } } }
@@ -101,6 +93,7 @@ type TestRequest = {
  */
 export class ConfigManager {
 	private configDir: string;
+	private wslEnvironment: WslEnvironment | null = null;
 
 	constructor(configDir?: string) {
 		this.configDir = configDir ?? PI_AGENT_DIR;
@@ -108,63 +101,174 @@ export class ConfigManager {
 
 	/** 将配置目录切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
 	configureWsl(environment: WslEnvironment | null) {
+		this.wslEnvironment = environment;
 		this.configDir = environment
 			? join(environment.windowsHome, ".pi", "agent")
 			: PI_AGENT_DIR;
 	}
 
 	// ── Maestro 辅助方法 ──────────────────────────────────
-	
+
 	private getMaestroDir(): string {
-		return this.configDir.endsWith(join(".pi", "agent")) 
-			? join(dirname(dirname(this.configDir)), ".maestro") 
-			: MAESTRO_DIR; // fallback
+		return this.configDir.endsWith(join(".pi", "agent"))
+			? join(dirname(dirname(this.configDir)), ".maestro")
+			: MAESTRO_DIR;
 	}
 
-	private async readJsonFileRaw<T>(
-		filePath: string,
-		fallback: T,
-	): Promise<ConfigFileReadResult<T>> {
+	private resolveMaestroPath(scope: "global" | "workspace", workspacePath?: string) {
+		if (scope === "global") return join(this.getMaestroDir(), MAESTRO_CONFIG_FILE);
+		if (!workspacePath?.trim()) {
+			throw new Error("Workspace path is required for workspace Maestro configuration");
+		}
+		const resolvedWorkspace = this.wslEnvironment
+			? toWindowsHostPath(workspacePath, this.wslEnvironment)
+			: workspacePath;
+		if (!isAbsolute(resolvedWorkspace)) {
+			throw new Error("Workspace path must be absolute");
+		}
+		return join(resolvedWorkspace, ".maestro", MAESTRO_CONFIG_FILE);
+	}
+
+	private async readMaestroSource(
+		scope: "global" | "workspace",
+		workspacePath?: string,
+	): Promise<MaestroConfigSource> {
+		const filePath = this.resolveMaestroPath(scope, workspacePath);
 		try {
 			const raw = await readFile(filePath, "utf8");
 			try {
-				const parsed = JSON.parse(raw) as T;
-				return { raw, parsed };
+				const value = JSON.parse(raw) as unknown;
+				if (!value || typeof value !== "object" || Array.isArray(value)) {
+					throw new Error("cli-tools.json 的根节点必须是对象");
+				}
+				const parsed = value as MaestroCliToolsFile;
+				for (const field of ["tools", "roles"] as const) {
+					const candidate = parsed[field];
+					if (candidate !== undefined && (!candidate || typeof candidate !== "object" || Array.isArray(candidate))) {
+						throw new Error(`cli-tools.json 的 ${field} 字段必须是对象`);
+					}
+				}
+				return { scope, path: filePath, exists: true, raw, parsed };
 			} catch (error) {
 				return {
+					scope,
+					path: filePath,
+					exists: true,
 					raw,
-					parsed: fallback,
-					diagnostic: this.createJsonDiagnostic("cli-tools.json", raw, error),
+					parsed: {},
+					diagnostic: this.createJsonDiagnostic(MAESTRO_CONFIG_FILE, raw, error),
 				};
 			}
-		} catch {
-			return { raw: JSON.stringify(fallback, null, 2), parsed: fallback };
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return { scope, path: filePath, exists: false, raw: "", parsed: {} };
+			}
+			return {
+				scope,
+				path: filePath,
+				exists: false,
+				raw: "",
+				parsed: {},
+				diagnostic: this.createJsonDiagnostic(MAESTRO_CONFIG_FILE, "", error),
+			};
+		}
+	}
+
+	/** Maestro runtime uses same-name workspace tool/role entries as complete overrides. */
+	private mergeMaestroSources(
+		globalConfig: MaestroCliToolsFile,
+		workspaceConfig?: MaestroCliToolsFile,
+	): MaestroCliToolsFile {
+		if (!workspaceConfig) return { ...globalConfig };
+		return {
+			...globalConfig,
+			...workspaceConfig,
+			version: workspaceConfig.version ?? globalConfig.version,
+			tools: { ...globalConfig.tools, ...workspaceConfig.tools },
+			roles: { ...globalConfig.roles, ...workspaceConfig.roles },
+			proxy: workspaceConfig.proxy ?? globalConfig.proxy,
+		};
+	}
+
+	/** Merge only submitted entries so unrelated and future Maestro fields survive GUI saves. */
+	private mergeMaestroUpdate(
+		existing: MaestroCliToolsFile,
+		update: MaestroCliToolsFile,
+	): MaestroCliToolsFile {
+		const tools = { ...existing.tools };
+		for (const [name, entry] of Object.entries(update.tools ?? {})) {
+			tools[name] = { ...tools[name], ...entry };
+		}
+		const roles = { ...existing.roles };
+		for (const [name, mapping] of Object.entries(update.roles ?? {})) {
+			if (!mapping) continue;
+			roles[name] = {
+				...(roles[name] as MaestroRoleMapping | undefined),
+				...mapping,
+			};
+		}
+		return {
+			...existing,
+			...update,
+			version: update.version ?? existing.version ?? "1.1.0",
+			tools,
+			roles,
+		};
+	}
+
+	async getMaestroCliToolsConfig(workspacePath?: string): Promise<MaestroConfigSnapshot> {
+		const global = await this.readMaestroSource("global");
+		const workspace = workspacePath
+			? await this.readMaestroSource("workspace", workspacePath)
+			: undefined;
+		return {
+			global,
+			workspace,
+			effective: this.mergeMaestroSources(
+				global.diagnostic ? {} : global.parsed,
+				workspace?.diagnostic ? undefined : workspace?.parsed,
+			),
+		};
+	}
+
+	async saveMaestroCliToolsConfig(
+		request: MaestroConfigSaveRequest,
+	): Promise<ConfigValidationResult> {
+		if (
+			!request ||
+			typeof request !== "object" ||
+			!request.config ||
+			typeof request.config !== "object" ||
+			Array.isArray(request.config) ||
+			(request.scope !== "global" && request.scope !== "workspace")
+		) {
+			return { valid: false, error: "Maestro 配置保存请求无效" };
+		}
+		try {
+			const source = await this.readMaestroSource(request.scope, request.workspacePath);
+			if (source.diagnostic) {
+				return {
+					valid: false,
+					error: `无法保存：${source.path} 当前无法安全解析，请先修复原文件。`,
+				};
+			}
+			const merged = this.mergeMaestroUpdate(source.parsed, request.config);
+			for (const name of request.removeTools ?? []) {
+				delete merged.tools?.[name];
+			}
+			for (const role of request.removeRoles ?? []) {
+				delete merged.roles?.[role];
+			}
+			await this.writeJsonFileRaw(source.path, merged);
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
 		}
 	}
 
 	private async writeJsonFileRaw<T>(filePath: string, data: T): Promise<void> {
-		const dir = dirname(filePath);
-		await mkdir(dir, { recursive: true });
-		await writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
-	}
-
-	async getMaestroCliToolsConfig(): Promise<ConfigFileReadResult<MaestroCliToolsFile>> {
-		return this.readJsonFileRaw<MaestroCliToolsFile>(
-			join(this.getMaestroDir(), "cli-tools.json"), 
-			{ tools: {}, roles: {} }
-		);
-	}
-
-	async saveMaestroCliToolsConfig(data: MaestroCliToolsFile): Promise<ConfigValidationResult> {
-		if (typeof data !== "object" || !data) {
-			return { valid: false, error: "配置数据必须是对象" };
-		}
-		try {
-			await this.writeJsonFileRaw(join(this.getMaestroDir(), "cli-tools.json"), data);
-			return { valid: true };
-		} catch (e: any) {
-			return { valid: false, error: e.message };
-		}
+		await mkdir(dirname(filePath), { recursive: true });
+		await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 	}
 
 	// ── 读取 ──────────────────────────────────────────────
@@ -393,6 +497,7 @@ export class ConfigManager {
 	private docsUrlForFile(fileName: string) {
 		if (fileName === "models.json") return "https://pi.dev/docs/latest/models";
 		if (fileName === "settings.json") return "https://pi.dev/docs/latest/settings";
+		if (fileName === MAESTRO_CONFIG_FILE) return "https://www.npmjs.com/package/pi-maestro-flow";
 		return "https://pi.dev/docs/latest/providers";
 	}
 

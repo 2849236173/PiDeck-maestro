@@ -115,6 +115,7 @@ type ConfigModalProps = {
 	open: boolean;
 	onClose: () => void;
 	onSaved: () => void;
+	projectPath?: string;
 };
 
 class ConfigModalErrorBoundary extends Component<
@@ -1566,8 +1567,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "config" && !loading && tab === "maestro" && (
 						<MaestroTab
-							models={modelsData ?? { providers: {} }}
-							onSave={() => loadConfig("maestro")}
+							workspacePath={props.projectPath}
+							onSave={onSaved}
 						/>
 					)}
 
