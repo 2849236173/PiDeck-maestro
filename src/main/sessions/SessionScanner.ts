@@ -1040,7 +1040,7 @@ export class SessionScanner {
     subagentScore.pathInferred = pathInferredParent ? 2 : 0;
     subagentScore.customMarker = hasSubagentChildMarker ? 2 : 0;
     subagentScore.namePattern = latestSessionInfoName?.startsWith("subagent-") ? 1 : 0;
-    subagentScore.parentHeader = forkParentSession ? 1 : 0;
+    subagentScore.parentHeader = forkParentSession ? 2 : 0; // INCREASE SCORE FOR EXPLICIT FORK MARKERS
 
     const confidenceScore =
       subagentScore.pathInferred +
