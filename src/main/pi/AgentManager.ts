@@ -227,6 +227,11 @@ export class AgentManager {
 		private readonly configManager: ConfigManager,
 		private readonly rpcLogger?: RpcLogger,
 		private readonly appLogger?: AppLogger,
+		private readonly onSubAgentSessionDiscovered?: (input: {
+			childSessionPath: string;
+			parentSessionPath: string;
+			correlationId?: string;
+		}) => void,
 	) {}
 
 	configureWsl(environment: WslEnvironment | null): void {
@@ -3138,6 +3143,7 @@ export class AgentManager {
 
 		try {
 			const sessionFiles = this.collectSubAgentSessionFiles(subAgentDir);
+			const parentSessionPath = this.agents.get(agentId)?.tab.sessionPath;
 			// 预建索引：已落盘文件集合 + 尚无文件的实时占位列表，避免每个文件都 O(n) 展开整个 Map
 			const knownSessionFiles = new Set<string>();
 			const pendingRuntimeEntries: import('../../shared/types').SubAgent[] = [];
@@ -3183,6 +3189,16 @@ export class AgentManager {
 				subAgent.sessionFile = sessionFile;
 				subAgent.startTime = Math.min(subAgent.startTime, stat.birthtimeMs);
 				subAgent.lastUpdate = stat.mtimeMs;
+
+				// 该目录由父 Agent 的 teammate 监控器独占，文件一经发现即可作为权威父子关系持久化。
+				// 使用协议路径保存，保证 WSL 重启后 SessionScanner 能直接与 Linux 会话路径匹配。
+				if (parentSessionPath) {
+					this.onSubAgentSessionDiscovered?.({
+						childSessionPath: this.toSessionProtocolPath(sessionFile),
+						parentSessionPath: this.toSessionProtocolPath(parentSessionPath),
+						correlationId: subAgent.correlationId,
+					});
+				}
 
 				await this.extractSubAgentInfo(subAgent);
 				// 首次历史扫描也可能直接读到最终回答；立即冻结终态时间，不能等下一次文件变更轮询。

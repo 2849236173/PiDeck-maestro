@@ -27,7 +27,7 @@ interface DiskCacheFile<V> {
   entries: Record<string, CacheEntry<V>>;
 }
 
-const DISK_SCHEMA_VERSION = 1;
+const DISK_SCHEMA_VERSION = 2;
 const SAVE_DEBOUNCE_MS = 800;
 
 export class SessionSummaryCache<V> {

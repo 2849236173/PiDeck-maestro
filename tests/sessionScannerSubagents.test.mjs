@@ -99,6 +99,27 @@ function session(name, cwd) {
 	];
 }
 
+function createSubAgentRegistry(initialLinks = []) {
+	const links = new Map(
+		initialLinks.map((link) => [link.childSessionPath.replace(/\\/g, "/").toLowerCase(), link]),
+	);
+	const recorded = [];
+	return {
+		recorded,
+		async ensureLoaded() {},
+		get(childSessionPath) {
+			return links.get(childSessionPath.replace(/\\/g, "/").toLowerCase());
+		},
+		prune() {},
+		async record(link) {
+			const key = link.childSessionPath.replace(/\\/g, "/").toLowerCase();
+			if (links.has(key)) return;
+			links.set(key, link);
+			recorded.push(link);
+		},
+	};
+}
+
 test("validates a local parent session by reading only the bounded file head", () => {
 	const home = mkdtempSync(join(tmpdir(), "pideck-session-head-"));
 	try {
@@ -209,7 +230,24 @@ test("groups WSL child sessions with POSIX parent paths", async () => {
 		const forkChildFile = `${sessionsRoot}/--mnt-f-git-optimize--/detached/run-xyz/run-0/session.jsonl`;
 		const files = new Map([
 			[parentFile, `${session("Parent", projectPath).map((entry) => JSON.stringify(entry)).join("\n")}\n`],
-			[forkParentFile, `${session("Fork parent", projectPath).map((entry) => JSON.stringify(entry)).join("\n")}\n`],
+			[forkParentFile, `${[
+				...session("Fork parent", projectPath),
+				{
+					type: "message",
+					message: {
+						role: "assistant",
+						content: [{ type: "toolCall", id: "wsl-teammate-call", name: "teammate", arguments: {} }],
+					},
+				},
+				{
+					type: "message",
+					message: {
+						role: "toolResult",
+						toolCallId: "wsl-teammate-call",
+						details: { progress: [{ correlationId: "run-xyz" }] },
+					},
+				},
+			].map((entry) => JSON.stringify(entry)).join("\n")}\n`],
 			[childFile, `${session("subagent-worker-wsl-0", projectPath).map((entry) => JSON.stringify(entry)).join("\n")}\n`],
 			[forkChildFile, `${[
 				{ type: "session", id: "wsl-fork-child", parentSession: "../../../fork-parent.jsonl", cwd: projectPath },
@@ -345,6 +383,71 @@ test("handles orphan, fork, rename and imported-session compatibility without fa
 	}
 });
 
+test("backfills historical teammate links without hiding an ordinary fork", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-teammate-link-migration-"));
+	try {
+		const projectPath = "C:\\repo\\project";
+		const sessionsRoot = join(home, ".pi", "agent", "sessions");
+		const projectDir = join(sessionsRoot, "--C--repo-project--");
+		const parentFile = join(projectDir, "parent.jsonl");
+		const ordinaryForkFile = join(projectDir, "ordinary-fork.jsonl");
+		const correlationId = "b3d2a824-20ad-45a7-90f0-22ff4b742ce1";
+		const historicalChildFile = join(projectDir, "detached", correlationId, "session.jsonl");
+		const registeredChildFile = join(projectDir, "registered-child.jsonl");
+
+		writeSession(parentFile, [
+			...session("Parent", projectPath),
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [{ type: "toolCall", id: "call-teammate", name: "teammate", arguments: {} }],
+				},
+			},
+			{
+				type: "message",
+				message: {
+					role: "toolResult",
+					toolCallId: "call-teammate",
+					details: { progress: [{ correlationId }] },
+				},
+			},
+		]);
+		writeSession(ordinaryForkFile, [
+			{ type: "session", parentSession: parentFile, cwd: projectPath },
+			...session("subagent-worker-copied-name-0", projectPath),
+		]);
+		writeSession(historicalChildFile, [
+			{ type: "session", parentSession: parentFile, cwd: projectPath },
+			...session("Historical teammate", projectPath),
+		]);
+		writeSession(registeredChildFile, session("Runtime registered teammate", projectPath));
+
+		const registry = createSubAgentRegistry([{
+			childSessionPath: registeredChildFile,
+			parentSessionPath: parentFile,
+			source: "runtime",
+			updatedAt: Date.now(),
+		}]);
+		const { SessionScanner } = loadSessionScanner(home);
+		const scanner = new SessionScanner(registry);
+		const summaries = await scanner.list(projectPath);
+
+		assert.equal(summaries.find((item) => item.filePath === ordinaryForkFile)?.parentSessionPath, undefined);
+		assert.equal(summaries.find((item) => item.filePath === historicalChildFile)?.parentSessionPath, parentFile);
+		assert.equal(summaries.find((item) => item.filePath === registeredChildFile)?.parentSessionPath, parentFile);
+		assert.equal(registry.recorded.length, 1);
+		assert.equal(registry.recorded[0].childSessionPath, historicalChildFile);
+		assert.equal(registry.recorded[0].parentSessionPath, parentFile);
+		assert.equal(registry.recorded[0].correlationId, correlationId);
+
+		await scanner.list(projectPath);
+		assert.equal(registry.recorded.length, 1);
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("resolves fork child with absolute Windows parent path via parentSession header", async () => {
 	const home = mkdtempSync(join(tmpdir(), "pideck-abs-fork-scanner-"));
 	try {
@@ -358,6 +461,7 @@ test("resolves fork child with absolute Windows parent path via parentSession he
 		writeSession(forkChildFile, [
 			{ type: "session", parentSession: parentFile, cwd: projectPath },
 			...session("subagent-reviewer-abc-1", projectPath),
+			{ type: "custom", customType: "pi-subagents.child-session", data: { schemaVersion: 1 } },
 		]);
 
 		const { SessionScanner } = loadSessionScanner(home);

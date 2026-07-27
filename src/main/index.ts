@@ -88,6 +88,7 @@ import { PiLocator } from "./pi/PiLocator";
 import { PiRpcClient } from "./pi/PiRpcClient";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
+import { SubAgentSessionRegistry } from "./sessions/SubAgentSessionRegistry";
 import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
 import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
@@ -138,6 +139,7 @@ let isQuitting = false;
 let projectStore: ProjectStore;
 let fileSystemService: FileSystemService;
 let sessionScanner: SessionScanner;
+let subAgentSessionRegistry: SubAgentSessionRegistry;
 let codexSessionImporter: CodexSessionImporter;
 let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
@@ -3546,7 +3548,8 @@ function resetGenIdleTimer() {
 app.whenReady().then(async () => {
 	projectStore = new ProjectStore();
 	fileSystemService = new FileSystemService();
-	sessionScanner = new SessionScanner();
+	subAgentSessionRegistry = new SubAgentSessionRegistry();
+	sessionScanner = new SessionScanner(subAgentSessionRegistry);
 	codexSessionImporter = new CodexSessionImporter();
 	claudeSessionImporter = new ClaudeSessionImporter();
 	openCodeSessionImporter = new OpenCodeSessionImporter();
@@ -3569,6 +3572,9 @@ app.whenReady().then(async () => {
 		configManager,
 		rpcLogger,
 		appLogger,
+		(input) => {
+			void subAgentSessionRegistry.record({ ...input, source: "runtime" });
+		},
 	);
 	webServiceManager = new WebServiceManager({
 		listProjects: () => projectStore.list(),
@@ -3789,8 +3795,9 @@ app.on("before-quit", () => {
 	void webServiceManager?.stop();
 	terminalManager?.closeAll();
 	agentManager?.stopAll();
-	// 退出前刷盘会话摘要缓存，保证下次冷启动可复用未变化文件的摘要。
+	// 退出前刷盘会话摘要与子代理关系缓存，保证下次冷启动可直接复用。
 	void sessionScanner?.flushSummaryCache();
+	void subAgentSessionRegistry?.flush();
 	petSystem?.stop();
 	petSystem = null;
 	stopGenProcess();

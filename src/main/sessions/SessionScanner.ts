@@ -3,12 +3,18 @@ import { app, shell } from "electron";
 import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
-import { basename as posixBasename, dirname as posixDirname, isAbsolute as posixIsAbsolute, join as posixJoin } from "node:path/posix";
+import { basename as posixBasename, dirname as posixDirname, isAbsolute as posixIsAbsolute, join as posixJoin, normalize as posixNormalize } from "node:path/posix";
 import type { ChatMessage, ChatRole, SessionSummary } from "../../shared/types";
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { SessionSummaryCache, type SessionFileVersion } from "./sessionSummaryCache";
+import type { SubAgentSessionRegistry } from "./SubAgentSessionRegistry";
+
+interface SessionScanContext {
+  rawFiles: Map<string, Promise<string>>;
+  parentCorrelations: Map<string, Promise<Set<string>>>;
+}
 
 export class SessionScanner {
   private readonly root = join(app.getPath("home"), ".pi", "agent", "sessions");
@@ -18,6 +24,8 @@ export class SessionScanner {
   /** 比 renderer watchdog 更短，确保超时前先终止实际扫描，避免后台请求堆积。 */
   private scanTimeoutMs = 18_000;
   private readonly summaryCache = new SessionSummaryCache<SessionSummary | null>();
+  private readonly subAgentRegistry?: SubAgentSessionRegistry;
+  private activeScanFileKeys = new Set<string>();
   private summaryCacheFileSetKey = "";
   /**
    * 最近一次 list() 解析出的会话扫描根目录。
@@ -25,6 +33,10 @@ export class SessionScanner {
    * 供子会话父路径推断作为边界。
    */
   private activeScanRoots: string[] = [];
+
+  constructor(subAgentRegistry?: SubAgentSessionRegistry) {
+    this.subAgentRegistry = subAgentRegistry;
+  }
 
   /**
    * wsl.exe 命令与启动模式。优先绝对路径，
@@ -232,8 +244,11 @@ export class SessionScanner {
     };
 
     try {
-      // 重启后先恢复磁盘摘要缓存，避免全量重读 JSONL。
-      await this.summaryCache.ensureLoaded();
+      // 重启后先恢复磁盘摘要缓存和 PiDeck 自己维护的子代理关系。
+      await Promise.all([
+        this.summaryCache.ensureLoaded(),
+        this.subAgentRegistry?.ensureLoaded(),
+      ]);
 
       // 扫描根 = 默认全局 sessions + 项目/全局 sessionDir（如 <project>/.pi/sessions）。
       // pi 配置 sessionDir 后不再写 encoded-cwd 子目录，必须额外扫该路径。
@@ -245,14 +260,20 @@ export class SessionScanner {
         ? await this.collectFromRootsWsl(scanRoots, signal).catch(rethrowAbort([] as string[]))
         : await this.collectFromRootsLocal(scanRoots);
       const fileSetKey = [...files].sort().join("\n");
+      this.activeScanFileKeys = new Set(files.map((file) => this.normalize(file)));
+      this.subAgentRegistry?.prune(files, scanRoots);
       if (fileSetKey !== this.summaryCacheFileSetKey) {
         // 仅修剪当前环境下已消失文件，保留未变化会话的摘要命中（含磁盘恢复的条目）。
         this.summaryCache.prune(files, this.wslConfig ? "wsl" : "local");
         this.summaryCacheFileSetKey = fileSetKey;
       }
 
+      const scanContext: SessionScanContext = {
+        rawFiles: new Map(),
+        parentCorrelations: new Map(),
+      };
       const summaries = await Promise.all(files.map(file =>
-        this.readSummary(file, signal).catch(rethrowAbort(null))
+        this.readSummary(file, signal, scanContext).catch(rethrowAbort(null))
       ));
       signal?.throwIfAborted();
 
@@ -941,7 +962,11 @@ export class SessionScanner {
     return undefined;
   }
 
-  private async readSummary(filePath: string, signal?: AbortSignal): Promise<SessionSummary | null> {
+  private async readSummary(
+    filePath: string,
+    signal?: AbortSignal,
+    scanContext: SessionScanContext = { rawFiles: new Map(), parentCorrelations: new Map() },
+  ): Promise<SessionSummary | null> {
     // 先读取轻量文件指纹；未变化时复用摘要，避免周期扫描反复读取和解析全部 JSONL。
     const isWsl = this.isWslPath(filePath);
     const info = isWsl
@@ -949,11 +974,9 @@ export class SessionScanner {
       : await stat(filePath);
     const version = { mtimeMs: info.mtimeMs, size: info.size };
     const cached = this.summaryCache.get(filePath, version);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return cached ? this.applyRegisteredParent(filePath, cached) : null;
 
-    const raw = isWsl
-      ? await this.readWslFile(filePath, signal)
-      : await readFile(filePath, "utf8");
+    const raw = await this.readSessionRaw(filePath, signal, scanContext);
     const lines = raw.split(/\r?\n/).filter(Boolean);
     if (lines.length === 0) {
       this.summaryCache.set(filePath, version, null);
@@ -974,16 +997,11 @@ export class SessionScanner {
     let codexAgentRole: string | undefined;
     let codexAgentNickname: string | undefined;
     let codexSourcePath: string | undefined;
-    let latestSessionInfoName: string | undefined;
     let forkParentSession: string | undefined;
     let hasSubagentChildMarker = false;
 
     for (const line of lines) {
       const entry = JSON.parse(line) as any;
-      if (entry.type === "session_info") {
-        // Forked sessions may contain an older copied name; only the latest marker is authoritative.
-        latestSessionInfoName = this.optionalString(entry.name ?? entry.data?.name);
-      }
       if (entry.type === "session") {
         forkParentSession ||= this.optionalString(entry.parentSession ?? entry.header?.parentSession);
       }
@@ -1024,56 +1042,56 @@ export class SessionScanner {
     // 不在顶层列表显示，而是设置 parentSessionPath 供 UI 嵌套渲染。
     //
     // 采用分层信号打分机制，兼容不同扩展的子会话存储方式：
-    //   强信号（2分）：路径布局匹配、显式 customType 标记
-    //   弱信号（1分）：子会话命名模式、parentSession header 引用
+    //   强信号（2分）：PiDeck 登记、父工具 correlationId、路径布局、显式 customType 标记
+    //   弱信号（1分）：parentSession header 引用
     //   置信度阈值：≥ 2 分判定为子会话
     const subagentScore = {
+      registeredLink: 0,     // PiDeck 运行时确认或历史迁移的持久化关系
+      parentToolMatch: 0,    // 子路径 correlationId 出现在父会话 teammate 工具记录中
       pathInferred: 0,       // 路径布局 ← 新泛化算法
       customMarker: 0,       // customType: "*.child-session"
-      namePattern: 0,        // sessionName 以 "subagent-" 开头
       parentHeader: 0,       // session header 中的 parentSession
     };
 
+    const registeredLink = this.subAgentRegistry?.get(filePath);
+    const registeredParent = registeredLink && this.activeScanFileKeys.has(this.normalize(registeredLink.parentSessionPath))
+      ? registeredLink.parentSessionPath
+      : undefined;
     const pathInferredParent = isWsl
       ? await this.inferWslParentSessionFromPath(filePath, signal)
       : this.inferParentSessionFromPath(filePath);
+    const resolvedForkParent = forkParentSession
+      ? this.resolveForkParentFromCurrentScan(filePath, forkParentSession, isWsl)
+      : undefined;
+    const migratedCorrelationId = !registeredParent && !pathInferredParent && resolvedForkParent &&
+      this.isNestedBelowParentDirectory(filePath, resolvedForkParent, isWsl)
+      ? await this.matchParentTeammateCorrelation(resolvedForkParent, filePath, signal, scanContext)
+      : undefined;
+    subagentScore.registeredLink = registeredParent ? 2 : 0;
+    subagentScore.parentToolMatch = migratedCorrelationId ? 2 : 0;
     subagentScore.pathInferred = pathInferredParent ? 2 : 0;
     subagentScore.customMarker = hasSubagentChildMarker ? 2 : 0;
-    subagentScore.namePattern = latestSessionInfoName?.startsWith("subagent-") ? 1 : 0;
-    subagentScore.parentHeader = forkParentSession ? 2 : 0; // INCREASE SCORE FOR EXPLICIT FORK MARKERS
+    subagentScore.parentHeader = forkParentSession ? 1 : 0;
 
     const confidenceScore =
+      subagentScore.registeredLink +
+      subagentScore.parentToolMatch +
       subagentScore.pathInferred +
       subagentScore.customMarker +
-      subagentScore.namePattern +
       subagentScore.parentHeader;
 
     let parentSessionPath: string | undefined;
     if (source === "pi" && confidenceScore >= 2) {
-      // 优先复用上面已完成的路径推断，避免重复遍历文件系统/WSL。
-      parentSessionPath = pathInferredParent;
-      // 路径推断失败时，尝试使用 forkParentSession header 引用的父路径
-      if (!parentSessionPath && forkParentSession) {
-        const normalizedForkParent = forkParentSession.replace(/\\/g, "/");
-        const resolved = isWsl
-          ? posixJoin(posixDirname(filePath), normalizedForkParent)
-          // forkParentSession 可能来自 fork header 的绝对 Windows 路径；
-          // path.join 在 Windows 上不会以盘符根路径重置，需用 resolve。
-          : resolve(dirname(filePath), forkParentSession);
-        const normalizedResolved = this.normalize(resolved);
-        const normalizedSessionsRoot = this.normalize(this.findSessionsRootForFile(filePath));
-        // header 来自外部 JSONL；仅允许引用当前 sessions 根目录内的现有文件，避免路径穿越或误挂载。
-        const isInsideSessionsRoot =
-          normalizedResolved !== normalizedSessionsRoot &&
-          normalizedResolved.startsWith(`${normalizedSessionsRoot}/`);
-        const resolvedExists = isInsideSessionsRoot && (
-          isWsl ? await this.existsWslFile(resolved, signal) : existsSync(resolved)
-        );
-        if (resolvedExists) {
-          parentSessionPath = resolved;
-        } else {
-        }
-      }
+      // parentSession 只在已有独立子代理证据后充当定位信息，不能单独改变会话分类。
+      parentSessionPath = registeredParent ?? pathInferredParent ?? resolvedForkParent;
+    }
+    if (parentSessionPath && !registeredParent && this.subAgentRegistry) {
+      await this.subAgentRegistry.record({
+        childSessionPath: filePath,
+        parentSessionPath,
+        correlationId: migratedCorrelationId,
+        source: "migration",
+      });
     }
 
     if (source === "codex" && codexSourcePath && !codexParentThreadId) {
@@ -1107,6 +1125,160 @@ export class SessionScanner {
       wsl: isWsl || undefined,
     };
     this.summaryCache.set(filePath, version, summary);
+    return summary;
+  }
+
+  private readSessionRaw(
+    filePath: string,
+    signal: AbortSignal | undefined,
+    scanContext: SessionScanContext,
+  ): Promise<string> {
+    const key = this.normalize(filePath);
+    const cached = scanContext.rawFiles.get(key);
+    if (cached) return cached;
+    const pending = this.isWslPath(filePath)
+      ? this.readWslFile(filePath, signal)
+      : readFile(filePath, "utf8");
+    scanContext.rawFiles.set(key, pending);
+    return pending;
+  }
+
+  private resolveForkParentFromCurrentScan(
+    childFilePath: string,
+    parentReference: string,
+    isWsl: boolean,
+  ): string | undefined {
+    const normalizedReference = parentReference.replace(/\\/g, "/");
+    const resolved = isWsl
+      ? posixIsAbsolute(normalizedReference)
+        ? posixNormalize(normalizedReference)
+        : posixJoin(posixDirname(childFilePath), normalizedReference)
+      // Windows path.join does not reset on a drive-qualified path; resolve does.
+      : resolve(dirname(childFilePath), parentReference);
+    const normalizedResolved = this.normalize(resolved);
+    const normalizedRoot = this.normalize(this.findSessionsRootForFile(childFilePath));
+    const isInsideRoot = normalizedResolved !== normalizedRoot && normalizedResolved.startsWith(`${normalizedRoot}/`);
+    return isInsideRoot && this.activeScanFileKeys.has(normalizedResolved) ? resolved : undefined;
+  }
+
+  private isNestedBelowParentDirectory(
+    childFilePath: string,
+    parentFilePath: string,
+    isWsl: boolean,
+  ): boolean {
+    const childDir = this.normalize(isWsl ? posixDirname(childFilePath) : dirname(childFilePath));
+    const parentDir = this.normalize(isWsl ? posixDirname(parentFilePath) : dirname(parentFilePath));
+    return childDir !== parentDir && childDir.startsWith(`${parentDir}/`);
+  }
+
+  /**
+   * Rebuild old teammate links without trusting parentSession alone.
+   * A teammate correlation id is persisted in the parent tool result and used
+   * as the child --session-dir component, so matching both sides is a stable
+   * historical signal even when the usual parent-owned path was renamed.
+   */
+  private async matchParentTeammateCorrelation(
+    parentSessionPath: string,
+    childSessionPath: string,
+    signal: AbortSignal | undefined,
+    scanContext: SessionScanContext,
+  ): Promise<string | undefined> {
+    const correlationIds = await this.readParentTeammateCorrelationIds(parentSessionPath, signal, scanContext);
+    const pathSegments = childSessionPath.replace(/\\/g, "/").split("/").filter(Boolean);
+    return [...correlationIds].find((correlationId) => pathSegments.includes(correlationId));
+  }
+
+  private readParentTeammateCorrelationIds(
+    parentSessionPath: string,
+    signal: AbortSignal | undefined,
+    scanContext: SessionScanContext,
+  ): Promise<Set<string>> {
+    const key = this.normalize(parentSessionPath);
+    const cached = scanContext.parentCorrelations.get(key);
+    if (cached) return cached;
+
+    const pending = (async () => {
+      const raw = await this.readSessionRaw(parentSessionPath, signal, scanContext);
+      signal?.throwIfAborted();
+      const entries: unknown[] = [];
+      for (const line of raw.split(/\r?\n/)) {
+        if (!line || (!line.includes("teammate") && !line.includes("delegate") && !line.includes("explorer") && !line.includes("correlationId") && !line.includes("toolCallId"))) {
+          continue;
+        }
+        try {
+          entries.push(JSON.parse(line));
+        } catch {
+          // A partially written final line is ignored and retried after mtime changes.
+        }
+      }
+
+      const teammateCallIds = new Set<string>();
+      for (const entry of entries) {
+        this.walkJson(entry, (node) => {
+          if (!this.isTeammateToolNode(node)) return;
+          const callId = this.optionalString(node.toolCallId ?? node.id);
+          if (callId) teammateCallIds.add(callId);
+        });
+      }
+
+      const correlationIds = new Set<string>();
+      for (const entry of entries) {
+        let belongsToTeammate = false;
+        this.walkJson(entry, (node) => {
+          if (belongsToTeammate) return;
+          if (this.isTeammateToolNode(node)) {
+            belongsToTeammate = true;
+            return;
+          }
+          const callId = this.optionalString(node.toolCallId);
+          if (callId && teammateCallIds.has(callId)) belongsToTeammate = true;
+        });
+        if (!belongsToTeammate) continue;
+        this.walkJson(entry, (node) => {
+          const correlationId = this.optionalString(node.correlationId);
+          if (correlationId) correlationIds.add(correlationId);
+        });
+      }
+      return correlationIds;
+    })().catch(() => new Set<string>());
+
+    scanContext.parentCorrelations.set(key, pending);
+    return pending;
+  }
+
+  private isTeammateToolNode(node: Record<string, unknown>): boolean {
+    const type = typeof node.type === "string" ? node.type.toLowerCase() : "";
+    const toolName = typeof node.toolName === "string"
+      ? node.toolName
+      : type.includes("tool") && typeof node.name === "string"
+        ? node.name
+        : undefined;
+    return toolName === "teammate" || toolName === "delegate" || toolName === "explorer" || toolName === "maestro";
+  }
+
+  private walkJson(value: unknown, visit: (node: Record<string, unknown>) => void): void {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) this.walkJson(item, visit);
+      return;
+    }
+    const node = value as Record<string, unknown>;
+    visit(node);
+    for (const child of Object.values(node)) this.walkJson(child, visit);
+  }
+
+  private applyRegisteredParent(filePath: string, summary: SessionSummary): SessionSummary {
+    const registered = this.subAgentRegistry?.get(filePath);
+    if (registered && this.activeScanFileKeys.has(this.normalize(registered.parentSessionPath))) {
+      return summary.parentSessionPath === registered.parentSessionPath
+        ? summary
+        : { ...summary, parentSessionPath: registered.parentSessionPath };
+    }
+    // Cached summaries may outlive a deleted parent or a pruned registry entry.
+    if (summary.parentSessionPath && !this.activeScanFileKeys.has(this.normalize(summary.parentSessionPath))) {
+      const { parentSessionPath: _removed, ...rest } = summary;
+      return rest;
+    }
     return summary;
   }
 
