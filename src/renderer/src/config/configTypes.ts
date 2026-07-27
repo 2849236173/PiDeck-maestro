@@ -1,4 +1,20 @@
-export type ConfigTab = "models" | "auth" | "settings" | "trust" | "raw";
+export type ConfigTab = "models" | "auth" | "settings" | "maestro" | "trust" | "raw";
+
+export type MaestroCliToolConfig = {
+	enabled?: boolean;
+	primaryModel?: string;
+	tags?: string[];
+	type?: string;
+	auth?: Record<string, unknown>;
+	[key: string]: unknown;
+};
+
+export type MaestroCliToolsFile = {
+	version?: string;
+	tools?: Record<string, MaestroCliToolConfig>;
+	roles?: Record<string, { fallbackChain?: string[]; [key: string]: unknown }>;
+	[key: string]: unknown;
+};
 
 // ── 匹配 pi 实际文件格式的类型 ────────────────────────
 

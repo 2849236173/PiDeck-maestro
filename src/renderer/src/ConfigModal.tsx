@@ -3,6 +3,7 @@ import { Component, useState, useEffect, useCallback, type ReactNode } from "rea
 import type { PiDesktopApi } from "../../preload";
 import { AuthTab } from "./config/AuthTab";
 import { ModelsTab } from "./config/ModelsTab";
+import { MaestroTab } from "./config/MaestroTab";
 import { RawTab } from "./config/RawTab";
 import { TrustTab } from "./config/TrustTab";
 import { SettingsTab } from "./config/SettingsTab";
@@ -989,7 +990,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		const isModelsFile = rawFileName === "models.json";
 		await saveAndReload(
 			() => api.config.saveRaw(rawFileName, rawContent),
-			isModelsFile ? t("config.modelsSaved") : undefined,
+			isModelsFile ? (t("config.modelsSaved") as any) : undefined,
 		);
 		if (isModelsFile) {
 			await loadConfig("models");
@@ -1357,6 +1358,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		{ id: "models", label: t("config.nav.models") },
 		{ id: "auth", label: t("config.nav.auth") },
 		{ id: "settings", label: t("config.nav.settings") },
+		{ id: "maestro", label: "Maestro" },
 		{ id: "trust", label: t("config.nav.trust") },
 		{ id: "raw", label: t("config.nav.raw") },
 	];
@@ -1559,6 +1561,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 							discoveredModels={discoveredModels}
 							onChange={setSettingsData}
 							onSave={handleSaveSettings}
+						/>
+					)}
+
+					{section === "config" && !loading && tab === "maestro" && (
+						<MaestroTab
+							models={modelsData ?? { providers: {} }}
+							onSave={() => loadConfig("maestro")}
 						/>
 					)}
 

@@ -3368,6 +3368,9 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configGetTrust, () =>
 		configManager.getTrustConfig(),
 	);
+	ipcMain.handle(ipcChannels.configGetMaestroCliTools, () =>
+		configManager.getMaestroCliToolsConfig(),
+	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3387,6 +3390,11 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configSaveSettings, async (_event, settings) => {
 		const result = await configManager.saveSettingsConfig(settings);
 		void appLogger.info("config", "Pi settings config saved", { keys: Object.keys(settings ?? {}) });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveMaestroCliTools, async (_event, data) => {
+		const result = await configManager.saveMaestroCliToolsConfig(data);
+		void appLogger.info("config", "Maestro cli-tools config saved");
 		return result;
 	});
 	ipcMain.handle(ipcChannels.configSaveRaw, async (_event, fileName, rawJson) => {

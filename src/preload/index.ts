@@ -677,6 +677,12 @@ const api = {
 				parsed: Record<string, unknown>;
 				diagnostic?: ConfigFileDiagnostic;
 			}>,
+		getMaestroCliTools: () =>
+			ipcRenderer.invoke(ipcChannels.configGetMaestroCliTools) as Promise<{
+				raw: string;
+				parsed: any;
+				diagnostic?: ConfigFileDiagnostic;
+			}>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -689,6 +695,11 @@ const api = {
 			}>,
 		saveSettings: (settings: Record<string, unknown>) =>
 			ipcRenderer.invoke(ipcChannels.configSaveSettings, settings) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveMaestroCliTools: (data: any) =>
+			ipcRenderer.invoke(ipcChannels.configSaveMaestroCliTools, data) as Promise<{
 				valid: boolean;
 				error?: string;
 			}>,

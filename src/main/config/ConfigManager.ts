@@ -13,6 +13,24 @@ import type { WslEnvironment } from "../wsl/WslPaths";
 
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
+const MAESTRO_DIR = join(homedir(), ".maestro");
+
+// ── Maestro 配置文件类型 ──────────────────────────────
+export type MaestroCliToolConfig = {
+	enabled?: boolean;
+	primaryModel?: string;
+	tags?: string[];
+	type?: string;
+	auth?: Record<string, unknown>;
+	[key: string]: unknown;
+};
+
+export type MaestroCliToolsFile = {
+	version?: string;
+	tools?: Record<string, MaestroCliToolConfig>;
+	roles?: Record<string, { fallbackChain?: string[]; [key: string]: unknown }>;
+	[key: string]: unknown;
+};
 
 // ── models.json 结构 ──────────────────────────────────
 // { providers: { [providerName]: { baseUrl, api, apiKey, models: [...] } } }
@@ -93,6 +111,60 @@ export class ConfigManager {
 		this.configDir = environment
 			? join(environment.windowsHome, ".pi", "agent")
 			: PI_AGENT_DIR;
+	}
+
+	// ── Maestro 辅助方法 ──────────────────────────────────
+	
+	private getMaestroDir(): string {
+		return this.configDir.endsWith(join(".pi", "agent")) 
+			? join(dirname(dirname(this.configDir)), ".maestro") 
+			: MAESTRO_DIR; // fallback
+	}
+
+	private async readJsonFileRaw<T>(
+		filePath: string,
+		fallback: T,
+	): Promise<ConfigFileReadResult<T>> {
+		try {
+			const raw = await readFile(filePath, "utf8");
+			try {
+				const parsed = JSON.parse(raw) as T;
+				return { raw, parsed };
+			} catch (error) {
+				return {
+					raw,
+					parsed: fallback,
+					diagnostic: this.createJsonDiagnostic("cli-tools.json", raw, error),
+				};
+			}
+		} catch {
+			return { raw: JSON.stringify(fallback, null, 2), parsed: fallback };
+		}
+	}
+
+	private async writeJsonFileRaw<T>(filePath: string, data: T): Promise<void> {
+		const dir = dirname(filePath);
+		await mkdir(dir, { recursive: true });
+		await writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
+	}
+
+	async getMaestroCliToolsConfig(): Promise<ConfigFileReadResult<MaestroCliToolsFile>> {
+		return this.readJsonFileRaw<MaestroCliToolsFile>(
+			join(this.getMaestroDir(), "cli-tools.json"), 
+			{ tools: {}, roles: {} }
+		);
+	}
+
+	async saveMaestroCliToolsConfig(data: MaestroCliToolsFile): Promise<ConfigValidationResult> {
+		if (typeof data !== "object" || !data) {
+			return { valid: false, error: "配置数据必须是对象" };
+		}
+		try {
+			await this.writeJsonFileRaw(join(this.getMaestroDir(), "cli-tools.json"), data);
+			return { valid: true };
+		} catch (e: any) {
+			return { valid: false, error: e.message };
+		}
 	}
 
 	// ── 读取 ──────────────────────────────────────────────
