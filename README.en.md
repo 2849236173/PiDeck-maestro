@@ -26,7 +26,11 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-7** (2026-07-26)
+> **Latest compatibility release: v0.6.6-8** (2026-07-27)
+
+### v0.6.6-8 Maestro compatibility release
+
+- Fixed Pi extension directory resolution on non-system drives, WSL path compatibility, and sub-agent detail statistics.
 
 ### v0.6.6-7 Maestro compatibility release
 

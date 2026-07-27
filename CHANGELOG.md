@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.6-8 - 2026-07-27
+
+### Extensions and sub-agents
+
+- Fixed Pi extension directory resolution on non-system drives and WSL path compatibility.
+- Fixed sub-agent detail statistics and built-in extension management behavior.
+
 ## v0.6.6-7 - 2026-07-26
 
 ### Sessions and sub-agents
