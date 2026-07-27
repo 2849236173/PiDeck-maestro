@@ -83,6 +83,7 @@ import type {
 import { ProjectStore } from "./projects/ProjectStore";
 import { FileSystemService } from "./fs/FileSystemService";
 import { AgentManager } from "./pi/AgentManager";
+import { resolveLocalPiAgentDir, resolvePiAgentDir } from "./pi/PiAgentPaths";
 import { PiLocator } from "./pi/PiLocator";
 import { PiRpcClient } from "./pi/PiRpcClient";
 import { testPiProxy } from "./pi/PiProxyTester";
@@ -3708,7 +3709,7 @@ async function runPostWindowStartupTasks(): Promise<void> {
  * rm 的 force 选项会在文件不存在时静默忽略。
  */
 async function removeStalePiDeckExtension(extensionName: string): Promise<void> {
-	const targetPath = join(app.getPath("home"), ".pi", "agent", "extensions", extensionName);
+	const targetPath = join(resolvePiAgentDir(activeWslEnvironment), "extensions", extensionName);
 	await rm(targetPath, { force: true });
 	console.log(`[PiDeck] Removed stale extension: ${targetPath}`);
 }
@@ -3763,14 +3764,13 @@ async function ensureAllPiSettingsDefaults(): Promise<void> {
 		piVersion = (await piLocator.check(undefined, s.wslEnabled, s.wslDistro, s.wslUser).catch(() => null))?.version ?? "";
 	}
 
-	// Windows 本地
-	const winDir = join(app.getPath("home"), ".pi", "agent");
+	// Windows 本地：遵循原生 pi 的 PI_CODING_AGENT_DIR 覆盖规则。
+	const winDir = resolveLocalPiAgentDir();
 	await ensurePiSettingsDefaults(winDir, piVersion).catch(() => {});
 
-	// WSL（如果已配置）
+	// WSL（如果已配置）：使用发行版中解析出的 PI_CODING_AGENT_DIR。
 	if (activeWslEnvironment) {
-		const wslDir = join(activeWslEnvironment.windowsHome, ".pi", "agent");
-		await ensurePiSettingsDefaults(wslDir, piVersion).catch(() => {});
+		await ensurePiSettingsDefaults(activeWslEnvironment.windowsAgentDir, piVersion).catch(() => {});
 	}
 }
 

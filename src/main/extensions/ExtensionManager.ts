@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
+import { resolvePiAgentDir } from "../pi/PiAgentPaths";
 import type { PiLocator } from "../pi/PiLocator";
 import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 
@@ -44,8 +44,8 @@ export class ExtensionManager {
 		this.invalidateListCache();
 	}
 
-	private get homeDir(): string {
-		return this.wslEnvironment?.windowsHome ?? homedir();
+	private get agentDir(): string {
+		return resolvePiAgentDir(this.wslEnvironment);
 	}
 
 	/** 缓存的 pi 版本号，用于条件性传递 --no-approve。 */
@@ -95,8 +95,8 @@ export class ExtensionManager {
 			? await Promise.all(parsed.map((extension) => this.enrichExtensionVersion(extension)))
 			: parsed;
 
-		// 扫描本地自动发现的扩展（~/.pi/agent/extensions/ 下的 .ts 文件和目录），
-		// pi list 只列出通过 pi install 安装的包，不包含本地文件扩展。
+		// 扫描原生 pi 配置根目录下自动发现的扩展（默认 ~/.pi/agent/extensions，
+		// PI_CODING_AGENT_DIR 可将它放到任意盘符），补充 pi list 不包含的本地文件扩展。
 		const localExtensions = await this.scanLocalExtensions();
 
 		// 合并，已通过 pi 安装的优先保留原条目
@@ -121,11 +121,11 @@ export class ExtensionManager {
 	}
 
 	/**
-	 * 扫描 ~/.pi/agent/extensions/ 目录，发现未被 pi list 列出的本地扩展。
-	 * 单文件扩展（.ts 文件）和目录扩展（含 index.ts）都会被识别。
+	 * 扫描原生 pi 配置根目录的 extensions/，发现未被 pi list 列出的本地扩展。
+	 * 配置根目录遵循 PI_CODING_AGENT_DIR；单文件和含 index.ts 的目录扩展都会被识别。
 	 */
 	private async scanLocalExtensions(): Promise<PiExtensionSummary[]> {
-		const extensionsDir = join(this.homeDir, ".pi", "agent", "extensions");
+		const extensionsDir = join(this.agentDir, "extensions");
 		const result: PiExtensionSummary[] = [];
 
 		let entries: string[];
@@ -177,7 +177,7 @@ export class ExtensionManager {
 		if ((BUILT_IN_EXTENSIONS as readonly string[]).includes(normalized)) {
 			// 内置扩展是用户目录中的普通本地文件。删除文件并保留禁用记录，
 			// 防止旧配置残留或后续扫描再次把它当作启用扩展。
-			const target = join(this.homeDir, ".pi", "agent", "extensions", normalized);
+			const target = join(this.agentDir, "extensions", normalized);
 			await rm(target, { force: true });
 			await this.setEnabled(normalized, false);
 			this.invalidateListCache();
@@ -307,7 +307,7 @@ export class ExtensionManager {
 
 	/** 对当前已安装的重复内置扩展做一次默认禁用迁移。 */
 	private async ensureBuiltInDefaultsDisabled(extensions: PiExtensionSummary[]): Promise<void> {
-		const agentDir = join(this.homeDir, ".pi", "agent");
+		const agentDir = this.agentDir;
 		const settingsPath = join(agentDir, "settings.json");
 		const migrationPath = join(agentDir, ".pideck-extension-defaults-v1");
 		try {
@@ -336,7 +336,7 @@ export class ExtensionManager {
 
 
 	async setEnabled(source: string, enabled: boolean): Promise<void> {
-		const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
+		const settingsPath = join(this.agentDir, "settings.json");
 		let raw = "{}";
 		try { raw = await readFile(settingsPath, "utf8"); } catch {}
 		const settings = JSON.parse(raw);
@@ -354,7 +354,7 @@ export class ExtensionManager {
 	}
 
 	private async getDisabledExtensions(): Promise<Set<string>> {
-		const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
+		const settingsPath = join(this.agentDir, "settings.json");
 		try {
 			const raw = await readFile(settingsPath, "utf8");
 			const settings = JSON.parse(raw);

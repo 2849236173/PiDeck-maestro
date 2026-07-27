@@ -25,7 +25,13 @@ function loadWslPaths() {
 	return sandbox.exports;
 }
 
-function loadExtensionManager(fsOverrides = {}) {
+function loadPiAgentPaths() {
+	const sandbox = { exports: {}, require, process };
+	vm.runInNewContext(transpile("src/main/pi/PiAgentPaths.ts"), sandbox, { filename: "PiAgentPaths.ts" });
+	return sandbox.exports;
+}
+
+function loadExtensionManager(fsOverrides = {}, piAgentPaths = loadPiAgentPaths()) {
 	const wslPaths = loadWslPaths();
 	const sandbox = {
 		exports: {},
@@ -34,6 +40,7 @@ function loadExtensionManager(fsOverrides = {}) {
 				return { ...require(id), ...fsOverrides };
 			}
 			if (id === "../wsl/WslPaths") return wslPaths;
+			if (id === "../pi/PiAgentPaths") return piAgentPaths;
 			return require(id);
 		},
 	};
@@ -84,6 +91,44 @@ test("reads an installed WSL npm extension version through its canonical host pa
 	} finally {
 		rmSync(fixtureDir, { recursive: true, force: true });
 	}
+});
+
+test("uses PI_CODING_AGENT_DIR instead of assuming the system drive", async () => {
+	const paths = loadPiAgentPaths();
+	assert.equal(
+		paths.resolveLocalPiAgentDir({ PI_CODING_AGENT_DIR: "D:\\pi-data\\agent" }, "C:\\Users\\dev"),
+		"D:\\pi-data\\agent",
+	);
+	assert.equal(
+		paths.resolveLocalPiAgentDir({ PI_CODING_AGENT_DIR: "~\\custom-pi" }, "D:\\Users\\dev"),
+		join("D:\\Users\\dev", "custom-pi"),
+	);
+
+	let settingsContent = JSON.stringify({ disabledExtensions: [] });
+	const reads = [];
+	const writes = [];
+	const { ExtensionManager } = loadExtensionManager({
+		readdir: async (directory) => {
+			reads.push(String(directory));
+			return ["drive-extension.ts"];
+		},
+		readFile: async () => settingsContent,
+		writeFile: async (filePath, content) => {
+			writes.push(String(filePath));
+			settingsContent = String(content);
+		},
+	}, { resolvePiAgentDir: () => "D:\\pi-data\\agent" });
+	const manager = new ExtensionManager({}, () => ({}));
+
+	const extensions = await manager.scanLocalExtensions();
+	await manager.setEnabled("custom-extension.ts", false);
+
+	assert.equal(reads[0], join("D:\\pi-data\\agent", "extensions"));
+	assert.equal(extensions.length, 1);
+	assert.equal(extensions[0].source, "drive-extension.ts");
+	assert.equal(extensions[0].path, join("D:\\pi-data\\agent", "extensions"));
+	assert.equal(writes[0], join("D:\\pi-data\\agent", "settings.json"));
+	assert.deepEqual(JSON.parse(settingsContent).disabledExtensions, ["custom-extension.ts"]);
 });
 
 test("defaults installed legacy built-ins to disabled only once", async () => {

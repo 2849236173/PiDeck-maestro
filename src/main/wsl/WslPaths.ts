@@ -5,6 +5,9 @@ export type WslEnvironment = {
 	user: string;
 	linuxHome: string;
 	windowsHome: string;
+	/** 原生 pi 实际使用的配置根目录；PI_CODING_AGENT_DIR 未设置时为 ~/.pi/agent。 */
+	linuxAgentDir: string;
+	windowsAgentDir: string;
 };
 
 export type ParsedWslUncPath = {
@@ -58,16 +61,27 @@ export function linuxPathToWslUnc(path: string, distro: string): string {
 	return `\\\\wsl.localhost\\${distro}${suffix ? `\\${suffix}` : ""}`;
 }
 
-export function createWslEnvironment(distro: string, user: string, linuxHome: string): WslEnvironment {
+export function createWslEnvironment(
+	distro: string,
+	user: string,
+	linuxHome: string,
+	linuxAgentDir?: string,
+): WslEnvironment {
 	if (!linuxHome || !linuxHome.startsWith("/")) {
 		throw new WslPathError("INVALID_WSL_PATH", `WSL HOME must be absolute, received "${linuxHome}".`);
 	}
 	const normalizedHome = normalizeLinuxPath(linuxHome);
+	const normalizedAgentDir = normalizeLinuxPath(linuxAgentDir || `${normalizedHome}/.pi/agent`);
+	if (!normalizedAgentDir.startsWith("/")) {
+		throw new WslPathError("INVALID_WSL_PATH", `WSL pi agent directory must be absolute, received "${linuxAgentDir}".`);
+	}
 	return {
 		distro,
 		user,
 		linuxHome: normalizedHome,
 		windowsHome: linuxPathToWslUnc(normalizedHome, distro),
+		linuxAgentDir: normalizedAgentDir,
+		windowsAgentDir: linuxPathToWslUnc(normalizedAgentDir, distro),
 	};
 }
 

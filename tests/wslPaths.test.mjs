@@ -107,6 +107,8 @@ test("builds root, regular-user, and custom HOME contexts", () => {
 			user: "root",
 			linuxHome: "/root",
 			windowsHome: "\\\\wsl.localhost\\Ubuntu-24.04\\root",
+			linuxAgentDir: "/root/.pi/agent",
+			windowsAgentDir: "\\\\wsl.localhost\\Ubuntu-24.04\\root\\.pi\\agent",
 		},
 	);
 	assert.equal(
@@ -130,14 +132,16 @@ test("resolves HOME once and exposes an observable compatibility fallback", asyn
 		wslCommand: "wsl.exe",
 		execFile: (command, args, options, callback) => {
 			calls.push({ command, args, options });
-			callback(null, "/srv/dev home\n", "");
+			callback(null, "/srv/dev home\n/opt/pi agent\n", "");
 		},
 	});
 	assert.equal(resolved.linuxHome, "/srv/dev home");
 	assert.equal(resolved.windowsHome, "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\dev home");
+	assert.equal(resolved.linuxAgentDir, "/opt/pi agent");
+	assert.equal(resolved.windowsAgentDir, "\\\\wsl.localhost\\Ubuntu-24.04\\opt\\pi agent");
 	assert.deepEqual(
 		Array.from(calls[0].args),
-		["-d", "Ubuntu-24.04", "-u", "dev", "--exec", "printenv", "HOME"],
+		["-d", "Ubuntu-24.04", "-u", "dev", "--exec", "printenv", "HOME", "PI_CODING_AGENT_DIR"],
 	);
 
 	const warnings = [];
@@ -147,6 +151,7 @@ test("resolves HOME once and exposes an observable compatibility fallback", asyn
 		warn: (message, details) => warnings.push({ message, details }),
 	});
 	assert.equal(fallback.linuxHome, "/root");
+	assert.equal(fallback.linuxAgentDir, "/root/.pi/agent");
 	assert.equal(warnings.length, 1);
 	assert.equal(warnings[0].details.fallback, "/root");
 });
