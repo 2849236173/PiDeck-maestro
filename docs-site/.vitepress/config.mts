@@ -41,8 +41,8 @@ export default defineConfig({
         "operatingSystem": "Windows, macOS, Linux",
         "description": "Open-source desktop workbench for managing multiple pi AI coding agents across local project folders.",
         "url": siteOrigin,
-        "downloadUrl": "https://github.com/ayuayue/PiDeck/releases",
-        "sourceCodeRepository": "https://github.com/ayuayue/PiDeck",
+        "downloadUrl": "https://github.com/2849236173/PiDeck-maestro/releases",
+        "sourceCodeRepository": "https://github.com/2849236173/PiDeck-maestro",
         "license": "https://opensource.org/licenses/MIT",
         "author": {
           "@type": "Organization",
@@ -70,7 +70,7 @@ export default defineConfig({
       { text: "更新日志", link: "/changelog" },
       {
         text: "下载",
-        link: "https://github.com/ayuayue/PiDeck/releases",
+        link: "https://github.com/2849236173/PiDeck-maestro/releases",
       },
     ],
     sidebar: {
@@ -91,7 +91,7 @@ export default defineConfig({
       ],
     },
     socialLinks: [
-      { icon: "github", link: "https://github.com/ayuayue/PiDeck" },
+      { icon: "github", link: "https://github.com/2849236173/PiDeck-maestro" },
     ],
     search: {
       provider: "local",
@@ -112,7 +112,7 @@ export default defineConfig({
       },
     },
     editLink: {
-      pattern: "https://github.com/ayuayue/PiDeck/edit/main/docs-site/:path",
+      pattern: "https://github.com/2849236173/PiDeck-maestro/edit/main/docs-site/:path",
       text: "在 GitHub 上编辑此页",
     },
     footer: {

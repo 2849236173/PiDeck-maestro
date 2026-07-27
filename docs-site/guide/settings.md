@@ -9,8 +9,18 @@ PiDeck 提供图形化配置入口，减少频繁查找和编辑 pi 配置文件
 - Models：Provider 卡片、模型网格和连接测试。
 - Auth：API Key 管理。
 - Settings：类型感知的键值编辑器。
+- Maestro：管理 `pi-maestro-flow` 的 CLI 工具模型与角色路由。
 - 源文件：查看和编辑原始 JSON。
 - Skills：管理全局 Skills。
+
+### Maestro 模型路由入口
+
+1. 点击主界面左下角的设置按钮，打开 **Pi 管理**。
+2. 在左侧选择 **配置管理**。
+3. 点击顶部的 **Maestro** 标签。
+4. 在“配置作用域”中选择 **全局** 或 **当前项目**。
+
+“工具模型”页可以启用或禁用 CLI 工具，填写主模型、备用模型和推理强度；“角色路由”页可以为七类 Maestro 角色选择固定工具或调整 fallback 顺序。项目级配置写入当前项目的 `.maestro/cli-tools.json`，未覆盖的条目继承全局 `~/.maestro/cli-tools.json`。
 
 <img class="doc-screenshot" src="/images/config.png" alt="配置管理界面">
 

@@ -2,7 +2,11 @@
 
 完整更新日志仍维护在仓库根目录：
 
-当前兼容发行线为 `v0.6.6-9`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+当前兼容发行线为 `v0.6.6-10`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+
+## v0.6.6-10
+
+新增全局/项目级 Maestro CLI 工具模型与七类角色 fallback 路由 GUI；持久化并恢复子代理会话树；显示本地扩展实际版本，并修复非系统盘 Windows 与原生 Linux 路径处理。
 
 ## v0.6.6-9
 

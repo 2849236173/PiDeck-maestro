@@ -1,5 +1,24 @@
 # 更新日志
 
+## v0.6.6-10 - 2026-07-27
+
+### Maestro 模型路由
+
+- 在配置管理中新增 Maestro 页面，可分别编辑全局 `~/.maestro/cli-tools.json` 与当前项目 `.maestro/cli-tools.json`。
+- 支持启用或禁用 CLI 工具、自由填写主模型和备用模型，并设置 `reasoningEffort`。
+- 支持为 `analyze`、`explore`、`review`、`implement`、`plan`、`brainstorm`、`research` 配置固定工具或有序 fallback chain。
+- 保存时保留未知配置字段；JSON 损坏时显示诊断并禁止覆盖；项目级条目可恢复继承全局配置。
+
+### 子代理会话恢复
+
+- 持久化运行时发现的子代理父子会话关系，应用重启后仍能保持会话树结构。
+- 通过 teammate correlation ID 安全回填旧会话关系，避免普通 fork 会话被错误归类为子代理。
+
+### 扩展与跨平台路径
+
+- 本地目录扩展读取并显示自身 `package.json` 版本。
+- 修复非系统盘 Windows 和原生 Linux 环境中的扩展目录路径处理。
+
 ## v0.6.6-9 - 2026-07-27
 
 ### 子代理与扩展

@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.6.6-10 - 2026-07-27
+
+### Maestro model routing
+
+- Added a Maestro page in Configuration Management for separate global `~/.maestro/cli-tools.json` and current-project `.maestro/cli-tools.json` editing.
+- Added CLI tool enablement, free-form primary and secondary model IDs, and `reasoningEffort` controls.
+- Added direct-tool or ordered fallback-chain routing for `analyze`, `explore`, `review`, `implement`, `plan`, `brainstorm`, and `research`.
+- Preserved unknown configuration fields, blocked writes when JSON is malformed, and allowed project entries to restore global inheritance.
+
+### Sub-agent session recovery
+
+- Persisted parent/child sub-agent session links so the session tree survives application restarts.
+- Safely backfilled historical relationships from teammate correlation IDs without misclassifying ordinary fork sessions.
+
+### Extensions and cross-platform paths
+
+- Read and displayed the actual `package.json` version for local directory extensions.
+- Fixed extension-directory path handling on non-system Windows drives and native Linux.
+
 ## v0.6.6-9 - 2026-07-27
 
 ### Sub-agents and extensions

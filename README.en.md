@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.6--1-green)
+![Version](https://img.shields.io/badge/version-0.6.6--10-green)
 
 > This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
 >
@@ -26,7 +26,13 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-9** (2026-07-27)
+> **Latest compatibility release: v0.6.6-10** (2026-07-27)
+
+### v0.6.6-10 Maestro compatibility release
+
+- Added a Maestro model-routing GUI for global and current-project CLI tool models, reasoning effort, and ordered fallback routing across seven roles.
+- Persisted parent/child sub-agent session links and safely recovered historical session trees from teammate correlation IDs.
+- Displayed actual local extension versions and fixed path handling for non-system Windows drives and native Linux.
 
 ### v0.6.6-9 Maestro compatibility release
 
@@ -116,7 +122,7 @@ The following section records the upstream baseline features:
 | **Message Edit/Delete** | Copy, edit, and delete AI responses and user messages; edited text is backfilled to the composer for re-sending. |
 | **ScratchPad** | Overlay-style scratch pad with content preview, selection mapping, and theme-aware semantic colors. |
 | **Content Width Restriction** | Draggable content width slider (unlimited by default, drag left to narrow) for long code lines or compact layouts. |
-| **Configuration, Skill & Extension Management** | Visual editors for pi's `models.json`, `auth.json`, and `settings.json`, plus global Skill and Extension management. |
+| **Configuration, Skill & Extension Management** | Visual editors for pi's `models.json`, `auth.json`, and `settings.json`; a Maestro page for global/project CLI tool models and role routing; plus global Skill and Extension management. |
 | **Extension Enable/Disable** | Disable/enable built-in extensions, project-level skill/extension management, distinguishing global vs project config. |
 | **Trust Confirmation System** | Desktop-intercepted trust confirmation; untrusted projects can still be opened; projects with running agents cannot be deleted. |
 | **Proxy Settings** | Manage pi agent process proxy and desktop proxy separately; model discovery and connection tests can use the desktop proxy. |
@@ -147,7 +153,7 @@ Markdown rendering with streaming text, activity flow, tool-call details, sessio
 
 ![Configuration management](docs/images/config.png)
 
-Visual editors for Models (provider cards + model grid), Auth (API key management), Settings (type-aware key-value), and raw JSON source file editing — with save-and-reload to hot-apply changes to running agents.
+Visual editors for Models (provider cards + model grid), Auth (API key management), Settings (type-aware key-value), Maestro (global/project tool models and role routing), and raw JSON source files. Restart affected agents when required after saving.
 
 ### Slash Commands & Session History
 

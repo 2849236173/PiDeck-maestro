@@ -29,7 +29,7 @@ hero:
 - **Built-in Browser** — Multi-tab right-drawer browser with fullscreen mode, device presets (PC/Mobile/Tablet), and URL navigation.
 - **Floating Action Bar** — Quick access to Terminal, Files, Git, Browser, Scratch Pad, and External Editor from the conversation outline area.
 - **Built-in Terminal Dock** — Agent-scoped terminal tabs with PowerShell/cmd/sh fallback, multiple tabs, theme switching, height resizing, and right-click copy.
-- **Visual Config Management** — Graphical editors for Models, Auth, and Settings. Global and project-level Skills and Extension management.
+- **Visual Config Management** — Graphical editors for Models, Auth, Settings, and global/project Maestro CLI model routing, plus Skill and Extension management.
 - **Context-Aware Input** — `@` file suggestions, `!` shell execution, `/` slash commands, and command history in a single composer.
 - **Built-in Browser Preview** — Right-drawer browser with tabs, URL bar, fullscreen mode, and PC/mobile/tablet viewport presets.
 - **Cross-Platform** — Windows, macOS, and Linux installers via GitHub Releases. Source install supported via npm.
