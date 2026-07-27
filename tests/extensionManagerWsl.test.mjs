@@ -54,12 +54,15 @@ test("legacy built-ins are removable and no longer auto-deployed", () => {
 	const manager = readFileSync("src/main/extensions/ExtensionManager.ts", "utf8");
 	const main = readFileSync("src/main/index.ts", "utf8");
 	const tab = readFileSync("src/renderer/src/config/ExtensionsTab.tsx", "utf8");
+	const configModal = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
 
 	assert.match(manager, /await rm\(target, \{ force: true \}\)/);
 	assert.match(manager, /await this\.ensureBuiltInDefaultsDisabled\(merged\)/);
 	assert.doesNotMatch(main, /function ensurePiDeckExtension/);
 	assert.doesNotMatch(main, /deployExtensionsTo/);
 	assert.doesNotMatch(tab, /!extension\.builtIn && \(\s*<button[\s\S]*?config-icon-btn danger/);
+	assert.doesNotMatch(configModal, /if \(target\.builtIn\)/);
+	assert.match(configModal, /await api\.extensions\.uninstall\(target\.source, target\.scope\)/);
 });
 
 test("reads an installed WSL npm extension version through its canonical host path", async () => {

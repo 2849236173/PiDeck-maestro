@@ -1315,11 +1315,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const confirmUninstallExtension = async () => {
 		if (!uninstallExtensionConfirm) return;
 		const target = uninstallExtensionConfirm;
-		// 防御性检查：内置扩展不应出现在确认弹窗中
-		if (target.builtIn) {
-			setUninstallExtensionConfirm(null);
-			return;
-		}
 		setUninstallExtensionConfirm(null);
 		setUninstallingExtensionSource(target.source);
 		setError(null);

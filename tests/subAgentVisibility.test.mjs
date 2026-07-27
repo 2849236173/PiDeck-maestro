@@ -77,7 +77,8 @@ test("sub-agent detail stays content-sized and tool counting supports Pi session
   const panel = readFileSync("src/renderer/src/components/app/SubAgentPanel.tsx", "utf8");
 
   assert.match(detailModal, /size="medium" contentClassName="subagent-detail-modal"/);
-  assert.match(styles, /\.subagent-detail-body\s*\{[\s\S]*?flex:\s*0 1 auto[\s\S]*?max-height:/);
+  assert.match(styles, /\.modal-radix-content\.subagent-detail-modal\s*\{[\s\S]*?width: min\(1080px, calc\(100vw - 48px\)\)[\s\S]*?min-width: min\(640px,[\s\S]*?min-height: min\(360px,[\s\S]*?resize: both/);
+  assert.match(styles, /\.subagent-detail-body\s*\{[\s\S]*?flex:\s*1 1 auto[\s\S]*?overflow-y: auto/);
   assert.match(manager, /block\?\.type === 'toolCall'/);
   assert.match(manager, /Math\.max\(item\.toolCount, existing\?\.toolCount \?\? 0\)/);
   assert.match(panel, /subAgent\.durationMinutesSeconds/);
