@@ -26,11 +26,17 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-10** (2026-07-27)
+> **Latest compatibility release: v0.6.6-11** (2026-07-28)
+
+### v0.6.6-11 Maestro compatibility release
+
+- Corrected the Maestro configuration target to global `~/.pi/agent/teammate-models.json` and project `.pi/teammate-models.json`.
+- Added a default model and seven teammate task mappings, with searchable Pi model suggestions and editable `provider/model` values.
+- Preserved `thinkingLevels` and unknown fields, protected malformed JSON, and allowed project mappings to restore global inheritance.
 
 ### v0.6.6-10 Maestro compatibility release
 
-- Added a Maestro model-routing GUI for global and current-project CLI tool models, reasoning effort, and ordered fallback routing across seven roles.
+- The model-routing page in this version incorrectly configured Maestro CLI `cli-tools.json`; v0.6.6-11 supersedes it and users should upgrade.
 - Persisted parent/child sub-agent session links and safely recovered historical session trees from teammate correlation IDs.
 - Displayed actual local extension versions and fixed path handling for non-system Windows drives and native Linux.
 
@@ -122,7 +128,7 @@ The following section records the upstream baseline features:
 | **Message Edit/Delete** | Copy, edit, and delete AI responses and user messages; edited text is backfilled to the composer for re-sending. |
 | **ScratchPad** | Overlay-style scratch pad with content preview, selection mapping, and theme-aware semantic colors. |
 | **Content Width Restriction** | Draggable content width slider (unlimited by default, drag left to narrow) for long code lines or compact layouts. |
-| **Configuration, Skill & Extension Management** | Visual editors for pi's `models.json`, `auth.json`, and `settings.json`; a Maestro page for global/project CLI tool models and role routing; plus global Skill and Extension management. |
+| **Configuration, Skill & Extension Management** | Visual editors for pi's `models.json`, `auth.json`, and `settings.json`; a Maestro page for global/project teammate defaults and seven task mappings; plus global Skill and Extension management. |
 | **Extension Enable/Disable** | Disable/enable built-in extensions, project-level skill/extension management, distinguishing global vs project config. |
 | **Trust Confirmation System** | Desktop-intercepted trust confirmation; untrusted projects can still be opened; projects with running agents cannot be deleted. |
 | **Proxy Settings** | Manage pi agent process proxy and desktop proxy separately; model discovery and connection tests can use the desktop proxy. |
@@ -153,7 +159,7 @@ Markdown rendering with streaming text, activity flow, tool-call details, sessio
 
 ![Configuration management](docs/images/config.png)
 
-Visual editors for Models (provider cards + model grid), Auth (API key management), Settings (type-aware key-value), Maestro (global/project tool models and role routing), and raw JSON source files. Restart affected agents when required after saving.
+Visual editors for Models (provider cards + model grid), Auth (API key management), Settings (type-aware key-value), Maestro (global/project teammate defaults and seven task mappings), and raw JSON source files. Restart affected agents when required after saving.
 
 ### Slash Commands & Session History
 

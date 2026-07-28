@@ -46,7 +46,7 @@ features:
 
 `PiDeck` 不是 pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，把项目管理、会话管理、配置管理和桌面交互整合起来，Agent 能力仍由 pi 原生提供。
 
-这是 `2849236173/PiDeck-maestro` 的 Maestro 兼容发行线，基于上游 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)。当前兼容版为 `0.6.6-10`，支持 teammate 子代理会话树和 Maestro 全局/项目级模型路由；版本号在上游版本后追加兼容修复号。
+这是 `2849236173/PiDeck-maestro` 的 Maestro 兼容发行线，基于上游 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)。当前兼容版为 `0.6.6-11`，支持 teammate 子代理会话树和全局/项目级任务模型路由；版本号在上游版本后追加兼容修复号。
 
 <div class="info-strip">
   <div>
@@ -69,7 +69,7 @@ features:
   <div class="screenshot-card">
     <img src="/images/config.png" alt="配置管理界面">
     <strong>配置管理</strong>
-    <span>可视化编辑 Pi 模型、认证、设置和 Maestro 工具/角色路由。</span>
+    <span>可视化编辑 Pi 模型、认证、设置和 Maestro teammate 任务路由。</span>
   </div>
   <div class="screenshot-card">
     <img src="/images/slash-commands.png" alt="斜线命令与会话历史">

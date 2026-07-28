@@ -2,11 +2,15 @@
 
 完整更新日志仍维护在仓库根目录：
 
-当前兼容发行线为 `v0.6.6-10`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+当前兼容发行线为 `v0.6.6-11`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+
+## v0.6.6-11
+
+纠正 Maestro 配置目标，改为全局 `~/.pi/agent/teammate-models.json` 和项目 `.pi/teammate-models.json`；提供默认模型与七类 teammate 任务映射，模型候选来自 Pi 配置并支持自定义 `provider/model`；保留未知字段并保护损坏 JSON。
 
 ## v0.6.6-10
 
-新增全局/项目级 Maestro CLI 工具模型与七类角色 fallback 路由 GUI；持久化并恢复子代理会话树；显示本地扩展实际版本，并修复非系统盘 Windows 与原生 Linux 路径处理。
+此版本的模型路由页面错误地配置了 Maestro CLI `cli-tools.json`，已由 v0.6.6-11 取代；同时持久化并恢复子代理会话树、显示本地扩展实际版本，并修复非系统盘 Windows 与原生 Linux 路径处理。
 
 ## v0.6.6-9
 

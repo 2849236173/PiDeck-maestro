@@ -1,106 +1,117 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Check, RefreshCw, RotateCcw } from "lucide-react";
 import {
-	AlertTriangle,
-	ArrowDown,
-	ArrowUp,
-	Check,
-	RefreshCw,
-	RotateCcw,
-	Trash2,
-} from "lucide-react";
-import {
-	MAESTRO_DELEGATE_ROLES,
-	type MaestroCliToolConfig,
-	type MaestroCliToolsFile,
-	type MaestroConfigScope,
-	type MaestroConfigSnapshot,
-	type MaestroDelegateRole,
-	type MaestroReasoningEffort,
-	type MaestroRoleMapping,
+	TEAMMATE_MODEL_TASK_TYPES,
+	type TeammateModelConfigScope,
+	type TeammateModelConfigSnapshot,
+	type TeammateModelRoutingFile,
+	type TeammateModelTaskType,
 } from "../../../shared/types";
 import type { PiDesktopApi } from "../../../preload";
 import { t } from "../i18n";
 import { Button } from "../components/ui/Button";
 import { IconButton } from "../components/ui/IconButton";
 import { SelectField } from "../components/ui/SelectField";
-import { TextField } from "../components/ui/TextField";
+import { ConfigComboboxInput } from "./ConfigShared";
+import type { ModelsFile } from "./configTypes";
 import { showNotice } from "../utils/notice";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
-const EMPTY_CONFIG: MaestroCliToolsFile = { tools: {}, roles: {} };
-const EFFORT_OPTIONS: Array<{ value: "" | MaestroReasoningEffort; labelKey: string }> = [
-	{ value: "", labelKey: "maestro.effort.default" },
-	{ value: "low", labelKey: "maestro.effort.low" },
-	{ value: "medium", labelKey: "maestro.effort.medium" },
-	{ value: "high", labelKey: "maestro.effort.high" },
-	{ value: "max", labelKey: "maestro.effort.max" },
-];
+const EMPTY_CONFIG: TeammateModelRoutingFile = { mappings: {} };
 
-function mergeScopes(
-	globalConfig: MaestroCliToolsFile,
-	workspaceConfig: MaestroCliToolsFile,
-): MaestroCliToolsFile {
-	return {
-		...globalConfig,
-		...workspaceConfig,
-		version: workspaceConfig.version ?? globalConfig.version,
-		tools: { ...globalConfig.tools, ...workspaceConfig.tools },
-		roles: { ...globalConfig.roles, ...workspaceConfig.roles },
-		proxy: workspaceConfig.proxy ?? globalConfig.proxy,
-	};
+const TASK_DESCRIPTIONS: Record<TeammateModelTaskType, { label: string; description: string }> = {
+	explore: {
+		label: t("maestro.task.explore"),
+		description: t("maestro.task.exploreDescription"),
+	},
+	analysis: {
+		label: t("maestro.task.analysis"),
+		description: t("maestro.task.analysisDescription"),
+	},
+	debug: {
+		label: t("maestro.task.debug"),
+		description: t("maestro.task.debugDescription"),
+	},
+	planning: {
+		label: t("maestro.task.planning"),
+		description: t("maestro.task.planningDescription"),
+	},
+	development: {
+		label: t("maestro.task.development"),
+		description: t("maestro.task.developmentDescription"),
+	},
+	review: {
+		label: t("maestro.task.review"),
+		description: t("maestro.task.reviewDescription"),
+	},
+	testing: {
+		label: t("maestro.task.testing"),
+		description: t("maestro.task.testingDescription"),
+	},
+};
+
+function hasOwn(object: object | undefined, key: PropertyKey) {
+	return Object.hasOwn(object ?? {}, key);
 }
 
-function roleLabel(role: MaestroDelegateRole) {
-	const labels: Record<MaestroDelegateRole, string> = {
-		analyze: t("maestro.role.analyze"),
-		explore: t("maestro.role.explore"),
-		review: t("maestro.role.review"),
-		implement: t("maestro.role.implement"),
-		plan: t("maestro.role.plan"),
-		brainstorm: t("maestro.role.brainstorm"),
-		research: t("maestro.role.research"),
-	};
-	return labels[role];
-}
-
-function resolveRoleTool(mapping: MaestroRoleMapping | undefined, config: MaestroCliToolsFile) {
-	const tools = config.tools ?? {};
-	const firstEnabled = Object.entries(tools).find(([, entry]) => entry.enabled === true)?.[0];
-	if (mapping?.tool && tools[mapping.tool]?.enabled === true) return mapping.tool;
-	for (const toolName of mapping?.fallbackChain ?? []) {
-		if (tools[toolName]?.enabled === true) return toolName;
+function normalizeRoutingDraft(config: TeammateModelRoutingFile): TeammateModelRoutingFile {
+	const mappings = { ...config.mappings };
+	if (typeof config.global === "string" && config.global) {
+		for (const taskType of TEAMMATE_MODEL_TASK_TYPES) {
+			// PiDeck materializes the default into mappings for current runtimes; fold those copies back in the editor.
+			if (mappings[taskType] === config.global) delete mappings[taskType];
+		}
 	}
-	return firstEnabled;
+	return { ...config, mappings };
+}
+
+function modelOptions(models: ModelsFile) {
+	const options = new Map<string, { value: string; label: string }>();
+	for (const [provider, config] of Object.entries(models.providers ?? {})) {
+		for (const model of config.models ?? []) {
+			const id = model.id?.trim();
+			if (!provider.trim() || !id) continue;
+			const value = `${provider}/${id}`;
+			options.set(value, {
+				value,
+				label: model.name && model.name !== id ? `${value} · ${model.name}` : value,
+			});
+		}
+	}
+	return [...options.values()].sort((left, right) => left.value.localeCompare(right.value));
 }
 
 export function MaestroTab({
+	models,
 	workspacePath,
 	onSave,
 }: {
+	models: ModelsFile;
 	workspacePath?: string;
 	onSave: () => void;
 }) {
-	const [snapshot, setSnapshot] = useState<MaestroConfigSnapshot | null>(null);
-	const [scope, setScope] = useState<MaestroConfigScope>("global");
-	const [view, setView] = useState<"tools" | "roles">("tools");
-	const [drafts, setDrafts] = useState<Record<MaestroConfigScope, MaestroCliToolsFile>>({
+	const [snapshot, setSnapshot] = useState<TeammateModelConfigSnapshot | null>(null);
+	const [scope, setScope] = useState<TeammateModelConfigScope>("global");
+	const [drafts, setDrafts] = useState<Record<TeammateModelConfigScope, TeammateModelRoutingFile>>({
 		global: EMPTY_CONFIG,
 		workspace: EMPTY_CONFIG,
 	});
-	const [dirtyScopes, setDirtyScopes] = useState<Set<MaestroConfigScope>>(new Set());
+	const [dirtyScopes, setDirtyScopes] = useState<Set<TeammateModelConfigScope>>(new Set());
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+
+	const availableModels = useMemo(() => modelOptions(models), [models]);
 
 	const load = useCallback(async () => {
 		setLoading(true);
 		setError(null);
 		try {
-			const result = await api.config.getMaestroCliTools(workspacePath);
+			const result = await api.config.getTeammateModels(workspacePath);
 			setSnapshot(result);
 			setDrafts({
-				global: result.global.parsed,
-				workspace: result.workspace?.parsed ?? EMPTY_CONFIG,
+				global: normalizeRoutingDraft(result.global.parsed),
+				workspace: normalizeRoutingDraft(result.workspace?.parsed ?? EMPTY_CONFIG),
 			});
 			setDirtyScopes(new Set());
 			if (!workspacePath) setScope("global");
@@ -115,101 +126,81 @@ export function MaestroTab({
 		void load();
 	}, [load]);
 
-	const displayConfig = useMemo(() => {
-		if (scope === "global") return drafts.global;
-		return mergeScopes(snapshot?.global.parsed ?? EMPTY_CONFIG, drafts.workspace);
-	}, [drafts, scope, snapshot]);
-
 	const selectedSource = scope === "global" ? snapshot?.global : snapshot?.workspace;
-	const scopedConfig = drafts[scope];
-	const tools = displayConfig.tools ?? {};
-	const toolNames = Object.keys(tools);
-	const enabledToolNames = toolNames.filter((name) => tools[name]?.enabled === true);
+	const draft = drafts[scope];
+	const initial = selectedSource?.parsed ?? EMPTY_CONFIG;
 	const hasDiagnostic = Boolean(selectedSource?.diagnostic);
 	const isDirty = dirtyScopes.has(scope);
+	const selectedDefault = hasOwn(draft, "global")
+		? draft.global ?? ""
+		: scope === "workspace"
+			? snapshot?.global.parsed.global ?? ""
+			: "";
 
-	function updateScopeConfig(update: (current: MaestroCliToolsFile) => MaestroCliToolsFile) {
+	function updateDraft(update: (current: TeammateModelRoutingFile) => TeammateModelRoutingFile) {
 		setDrafts((current) => ({ ...current, [scope]: update(current[scope]) }));
 		setDirtyScopes((current) => new Set(current).add(scope));
 	}
 
-	function updateTool(name: string, patch: Partial<MaestroCliToolConfig>) {
-		const base = scopedConfig.tools?.[name] ?? tools[name] ?? {};
-		updateScopeConfig((current) => ({
-			...current,
-			tools: {
-				...current.tools,
-				[name]: { ...base, ...patch },
-			},
-		}));
+	function setDefaultModel(value: string) {
+		updateDraft((current) => ({ ...current, global: value || null }));
 	}
 
-	function updateRole(role: MaestroDelegateRole, mapping: MaestroRoleMapping) {
-		const base = scopedConfig.roles?.[role] ?? displayConfig.roles?.[role] ?? {};
-		updateScopeConfig((current) => ({
-			...current,
-			roles: {
-				...current.roles,
-				[role]: { ...base, ...mapping },
-			},
-		}));
-	}
-
-	function moveFallback(role: MaestroDelegateRole, index: number, direction: -1 | 1) {
-		const mapping = displayConfig.roles?.[role];
-		const chain = [...(mapping?.fallbackChain ?? enabledToolNames)];
-		const target = index + direction;
-		if (target < 0 || target >= chain.length) return;
-		[chain[index], chain[target]] = [chain[target], chain[index]];
-		updateRole(role, { tool: undefined, fallbackChain: chain });
-	}
-
-	function restoreInheritedTool(name: string) {
-		updateScopeConfig((current) => {
-			const nextTools = { ...current.tools };
-			delete nextTools[name];
-			return { ...current, tools: nextTools };
+	function restoreDefault() {
+		updateDraft((current) => {
+			const next = { ...current };
+			delete next.global;
+			return next;
 		});
 	}
 
-	function restoreInheritedRole(role: MaestroDelegateRole) {
-		updateScopeConfig((current) => {
-			const nextRoles = { ...current.roles };
-			delete nextRoles[role];
-			return { ...current, roles: nextRoles };
+	function modelForTask(taskType: TeammateModelTaskType) {
+		if (hasOwn(draft.mappings, taskType)) return draft.mappings?.[taskType] ?? "";
+		if (typeof draft.global === "string" && draft.global) return draft.global;
+		return snapshot?.effective.mappings?.[taskType] ?? "";
+	}
+
+	function setTaskModel(taskType: TeammateModelTaskType, value: string) {
+		updateDraft((current) => ({
+			...current,
+			mappings: { ...current.mappings, [taskType]: value || null },
+		}));
+	}
+
+	function restoreTaskMapping(taskType: TeammateModelTaskType) {
+		updateDraft((current) => {
+			const mappings = { ...current.mappings };
+			delete mappings[taskType];
+			return { ...current, mappings };
 		});
 	}
 
-	function buildRoutingUpdate() {
-		const initial = scope === "global"
-			? snapshot?.global.parsed ?? EMPTY_CONFIG
-			: snapshot?.workspace?.parsed ?? EMPTY_CONFIG;
-		const draft = drafts[scope];
-		const tools = Object.fromEntries(
-			Object.entries(draft.tools ?? {}).filter(([name, entry]) =>
-				JSON.stringify(entry) !== JSON.stringify(initial.tools?.[name]),
-			),
+	function buildSaveRequest() {
+		const changedMappings: TeammateModelRoutingFile["mappings"] = {};
+		for (const taskType of TEAMMATE_MODEL_TASK_TYPES) {
+			if (hasOwn(draft.mappings, taskType)) {
+				const value = draft.mappings?.[taskType];
+				if (value !== initial.mappings?.[taskType]) changedMappings![taskType] = value;
+			} else if (typeof draft.global === "string" && draft.global) {
+				// Current teammate runtimes route from mappings; materialize legacy/default values.
+				if (initial.mappings?.[taskType] !== draft.global) changedMappings![taskType] = draft.global;
+			}
+		}
+		const removeMappings = TEAMMATE_MODEL_TASK_TYPES.filter(
+			(taskType) => hasOwn(initial.mappings, taskType) && !hasOwn(draft.mappings, taskType) && !draft.global,
 		);
-		const roles = Object.fromEntries(
-			Object.entries(draft.roles ?? {}).filter(([name, mapping]) =>
-				JSON.stringify(mapping) !== JSON.stringify(initial.roles?.[name]),
-			),
-		);
-		const removeTools = scope === "workspace"
-			? Object.keys(initial.tools ?? {}).filter((name) => !Object.hasOwn(draft.tools ?? {}, name))
-			: [];
-		const removeRoles = scope === "workspace"
-			? MAESTRO_DELEGATE_ROLES.filter(
-				(role) => Object.hasOwn(initial.roles ?? {}, role) && !Object.hasOwn(draft.roles ?? {}, role),
-			)
-			: [];
+		const globalChanged = hasOwn(draft, "global") && draft.global !== initial.global;
+		const removeGlobal = hasOwn(initial, "global") && !hasOwn(draft, "global");
 		return {
+			scope,
+			workspacePath: scope === "workspace" ? workspacePath : undefined,
 			config: {
-				...(Object.keys(tools).length ? { tools } : {}),
-				...(Object.keys(roles).length ? { roles } : {}),
+				version: 2,
+				...(globalChanged ? { global: draft.global } : {}),
+				...(Object.keys(changedMappings ?? {}).length ? { mappings: changedMappings } : {}),
 			},
-			...(removeTools.length ? { removeTools } : {}),
-			...(removeRoles.length ? { removeRoles } : {}),
+			...(removeGlobal ? { removeGlobal: true } : {}),
+			...(removeMappings.length ? { removeMappings } : {}),
 		};
 	}
 
@@ -218,15 +209,11 @@ export function MaestroTab({
 		setSaving(true);
 		setError(null);
 		try {
-			const update = buildRoutingUpdate();
-			const result = await api.config.saveMaestroCliTools({
-				scope,
-				workspacePath: scope === "workspace" ? workspacePath : undefined,
-				...update,
-			});
+			const result = await api.config.saveTeammateModels(buildSaveRequest());
 			if (!result.valid) {
-				setError(result.error ?? t("config.saveFailed"));
-				showNotice(result.error ?? t("config.saveFailed"), 4000);
+				const message = result.error ?? t("config.saveFailed");
+				setError(message);
+				showNotice(message, 4000);
 				return;
 			}
 			showNotice(t("maestro.saved"), 3000);
@@ -261,7 +248,7 @@ export function MaestroTab({
 					className="maestro-scope-select"
 					label={t("maestro.scope")}
 					value={scope}
-					onChange={(value) => setScope(value as MaestroConfigScope)}
+					onChange={(value) => setScope(value as TeammateModelConfigScope)}
 					options={[
 						{ value: "global", label: t("maestro.scope.global") },
 						{
@@ -272,25 +259,8 @@ export function MaestroTab({
 					]}
 					description={selectedSource?.path ?? t("maestro.workspaceUnavailable")}
 				/>
-				<div className="maestro-config-view-switch" role="tablist" aria-label={t("maestro.view") }>
-					<Button
-						role="tab"
-						aria-selected={view === "tools"}
-						variant={view === "tools" ? "primary" : "secondary"}
-						buttonSize="sm"
-						onClick={() => setView("tools")}
-					>
-						{t("maestro.tools")}
-					</Button>
-					<Button
-						role="tab"
-						aria-selected={view === "roles"}
-						variant={view === "roles" ? "primary" : "secondary"}
-						buttonSize="sm"
-						onClick={() => setView("roles")}
-					>
-						{t("maestro.roles")}
-					</Button>
+				<div className="maestro-model-count">
+					{t("maestro.availableModels", { count: availableModels.length })}
 				</div>
 			</div>
 
@@ -312,189 +282,66 @@ export function MaestroTab({
 
 			{error && <div className="config-error">{error}</div>}
 
-			{view === "tools" && (
-				<div className="maestro-routing-list">
-					{toolNames.length === 0 && (
-						<div className="config-empty">{t("maestro.noTools")}</div>
-					)}
-					{Object.entries(tools).map(([name, tool]) => {
-						const inherited = scope === "workspace" && !Object.hasOwn(scopedConfig.tools ?? {}, name);
-						return (
-							<section className="maestro-routing-card" key={name}>
-								<header>
-									<div>
-										<strong>{name}</strong>
-										{inherited && <span className="maestro-inherited-badge">{t("maestro.inherited")}</span>}
-									</div>
-									<div className="maestro-card-actions">
-										{scope === "workspace" && !inherited && (
-											<IconButton
-												label={t("maestro.restoreInherited")}
-												disabled={hasDiagnostic}
-												onClick={() => restoreInheritedTool(name)}
-											>
-												<RotateCcw size={14} aria-hidden="true" />
-											</IconButton>
-										)}
-										<label className="config-checkbox-label">
-											<input
-												type="checkbox"
-												checked={tool.enabled === true}
-												disabled={hasDiagnostic}
-												onChange={(event) => updateTool(name, { enabled: event.target.checked })}
-											/>
-											{t("maestro.enabled")}
-										</label>
-									</div>
-								</header>
-								<div className="maestro-tool-fields">
-									<TextField
-										label={t("maestro.primaryModel")}
-										value={tool.primaryModel ?? ""}
-										placeholder={t("maestro.modelPlaceholder")}
-										disabled={hasDiagnostic}
-										onChange={(value) => updateTool(name, { primaryModel: value })}
-										description={t("maestro.modelHint")}
-									/>
-									<TextField
-										label={t("maestro.secondaryModel")}
-										value={tool.secondaryModel ?? ""}
-										placeholder={t("maestro.optional")}
-										disabled={hasDiagnostic}
-										onChange={(value) => updateTool(name, { secondaryModel: value || undefined })}
-									/>
-									<SelectField
-										label={t("maestro.reasoningEffort")}
-										value={tool.reasoningEffort ?? ""}
-										disabled={hasDiagnostic}
-										onChange={(value) => updateTool(name, {
-											reasoningEffort: (value || undefined) as MaestroReasoningEffort | undefined,
-										})}
-										options={EFFORT_OPTIONS.map((option) => ({
-											value: option.value,
-											label: t(option.labelKey as Parameters<typeof t>[0]),
-										}))}
-									/>
-								</div>
-							</section>
-						);
-					})}
-				</div>
-			)}
+			<div className="maestro-model-routing-list">
+				<section className="maestro-model-routing-card maestro-default-model-card">
+					<div className="maestro-model-routing-info">
+						<strong>{t("maestro.globalModel")}</strong>
+						<code>global</code>
+						<p>{t("maestro.globalModelDescription")}</p>
+					</div>
+					<div className="maestro-model-routing-control">
+						<ConfigComboboxInput
+							value={selectedDefault}
+							options={availableModels}
+							onChange={setDefaultModel}
+							placeholder={t("maestro.modelPlaceholder")}
+						/>
+						{scope === "workspace" && hasOwn(draft, "global") && (
+							<IconButton
+								label={t("maestro.restoreInherited")}
+								disabled={hasDiagnostic}
+								onClick={restoreDefault}
+							>
+								<RotateCcw size={15} aria-hidden="true" />
+							</IconButton>
+						)}
+					</div>
+				</section>
 
-			{view === "roles" && (
-				<div className="maestro-routing-list">
-					{MAESTRO_DELEGATE_ROLES.map((role) => {
-						const mapping = displayConfig.roles?.[role];
-						const strategy = mapping?.tool ? "direct" : "fallback";
-						const chain = mapping?.fallbackChain ?? enabledToolNames;
-						const inherited = scope === "workspace" && !Object.hasOwn(scopedConfig.roles ?? {}, role);
-						const resolved = resolveRoleTool(mapping, displayConfig);
-						return (
-							<section className="maestro-routing-card maestro-role-card" key={role}>
-								<header>
-									<div>
-										<strong>{roleLabel(role)}</strong>
-										<code>{role}</code>
-										{inherited && <span className="maestro-inherited-badge">{t("maestro.inherited")}</span>}
-									</div>
-									<div className="maestro-card-actions">
-										<span className="maestro-resolved-tool">
-											{t("maestro.resolvedTool", { tool: resolved ?? t("maestro.none") })}
-										</span>
-										{scope === "workspace" && !inherited && (
-											<IconButton
-												label={t("maestro.restoreInherited")}
-												disabled={hasDiagnostic}
-												onClick={() => restoreInheritedRole(role)}
-											>
-												<RotateCcw size={14} aria-hidden="true" />
-											</IconButton>
-										)}
-									</div>
-								</header>
-								<div className="maestro-role-fields">
-									<SelectField
-										label={t("maestro.routingMode")}
-										value={strategy}
-										disabled={hasDiagnostic || toolNames.length === 0}
-										onChange={(value) => {
-											if (value === "direct") {
-												updateRole(role, { tool: resolved ?? enabledToolNames[0], fallbackChain: undefined });
-											} else {
-												updateRole(role, { tool: undefined, fallbackChain: chain.length ? chain : enabledToolNames });
-											}
-										}}
-										options={[
-											{ value: "fallback", label: t("maestro.routingFallback") },
-											{ value: "direct", label: t("maestro.routingDirect") },
-										]}
-									/>
-									{strategy === "direct" ? (
-										<SelectField
-											label={t("maestro.directTool")}
-											value={mapping?.tool ?? resolved ?? ""}
-											disabled={hasDiagnostic || toolNames.length === 0}
-											onChange={(value) => updateRole(role, { tool: value, fallbackChain: undefined })}
-											options={toolNames.map((name) => ({ value: name, label: name }))}
-										/>
-									) : (
-										<div className="maestro-fallback-editor">
-											<span className="ui-field-label">{t("maestro.fallbackChain")}</span>
-											{chain.map((toolName, index) => (
-												<div className="maestro-fallback-row" key={`${toolName}-${index}`}>
-													<span>{index + 1}</span>
-													<code>{toolName}</code>
-													<div>
-														<IconButton
-															label={t("maestro.moveUp")}
-															disabled={hasDiagnostic || index === 0}
-															onClick={() => moveFallback(role, index, -1)}
-														>
-															<ArrowUp size={14} aria-hidden="true" />
-														</IconButton>
-														<IconButton
-															label={t("maestro.moveDown")}
-															disabled={hasDiagnostic || index === chain.length - 1}
-															onClick={() => moveFallback(role, index, 1)}
-														>
-															<ArrowDown size={14} aria-hidden="true" />
-														</IconButton>
-														<IconButton
-															label={t("maestro.removeTool")}
-															disabled={hasDiagnostic}
-															onClick={() => updateRole(role, {
-																tool: undefined,
-																fallbackChain: chain.filter((_, itemIndex) => itemIndex !== index),
-															})}
-														>
-															<Trash2 size={14} aria-hidden="true" />
-														</IconButton>
-													</div>
-												</div>
-											))}
-											<SelectField
-												label={t("maestro.addFallback")}
-												value=""
-												disabled={hasDiagnostic || chain.length >= toolNames.length}
-												onChange={(value) => {
-													if (value) updateRole(role, { tool: undefined, fallbackChain: [...chain, value] });
-												}}
-												options={[
-													{ value: "", label: t("maestro.selectTool") },
-													...toolNames
-														.filter((name) => !chain.includes(name))
-														.map((name) => ({ value: name, label: name })),
-												]}
-											/>
-										</div>
-									)}
-								</div>
-							</section>
-						);
-					})}
-				</div>
-			)}
+				{TEAMMATE_MODEL_TASK_TYPES.map((taskType) => {
+					const ownMapping = hasOwn(draft.mappings, taskType);
+					const inherited = scope === "workspace" && !ownMapping && !hasOwn(draft, "global");
+					const usingDefault = !ownMapping && !inherited;
+					return (
+						<section className="maestro-model-routing-card" key={taskType}>
+							<div className="maestro-model-routing-info">
+								<strong>{TASK_DESCRIPTIONS[taskType].label}</strong>
+								<code>{taskType}</code>
+								{inherited && <span className="maestro-inherited-badge">{t("maestro.inherited")}</span>}
+								{usingDefault && <span className="maestro-inherited-badge">{t("maestro.usesDefault")}</span>}
+								<p>{TASK_DESCRIPTIONS[taskType].description}</p>
+							</div>
+							<div className="maestro-model-routing-control">
+								<ConfigComboboxInput
+									value={modelForTask(taskType)}
+									options={availableModels}
+									onChange={(value) => setTaskModel(taskType, value)}
+									placeholder={t("maestro.modelPlaceholder")}
+								/>
+								{ownMapping && (
+									<IconButton
+										label={t("maestro.restoreMapping")}
+										disabled={hasDiagnostic}
+										onClick={() => restoreTaskMapping(taskType)}
+									>
+										<RotateCcw size={15} aria-hidden="true" />
+									</IconButton>
+								)}
+							</div>
+						</section>
+					);
+				})}
+			</div>
 
 			<div className="maestro-config-footer">
 				<span>{isDirty ? t("maestro.unsaved") : t("maestro.noChanges")}</span>

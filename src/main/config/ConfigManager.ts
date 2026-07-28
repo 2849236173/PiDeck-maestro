@@ -3,14 +3,15 @@ import { normalize, join, dirname, isAbsolute } from "node:path";
 import { dirname as posixDirname, normalize as posixNormalize } from "node:path/posix";
 import { homedir } from "node:os";
 import { net } from "electron";
+import { TEAMMATE_MODEL_TASK_TYPES } from "../../shared/types";
 import type {
 	ConfigFileDiagnostic,
 	ConfigFileReadResult,
-	MaestroCliToolsFile,
-	MaestroConfigSaveRequest,
-	MaestroConfigSnapshot,
-	MaestroConfigSource,
-	MaestroRoleMapping,
+	TeammateModelConfigSaveRequest,
+	TeammateModelConfigSnapshot,
+	TeammateModelConfigSource,
+	TeammateModelRoutingFile,
+	TeammateModelTaskType,
 } from "../../shared/types";
 import {
 	ensureOpenAiVersionPath,
@@ -21,8 +22,7 @@ import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
-const MAESTRO_DIR = join(homedir(), ".maestro");
-const MAESTRO_CONFIG_FILE = "cli-tools.json";
+const TEAMMATE_MODELS_FILE = "teammate-models.json";
 
 // ── models.json 结构 ──────────────────────────────────
 // { providers: { [providerName]: { baseUrl, api, apiKey, models: [...] } } }
@@ -107,18 +107,12 @@ export class ConfigManager {
 			: PI_AGENT_DIR;
 	}
 
-	// ── Maestro 辅助方法 ──────────────────────────────────
+	// ── Teammate 模型路由 ─────────────────────────────────
 
-	private getMaestroDir(): string {
-		return this.configDir.endsWith(join(".pi", "agent"))
-			? join(dirname(dirname(this.configDir)), ".maestro")
-			: MAESTRO_DIR;
-	}
-
-	private resolveMaestroPath(scope: "global" | "workspace", workspacePath?: string) {
-		if (scope === "global") return join(this.getMaestroDir(), MAESTRO_CONFIG_FILE);
+	private resolveTeammateModelsPath(scope: "global" | "workspace", workspacePath?: string) {
+		if (scope === "global") return join(this.configDir, TEAMMATE_MODELS_FILE);
 		if (!workspacePath?.trim()) {
-			throw new Error("Workspace path is required for workspace Maestro configuration");
+			throw new Error("Workspace path is required for project teammate model configuration");
 		}
 		const resolvedWorkspace = this.wslEnvironment
 			? toWindowsHostPath(workspacePath, this.wslEnvironment)
@@ -126,26 +120,35 @@ export class ConfigManager {
 		if (!isAbsolute(resolvedWorkspace)) {
 			throw new Error("Workspace path must be absolute");
 		}
-		return join(resolvedWorkspace, ".maestro", MAESTRO_CONFIG_FILE);
+		return join(resolvedWorkspace, ".pi", TEAMMATE_MODELS_FILE);
 	}
 
-	private async readMaestroSource(
+	private async readTeammateModelSource(
 		scope: "global" | "workspace",
 		workspacePath?: string,
-	): Promise<MaestroConfigSource> {
-		const filePath = this.resolveMaestroPath(scope, workspacePath);
+	): Promise<TeammateModelConfigSource> {
+		const filePath = this.resolveTeammateModelsPath(scope, workspacePath);
 		try {
 			const raw = await readFile(filePath, "utf8");
 			try {
 				const value = JSON.parse(raw) as unknown;
 				if (!value || typeof value !== "object" || Array.isArray(value)) {
-					throw new Error("cli-tools.json 的根节点必须是对象");
+					throw new Error(`${TEAMMATE_MODELS_FILE} 的根节点必须是对象`);
 				}
-				const parsed = value as MaestroCliToolsFile;
-				for (const field of ["tools", "roles"] as const) {
+				const parsed = value as TeammateModelRoutingFile;
+				if (parsed.global !== undefined && parsed.global !== null && typeof parsed.global !== "string") {
+					throw new Error(`${TEAMMATE_MODELS_FILE} 的 global 字段必须是字符串或 null`);
+				}
+				for (const field of ["mappings", "thinkingLevels"] as const) {
 					const candidate = parsed[field];
 					if (candidate !== undefined && (!candidate || typeof candidate !== "object" || Array.isArray(candidate))) {
-						throw new Error(`cli-tools.json 的 ${field} 字段必须是对象`);
+						throw new Error(`${TEAMMATE_MODELS_FILE} 的 ${field} 字段必须是对象`);
+					}
+				}
+				for (const taskType of TEAMMATE_MODEL_TASK_TYPES) {
+					const model = parsed.mappings?.[taskType];
+					if (model !== undefined && model !== null && typeof model !== "string") {
+						throw new Error(`${TEAMMATE_MODELS_FILE} 的 mappings.${taskType} 必须是字符串或 null`);
 					}
 				}
 				return { scope, path: filePath, exists: true, raw, parsed };
@@ -156,7 +159,7 @@ export class ConfigManager {
 					exists: true,
 					raw,
 					parsed: {},
-					diagnostic: this.createJsonDiagnostic(MAESTRO_CONFIG_FILE, raw, error),
+					diagnostic: this.createJsonDiagnostic(TEAMMATE_MODELS_FILE, raw, error),
 				};
 			}
 		} catch (error) {
@@ -169,70 +172,77 @@ export class ConfigManager {
 				exists: false,
 				raw: "",
 				parsed: {},
-				diagnostic: this.createJsonDiagnostic(MAESTRO_CONFIG_FILE, "", error),
+				diagnostic: this.createJsonDiagnostic(TEAMMATE_MODELS_FILE, "", error),
 			};
 		}
 	}
 
-	/** Maestro runtime uses same-name workspace tool/role entries as complete overrides. */
-	private mergeMaestroSources(
-		globalConfig: MaestroCliToolsFile,
-		workspaceConfig?: MaestroCliToolsFile,
-	): MaestroCliToolsFile {
-		if (!workspaceConfig) return { ...globalConfig };
+	/** Project mappings override global mappings one task type at a time. */
+	private mergeTeammateModelSources(
+		globalConfig: TeammateModelRoutingFile,
+		workspaceConfig?: TeammateModelRoutingFile,
+	): TeammateModelRoutingFile {
+		const mappings: Partial<Record<TeammateModelTaskType, string | null>> = {};
+		for (const taskType of TEAMMATE_MODEL_TASK_TYPES) {
+			let value = Object.hasOwn(globalConfig.mappings ?? {}, taskType)
+				? globalConfig.mappings?.[taskType]
+				: globalConfig.global;
+			if (workspaceConfig) {
+				if (Object.hasOwn(workspaceConfig.mappings ?? {}, taskType)) {
+					value = workspaceConfig.mappings?.[taskType];
+				} else if (workspaceConfig.global !== undefined) {
+					value = workspaceConfig.global;
+				}
+			}
+			if (value !== undefined) mappings[taskType] = value;
+		}
 		return {
 			...globalConfig,
 			...workspaceConfig,
-			version: workspaceConfig.version ?? globalConfig.version,
-			tools: { ...globalConfig.tools, ...workspaceConfig.tools },
-			roles: { ...globalConfig.roles, ...workspaceConfig.roles },
-			proxy: workspaceConfig.proxy ?? globalConfig.proxy,
+			version: workspaceConfig?.version ?? globalConfig.version ?? 2,
+			global: workspaceConfig?.global !== undefined
+				? workspaceConfig.global
+				: globalConfig.global,
+			mappings,
+			thinkingLevels: {
+				...globalConfig.thinkingLevels,
+				...workspaceConfig?.thinkingLevels,
+			},
 		};
 	}
 
-	/** Merge only submitted entries so unrelated and future Maestro fields survive GUI saves. */
-	private mergeMaestroUpdate(
-		existing: MaestroCliToolsFile,
-		update: MaestroCliToolsFile,
-	): MaestroCliToolsFile {
-		const tools = { ...existing.tools };
-		for (const [name, entry] of Object.entries(update.tools ?? {})) {
-			tools[name] = { ...tools[name], ...entry };
-		}
-		const roles = { ...existing.roles };
-		for (const [name, mapping] of Object.entries(update.roles ?? {})) {
-			if (!mapping) continue;
-			roles[name] = {
-				...(roles[name] as MaestroRoleMapping | undefined),
-				...mapping,
-			};
-		}
+	private mergeTeammateModelUpdate(
+		existing: TeammateModelRoutingFile,
+		update: TeammateModelRoutingFile,
+	): TeammateModelRoutingFile {
 		return {
 			...existing,
 			...update,
-			version: update.version ?? existing.version ?? "1.1.0",
-			tools,
-			roles,
+			version: update.version ?? existing.version ?? 2,
+			mappings: { ...existing.mappings, ...update.mappings },
+			thinkingLevels: { ...existing.thinkingLevels, ...update.thinkingLevels },
 		};
 	}
 
-	async getMaestroCliToolsConfig(workspacePath?: string): Promise<MaestroConfigSnapshot> {
-		const global = await this.readMaestroSource("global");
+	async getTeammateModelRoutingConfig(
+		workspacePath?: string,
+	): Promise<TeammateModelConfigSnapshot> {
+		const global = await this.readTeammateModelSource("global");
 		const workspace = workspacePath
-			? await this.readMaestroSource("workspace", workspacePath)
+			? await this.readTeammateModelSource("workspace", workspacePath)
 			: undefined;
 		return {
 			global,
 			workspace,
-			effective: this.mergeMaestroSources(
+			effective: this.mergeTeammateModelSources(
 				global.diagnostic ? {} : global.parsed,
 				workspace?.diagnostic ? undefined : workspace?.parsed,
 			),
 		};
 	}
 
-	async saveMaestroCliToolsConfig(
-		request: MaestroConfigSaveRequest,
+	async saveTeammateModelRoutingConfig(
+		request: TeammateModelConfigSaveRequest,
 	): Promise<ConfigValidationResult> {
 		if (
 			!request ||
@@ -242,22 +252,20 @@ export class ConfigManager {
 			Array.isArray(request.config) ||
 			(request.scope !== "global" && request.scope !== "workspace")
 		) {
-			return { valid: false, error: "Maestro 配置保存请求无效" };
+			return { valid: false, error: "Teammate 模型路由保存请求无效" };
 		}
 		try {
-			const source = await this.readMaestroSource(request.scope, request.workspacePath);
+			const source = await this.readTeammateModelSource(request.scope, request.workspacePath);
 			if (source.diagnostic) {
 				return {
 					valid: false,
 					error: `无法保存：${source.path} 当前无法安全解析，请先修复原文件。`,
 				};
 			}
-			const merged = this.mergeMaestroUpdate(source.parsed, request.config);
-			for (const name of request.removeTools ?? []) {
-				delete merged.tools?.[name];
-			}
-			for (const role of request.removeRoles ?? []) {
-				delete merged.roles?.[role];
+			const merged = this.mergeTeammateModelUpdate(source.parsed, request.config);
+			if (request.removeGlobal) delete merged.global;
+			for (const taskType of request.removeMappings ?? []) {
+				delete merged.mappings?.[taskType];
 			}
 			await this.writeJsonFileRaw(source.path, merged);
 			return { valid: true };
@@ -497,7 +505,7 @@ export class ConfigManager {
 	private docsUrlForFile(fileName: string) {
 		if (fileName === "models.json") return "https://pi.dev/docs/latest/models";
 		if (fileName === "settings.json") return "https://pi.dev/docs/latest/settings";
-		if (fileName === MAESTRO_CONFIG_FILE) return "https://www.npmjs.com/package/pi-maestro-flow";
+		if (fileName === TEAMMATE_MODELS_FILE) return "https://www.npmjs.com/package/pi-maestro-flow";
 		return "https://pi.dev/docs/latest/providers";
 	}
 

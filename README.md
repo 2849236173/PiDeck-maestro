@@ -26,11 +26,17 @@
 
 ## 📋 更新日志
 
-> **兼容版最新版本 v0.6.6-10**（2026-07-27）
+> **兼容版最新版本 v0.6.6-11**（2026-07-28）
+
+### v0.6.6-11 Maestro 兼容版
+
+- 纠正 Maestro 配置页目标：现在读写全局 `~/.pi/agent/teammate-models.json` 与项目 `.pi/teammate-models.json`。
+- 提供默认模型和七类 teammate 任务映射，模型候选来自 Pi 配置，支持搜索和自定义 `provider/model`。
+- 保留 `thinkingLevels` 与未知字段，损坏 JSON 不覆盖，项目映射可恢复继承全局值。
 
 ### v0.6.6-10 Maestro 兼容版
 
-- 新增 Maestro 模型路由 GUI，可分别管理全局和当前项目的 CLI 工具模型、推理强度及七类角色 fallback 顺序。
+- 此版本的模型路由页面误配置了 Maestro CLI `cli-tools.json`，已由 v0.6.6-11 纠正，请升级使用。
 - 持久化子代理父子会话关系，并从历史 teammate correlation ID 安全恢复旧会话树。
 - 显示本地扩展实际版本，修复非系统盘 Windows 与原生 Linux 路径处理。
 
@@ -117,7 +123,7 @@
 | **消息编辑/删除** | AI 回答和用户消息均支持复制、编辑和删除，编辑后回填到输入框重新发送。 |
 | **草稿本 (ScratchPad)** | 浮层式草稿本，支持内容预览、勾选映射和动画，颜色使用主题语义 token。 |
 | **内容行宽限制** | 可拖拽的内容宽度滑块，默认不限宽，往左拖逐渐变窄，适应长行代码阅读或紧凑布局需求。 |
-| **配置、Skill 与 Extension 管理** | 可视化编辑 pi 的 `models.json`、`auth.json`、`settings.json`，通过 Maestro 页面管理全局/项目级 CLI 工具模型与角色路由，并可管理全局 Skills 与 Extensions。 |
+| **配置、Skill 与 Extension 管理** | 可视化编辑 pi 的 `models.json`、`auth.json`、`settings.json`，通过 Maestro 页面管理全局/项目级 teammate 默认模型与七类任务映射，并可管理全局 Skills 与 Extensions。 |
 | **扩展启用/禁用** | 支持禁用/启用内置扩展，项目级技能/扩展管理，区分全局与项目级配置。 |
 | **信任确认系统** | 桌面端拦截信任确认，不信任仍可打开项目；有 Agent 运行时禁止删除项目。 |
 | **代理设置** | 独立管理 pi agent 子进程代理和桌面端代理，模型拉取与连接测试可走桌面端代理。 |
@@ -150,7 +156,7 @@ Markdown 渲染 + 流式输出、活动轨迹、工具调用详情、回答级�
 
 ![配置管理](docs/images/config.png)
 
-可视化编辑器：Models（Provider 卡片 + 模型网格 + 连接测试）、Auth（API Key 管理）、Settings（类型感知的键值编辑器）、Maestro（全局/项目级工具模型和角色路由）、源文件（原始 JSON 编辑）——保存后可按需重启 Agent 生效。
+可视化编辑器：Models（Provider 卡片 + 模型网格 + 连接测试）、Auth（API Key 管理）、Settings（类型感知的键值编辑器）、Maestro（全局/项目级 teammate 默认模型和七类任务映射）、源文件（原始 JSON 编辑）——保存后可按需重启 Agent 生效。
 
 ### 斜线命令与会话历史
 

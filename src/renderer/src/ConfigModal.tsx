@@ -388,6 +388,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							}
 						});
 					}
+				} else if (target === "maestro") {
+					// Teammate 路由候选必须来自 Pi 已配置模型；只读本地 models.json，不触发远端发现。
+					const res = await api.config.getModels();
+					setModelsData(normalizeModelsFile(res.parsed));
 				} else if (target === "trust") {
 					const res = await api.config.getTrust();
 					setTrustData(res.parsed as Record<string, boolean>);
@@ -1567,6 +1571,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "config" && !loading && tab === "maestro" && (
 						<MaestroTab
+							models={modelsData}
 							workspacePath={props.projectPath}
 							onSave={onSaved}
 						/>

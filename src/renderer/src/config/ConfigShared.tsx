@@ -123,6 +123,7 @@ export function ConfigComboboxInput(props: {
 	options: Array<{ value: string; label?: string }>;
 	onChange: (value: string) => void;
 	placeholder?: string;
+	ariaLabel?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [filter, setFilter] = useState("");
@@ -165,8 +166,15 @@ export function ConfigComboboxInput(props: {
 	return (
 		<div ref={containerRef} className="config-combobox config-settings-combobox">
 			<input
-				value={open ? filter : props.value}
+				value={props.value}
+				role="combobox"
+				aria-label={props.ariaLabel}
+				aria-expanded={open}
+				aria-autocomplete="list"
 				onFocus={handleFocus}
+				onKeyDown={(event) => {
+					if (event.key === "ArrowDown" || event.key === "ArrowUp") setOpen(true);
+				}}
 				onChange={(e) => {
 					setFilter(e.target.value);
 					props.onChange(e.target.value);
@@ -178,6 +186,8 @@ export function ConfigComboboxInput(props: {
 			<button
 				type="button"
 				className="config-combobox-toggle"
+				aria-label={props.ariaLabel}
+				title={props.ariaLabel}
 				onMouseDown={(e) => {
 					e.preventDefault();
 					if (open) {
@@ -191,7 +201,7 @@ export function ConfigComboboxInput(props: {
 				<ChevronDown size={14} />
 			</button>
 			{open && (
-				<div className="config-combobox-menu config-settings-combobox-menu">
+				<div className="config-combobox-menu config-settings-combobox-menu" role="listbox">
 					{filtered.length === 0 && (
 						<div className="config-combobox-empty">{t("config.noMatchingOptions")}</div>
 					)}
@@ -199,9 +209,12 @@ export function ConfigComboboxInput(props: {
 						<button
 							key={option.value}
 							type="button"
+							role="option"
+							aria-selected={option.value === props.value}
 							className={option.value === props.value ? "active" : ""}
 							onMouseDown={(e) => {
 								e.preventDefault();
+								setFilter("");
 								props.onChange(option.value);
 								setOpen(false);
 							}}

@@ -3371,9 +3371,9 @@ function registerIpc() {
 		configManager.getTrustConfig(),
 	);
 	ipcMain.handle(
-		ipcChannels.configGetMaestroCliTools,
+		ipcChannels.configGetTeammateModels,
 		(_event, workspacePath?: string) =>
-			configManager.getMaestroCliToolsConfig(workspacePath),
+			configManager.getTeammateModelRoutingConfig(workspacePath),
 	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
@@ -3396,9 +3396,9 @@ function registerIpc() {
 		void appLogger.info("config", "Pi settings config saved", { keys: Object.keys(settings ?? {}) });
 		return result;
 	});
-	ipcMain.handle(ipcChannels.configSaveMaestroCliTools, async (_event, request) => {
-		const result = await configManager.saveMaestroCliToolsConfig(request);
-		void appLogger.info("config", "Maestro cli-tools config saved", {
+	ipcMain.handle(ipcChannels.configSaveTeammateModels, async (_event, request) => {
+		const result = await configManager.saveTeammateModelRoutingConfig(request);
+		void appLogger.info("config", "Teammate model routing config saved", {
 			scope: request?.scope,
 			workspacePath: request?.workspacePath,
 			valid: result.valid,

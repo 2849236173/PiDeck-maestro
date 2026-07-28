@@ -7,8 +7,9 @@ import ts from "typescript";
 import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
-const GLOBAL_PATH = "C:\\Users\\tester\\.maestro\\cli-tools.json";
-const WORKSPACE_PATH = "C:\\repo\\.maestro\\cli-tools.json";
+const TASK_TYPES = ["explore", "analysis", "debug", "planning", "development", "review", "testing"];
+const GLOBAL_PATH = "C:\\Users\\tester\\.pi\\agent\\teammate-models.json";
+const WORKSPACE_PATH = "C:\\repo\\.pi\\teammate-models.json";
 
 function missingFile() {
 	const error = new Error("ENOENT");
@@ -16,7 +17,7 @@ function missingFile() {
 	return error;
 }
 
-function loadConfigManager(initialFiles = {}) {
+function loadConfigManager(initialFiles = {}, toWindowsHostPath = (value) => value) {
 	const files = new Map(Object.entries(initialFiles));
 	const writes = [];
 	const source = readFileSync("src/main/config/ConfigManager.ts", "utf8");
@@ -49,6 +50,7 @@ function loadConfigManager(initialFiles = {}) {
 			if (id === "node:path") return path.win32;
 			if (id === "node:os") return { homedir: () => "C:\\Users\\tester" };
 			if (id === "electron") return { net: {} };
+			if (id === "../../shared/types") return { TEAMMATE_MODEL_TASK_TYPES: TASK_TYPES };
 			if (id === "./baseUrlPath") {
 				return {
 					ensureOpenAiVersionPath: (value) => value,
@@ -56,18 +58,12 @@ function loadConfigManager(initialFiles = {}) {
 					suggestNormalizedBaseUrl: () => undefined,
 				};
 			}
-			if (id === "../wsl/WslPaths") {
-				return { toWindowsHostPath: (value) => value };
-			}
+			if (id === "../wsl/WslPaths") return { toWindowsHostPath };
 			return require(id);
 		},
 	};
 	vm.runInNewContext(outputText, sandbox, { filename: "ConfigManager.ts" });
-	return {
-		...sandbox.exports,
-		files,
-		writes,
-	};
+	return { ...sandbox.exports, files, writes };
 }
 
 function createManager(ConfigManager) {
@@ -75,81 +71,57 @@ function createManager(ConfigManager) {
 }
 
 const globalConfig = {
-	version: "1.1.0",
+	version: 2,
+	global: "anthropic/claude-sonnet-4-6",
 	customTopLevel: { future: true },
-	tools: {
-		claude: {
-			enabled: true,
-			primaryModel: "global-model",
-			secondaryModel: "global-backup",
-			tags: ["fullstack"],
-			type: "builtin",
-			auth: { tokenRef: "secret" },
-			futureToolField: 42,
-		},
-		codex: {
-			enabled: true,
-			primaryModel: "gpt-global",
-			tags: ["backend"],
-			type: "builtin",
-		},
+	mappings: {
+		explore: "google/gemini-2.5-pro",
+		analysis: "anthropic/claude-sonnet-4-6",
+		development: "openai/gpt-5.4",
 	},
-	roles: {
-		analyze: { fallbackChain: ["claude", "codex"], futureRoleField: "keep" },
+	thinkingLevels: {
+		analysis: "high",
+		development: "medium",
 	},
 };
 
 const workspaceConfig = {
-	tools: {
-		claude: {
-			enabled: true,
-			primaryModel: "workspace-model",
-			tags: ["frontend"],
-			type: "builtin",
-		},
+	version: 2,
+	mappings: {
+		explore: "openai/gpt-5.4-mini",
+		testing: "anthropic/claude-haiku-4-5",
 	},
-	roles: {
-		analyze: { tool: "claude" },
-	},
+	thinkingLevels: { testing: "low" },
 };
 
-test("loads global and workspace sources with Maestro runtime override semantics", async () => {
+test("loads global and project teammate-models files with per-task override semantics", async () => {
 	const { ConfigManager } = loadConfigManager({
 		[GLOBAL_PATH]: JSON.stringify(globalConfig),
 		[WORKSPACE_PATH]: JSON.stringify(workspaceConfig),
 	});
-	const manager = createManager(ConfigManager);
-	const snapshot = await manager.getMaestroCliToolsConfig("C:\\repo");
+	const snapshot = await createManager(ConfigManager).getTeammateModelRoutingConfig("C:\\repo");
 
 	assert.equal(snapshot.global.path, GLOBAL_PATH);
 	assert.equal(snapshot.workspace.path, WORKSPACE_PATH);
-	assert.equal(snapshot.global.exists, true);
-	assert.equal(snapshot.workspace.exists, true);
-	assert.equal(snapshot.effective.tools.claude.primaryModel, "workspace-model");
-	assert.equal(snapshot.effective.tools.claude.futureToolField, undefined);
-	assert.equal(snapshot.effective.tools.codex.primaryModel, "gpt-global");
-	assert.equal(snapshot.effective.roles.analyze.tool, "claude");
-	assert.equal(snapshot.effective.roles.analyze.futureRoleField, undefined);
+	assert.equal(snapshot.effective.mappings.explore, "openai/gpt-5.4-mini");
+	assert.equal(snapshot.effective.mappings.analysis, "anthropic/claude-sonnet-4-6");
+	assert.equal(snapshot.effective.mappings.debug, "anthropic/claude-sonnet-4-6");
+	assert.equal(snapshot.effective.mappings.development, "openai/gpt-5.4");
+	assert.equal(snapshot.effective.mappings.testing, "anthropic/claude-haiku-4-5");
+	assert.equal(snapshot.effective.thinkingLevels.analysis, "high");
+	assert.equal(snapshot.effective.thinkingLevels.testing, "low");
 });
 
-test("field-merges GUI updates and preserves unknown Maestro fields", async () => {
+test("preserves thinking levels and unknown fields while saving model mappings", async () => {
 	const { ConfigManager, files, writes } = loadConfigManager({
 		[GLOBAL_PATH]: JSON.stringify(globalConfig),
 	});
-	const manager = createManager(ConfigManager);
-	const result = await manager.saveMaestroCliToolsConfig({
+	const result = await createManager(ConfigManager).saveTeammateModelRoutingConfig({
 		scope: "global",
 		config: {
-			tools: {
-				claude: {
-					primaryModel: "glm-5.2",
-					secondaryModel: undefined,
-					reasoningEffort: "high",
-				},
-			},
-			roles: {
-				analyze: { tool: "claude", fallbackChain: undefined },
-			},
+			version: 2,
+			global: "openai/gpt-5.5",
+			mappings: { analysis: "openai/gpt-5.5" },
 		},
 	});
 
@@ -157,29 +129,22 @@ test("field-merges GUI updates and preserves unknown Maestro fields", async () =
 	assert.equal(writes.length, 1);
 	const saved = JSON.parse(files.get(GLOBAL_PATH));
 	assert.deepEqual(saved.customTopLevel, { future: true });
-	assert.deepEqual(saved.tools.claude.auth, { tokenRef: "secret" });
-	assert.equal(saved.tools.claude.futureToolField, 42);
-	assert.deepEqual(saved.tools.claude.tags, ["fullstack"]);
-	assert.equal(saved.tools.claude.primaryModel, "glm-5.2");
-	assert.equal(saved.tools.claude.secondaryModel, undefined);
-	assert.equal(saved.tools.claude.reasoningEffort, "high");
-	assert.equal(saved.roles.analyze.tool, "claude");
-	assert.equal(saved.roles.analyze.fallbackChain, undefined);
-	assert.equal(saved.roles.analyze.futureRoleField, "keep");
+	assert.deepEqual(saved.thinkingLevels, globalConfig.thinkingLevels);
+	assert.equal(saved.global, "openai/gpt-5.5");
+	assert.equal(saved.mappings.analysis, "openai/gpt-5.5");
+	assert.equal(saved.mappings.explore, "google/gemini-2.5-pro");
 });
 
-test("refuses to overwrite malformed JSON in the selected scope", async () => {
-	const malformed = '{"tools":{"claude":';
-	const { ConfigManager, files, writes } = loadConfigManager({
-		[GLOBAL_PATH]: malformed,
-	});
+test("refuses to overwrite malformed teammate-models JSON", async () => {
+	const malformed = '{"mappings":{"analysis":';
+	const { ConfigManager, files, writes } = loadConfigManager({ [GLOBAL_PATH]: malformed });
 	const manager = createManager(ConfigManager);
-	const snapshot = await manager.getMaestroCliToolsConfig();
+	const snapshot = await manager.getTeammateModelRoutingConfig();
 
-	assert.equal(snapshot.global.diagnostic?.fileName, "cli-tools.json");
-	const result = await manager.saveMaestroCliToolsConfig({
+	assert.equal(snapshot.global.diagnostic?.fileName, "teammate-models.json");
+	const result = await manager.saveTeammateModelRoutingConfig({
 		scope: "global",
-		config: { tools: { claude: { primaryModel: "must-not-write" } } },
+		config: { mappings: { analysis: "must-not-write" } },
 	});
 	assert.equal(result.valid, false);
 	assert.match(result.error, /无法保存/);
@@ -187,78 +152,93 @@ test("refuses to overwrite malformed JSON in the selected scope", async () => {
 	assert.equal(writes.length, 0);
 });
 
-test("creates a workspace override without modifying the global file", async () => {
-	const initialGlobal = JSON.stringify(globalConfig);
-	const { ConfigManager, files, writes } = loadConfigManager({
-		[GLOBAL_PATH]: initialGlobal,
-	});
+test("reports invalid known task mapping values without overwriting the source", async () => {
+	const malformedShape = JSON.stringify({ version: 2, mappings: { analysis: 42 } });
+	const { ConfigManager, files, writes } = loadConfigManager({ [GLOBAL_PATH]: malformedShape });
 	const manager = createManager(ConfigManager);
-	const result = await manager.saveMaestroCliToolsConfig({
+	const snapshot = await manager.getTeammateModelRoutingConfig();
+
+	assert.match(snapshot.global.diagnostic?.message ?? "", /mappings\.analysis/);
+	const result = await manager.saveTeammateModelRoutingConfig({
+		scope: "global",
+		config: { mappings: { analysis: "openai/gpt-5.5" } },
+	});
+	assert.equal(result.valid, false);
+	assert.equal(files.get(GLOBAL_PATH), malformedShape);
+	assert.equal(writes.length, 0);
+});
+
+test("creates a project mapping without modifying the global file", async () => {
+	const initialGlobal = JSON.stringify(globalConfig);
+	const { ConfigManager, files, writes } = loadConfigManager({ [GLOBAL_PATH]: initialGlobal });
+	const result = await createManager(ConfigManager).saveTeammateModelRoutingConfig({
 		scope: "workspace",
 		workspacePath: "C:\\repo",
-		config: {
-			tools: {
-				claude: {
-					enabled: true,
-					primaryModel: "project-model",
-					tags: ["fullstack"],
-					type: "builtin",
-				},
-			},
-		},
+		config: { version: 2, mappings: { review: "openai/gpt-5.4" } },
 	});
 
 	assert.equal(result.valid, true);
 	assert.equal(writes[0].filePath, WORKSPACE_PATH);
 	assert.equal(files.get(GLOBAL_PATH), initialGlobal);
-	assert.equal(JSON.parse(files.get(WORKSPACE_PATH)).tools.claude.primaryModel, "project-model");
+	assert.equal(JSON.parse(files.get(WORKSPACE_PATH)).mappings.review, "openai/gpt-5.4");
 });
 
-test("restores workspace inheritance by explicitly removing scoped entries", async () => {
-	const initialGlobal = JSON.stringify(globalConfig);
-	const workspaceWithUnknown = {
-		...workspaceConfig,
-		futureWorkspaceField: "keep",
-	};
+test("restores project inheritance and preserves unrelated project fields", async () => {
+	const projectWithUnknown = { ...workspaceConfig, projectFutureField: "keep", global: "openai/gpt-5.5" };
 	const { ConfigManager, files } = loadConfigManager({
-		[GLOBAL_PATH]: initialGlobal,
-		[WORKSPACE_PATH]: JSON.stringify(workspaceWithUnknown),
+		[GLOBAL_PATH]: JSON.stringify(globalConfig),
+		[WORKSPACE_PATH]: JSON.stringify(projectWithUnknown),
 	});
 	const manager = createManager(ConfigManager);
-	const result = await manager.saveMaestroCliToolsConfig({
+	const result = await manager.saveTeammateModelRoutingConfig({
 		scope: "workspace",
 		workspacePath: "C:\\repo",
 		config: {},
-		removeTools: ["claude"],
-		removeRoles: ["analyze"],
+		removeGlobal: true,
+		removeMappings: ["explore"],
 	});
 
 	assert.equal(result.valid, true);
-	const savedWorkspace = JSON.parse(files.get(WORKSPACE_PATH));
-	assert.equal(savedWorkspace.tools.claude, undefined);
-	assert.equal(savedWorkspace.roles.analyze, undefined);
-	assert.equal(savedWorkspace.futureWorkspaceField, "keep");
-	assert.equal(files.get(GLOBAL_PATH), initialGlobal);
+	const saved = JSON.parse(files.get(WORKSPACE_PATH));
+	assert.equal(saved.global, undefined);
+	assert.equal(saved.mappings.explore, undefined);
+	assert.equal(saved.mappings.testing, "anthropic/claude-haiku-4-5");
+	assert.equal(saved.projectFutureField, "keep");
 
-	const snapshot = await manager.getMaestroCliToolsConfig("C:\\repo");
-	assert.equal(snapshot.effective.tools.claude.primaryModel, "global-model");
-	assert.deepEqual(Array.from(snapshot.effective.roles.analyze.fallbackChain), ["claude", "codex"]);
+	const snapshot = await manager.getTeammateModelRoutingConfig("C:\\repo");
+	assert.equal(snapshot.effective.mappings.explore, "google/gemini-2.5-pro");
 });
 
-test("renderer contract keeps Maestro models free-form and project-scoped", () => {
+test("resolves project teammate-models path through the configured WSL environment", async () => {
+	const hostProject = "D:\\wsl\\home\\dev\\repo";
+	const hostPath = `${hostProject}\\.pi\\teammate-models.json`;
+	const { ConfigManager } = loadConfigManager(
+		{ [hostPath]: JSON.stringify(workspaceConfig) },
+		(value) => (value === "/home/dev/repo" ? hostProject : value),
+	);
+	const manager = createManager(ConfigManager);
+	manager.configureWsl({ windowsHome: "D:\\wsl\\home\\dev" });
+	const snapshot = await manager.getTeammateModelRoutingConfig("/home/dev/repo");
+	assert.equal(snapshot.workspace.path, hostPath);
+	assert.equal(snapshot.workspace.exists, true);
+});
+
+test("renderer exposes Pi-backed searchable editable task model selectors", () => {
 	const maestroTab = readFileSync("src/renderer/src/config/MaestroTab.tsx", "utf8");
 	const configModal = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
-	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+	const shared = readFileSync("src/renderer/src/config/ConfigShared.tsx", "utf8");
 
-	assert.match(maestroTab, /getMaestroCliTools\(workspacePath\)/);
-	assert.match(maestroTab, /primaryModel/);
-	assert.match(maestroTab, /secondaryModel/);
-	assert.match(maestroTab, /reasoningEffort/);
-	assert.match(maestroTab, /MAESTRO_DELEGATE_ROLES\.map/);
-	assert.match(maestroTab, /<TextField[\s\S]*label=\{t\("maestro\.primaryModel"\)\}/);
-	assert.match(maestroTab, /restoreInheritedTool/);
-	assert.match(maestroTab, /removeTools/);
-	assert.doesNotMatch(maestroTab, /models\.providers|allModels/);
+	assert.match(maestroTab, /getTeammateModels\(workspacePath\)/);
+	assert.match(maestroTab, /saveTeammateModels\(buildSaveRequest\(\)\)/);
+	assert.match(maestroTab, /TEAMMATE_MODEL_TASK_TYPES\.map/);
+	assert.match(maestroTab, /const value = `\$\{provider\}\/\$\{id\}`/);
+	assert.match(maestroTab, /<ConfigComboboxInput/);
+	assert.match(maestroTab, /removeMappings/);
+	assert.match(maestroTab, /normalizeRoutingDraft/);
+	assert.doesNotMatch(maestroTab, /reasoningEffort|fallbackChain|primaryModel|secondaryModel/);
+	assert.match(configModal, /target === "maestro"[\s\S]*api\.config\.getModels\(\)/);
+	assert.match(configModal, /models=\{modelsData\}/);
 	assert.match(configModal, /workspacePath=\{props\.projectPath\}/);
-	assert.match(app, /projectPath=\{activeProject\?\.path\}/);
+	assert.match(shared, /role="combobox"/);
+	assert.match(shared, /props\.onChange\(e\.target\.value\)/);
 });

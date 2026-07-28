@@ -646,26 +646,26 @@ export function createPreviewApi(): PiDesktopApi {
 			getAuth: async () => ({ raw: "{}", parsed: {} }),
 			getSettings: async () => ({ raw: "{}", parsed: {} }),
 			getTrust: async () => ({ raw: "{}", parsed: {} }),
-			getMaestroCliTools: async (workspacePath) => ({
+			getTeammateModels: async (workspacePath) => ({
 				global: {
 					scope: "global" as const,
-					path: "C:/Users/14012/.maestro/cli-tools.json",
+					path: "C:/Users/14012/.pi/agent/teammate-models.json",
 					exists: true,
 					raw: "{}",
 					parsed: {
-						version: "1.1.0",
-						tools: {
-							claude: { enabled: true, primaryModel: "claude-sonnet-4-6", tags: ["fullstack"], type: "builtin" },
-							codex: { enabled: true, primaryModel: "gpt-5.5", reasoningEffort: "high" as const, tags: ["backend"], type: "builtin" },
+						version: 2,
+						global: "anthropic/claude-sonnet-4-6",
+						mappings: {
+							explore: "google/gemini-2.5-pro",
+							analysis: "anthropic/claude-sonnet-4-6",
 						},
-						roles: { analyze: { fallbackChain: ["claude", "codex"] } },
 					},
 				},
 				...(workspacePath
 					? {
 						workspace: {
 							scope: "workspace" as const,
-							path: `${workspacePath}/.maestro/cli-tools.json`,
+							path: `${workspacePath}/.pi/teammate-models.json`,
 							exists: false,
 							raw: "",
 							parsed: {},
@@ -673,18 +673,23 @@ export function createPreviewApi(): PiDesktopApi {
 					}
 					: {}),
 				effective: {
-					version: "1.1.0",
-					tools: {
-						claude: { enabled: true, primaryModel: "claude-sonnet-4-6", tags: ["fullstack"], type: "builtin" },
-						codex: { enabled: true, primaryModel: "gpt-5.5", reasoningEffort: "high" as const, tags: ["backend"], type: "builtin" },
+					version: 2,
+					global: "anthropic/claude-sonnet-4-6",
+					mappings: {
+						explore: "google/gemini-2.5-pro",
+						analysis: "anthropic/claude-sonnet-4-6",
+						debug: "anthropic/claude-sonnet-4-6",
+						planning: "anthropic/claude-sonnet-4-6",
+						development: "anthropic/claude-sonnet-4-6",
+						review: "anthropic/claude-sonnet-4-6",
+						testing: "anthropic/claude-sonnet-4-6",
 					},
-					roles: { analyze: { fallbackChain: ["claude", "codex"] } },
 				},
 			}),
 			saveModels: async () => ({ valid: true }),
 			saveAuth: async () => ({ valid: true }),
 			saveSettings: async () => ({ valid: true }),
-			saveMaestroCliTools: async () => ({ valid: true }),
+			saveTeammateModels: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
 			export: async () =>
 				JSON.stringify({

@@ -41,6 +41,19 @@ function loadConfigManager() {
 			if (id === "node:path") return path.win32;
 			if (id === "node:os") return { homedir: () => "C:\\Users\\tester" };
 			if (id === "electron") return { net: {} };
+			if (id === "../../shared/types") {
+				return {
+					TEAMMATE_MODEL_TASK_TYPES: [
+						"explore",
+						"analysis",
+						"debug",
+						"planning",
+						"development",
+						"review",
+						"testing",
+					],
+				};
+			}
 			if (id === "./baseUrlPath") {
 				return {
 					ensureOpenAiVersionPath: (value) => value,

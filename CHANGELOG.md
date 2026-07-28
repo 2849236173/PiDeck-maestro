@@ -1,13 +1,20 @@
 # Changelog
 
+## v0.6.6-11 - 2026-07-28
+
+### Corrected Maestro teammate model routing
+
+- Replaced the incorrectly targeted Maestro CLI routing page with global `~/.pi/agent/teammate-models.json` and current-project `.pi/teammate-models.json` editing.
+- Added a default model plus `explore`, `analysis`, `debug`, `planning`, `development`, `review`, and `testing` mappings.
+- Added searchable, editable `provider/model` selectors populated from Pi's configured `models.json`.
+- Preserved `thinkingLevels` and unknown fields, blocked writes over malformed JSON, and supported restoring project mappings to global inheritance.
+
 ## v0.6.6-10 - 2026-07-27
 
-### Maestro model routing
+### Maestro routing configuration (superseded)
 
-- Added a Maestro page in Configuration Management for separate global `~/.maestro/cli-tools.json` and current-project `.maestro/cli-tools.json` editing.
-- Added CLI tool enablement, free-form primary and secondary model IDs, and `reasoningEffort` controls.
-- Added direct-tool or ordered fallback-chain routing for `analyze`, `explore`, `review`, `implement`, `plan`, `brainstorm`, and `research`.
-- Preserved unknown configuration fields, blocked writes when JSON is malformed, and allowed project entries to restore global inheritance.
+- Added a Maestro routing page that incorrectly targeted global and project `.maestro/cli-tools.json` files instead of teammate model routing.
+- This configuration page is superseded by v0.6.6-11; users should upgrade for `teammate-models.json` support.
 
 ### Sub-agent session recovery
 

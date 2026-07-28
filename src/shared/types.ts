@@ -557,62 +557,46 @@ export type ConfigFileReadResult<T> = {
 	diagnostic?: ConfigFileDiagnostic;
 };
 
-export const MAESTRO_DELEGATE_ROLES = [
-	"analyze",
+export const TEAMMATE_MODEL_TASK_TYPES = [
 	"explore",
+	"analysis",
+	"debug",
+	"planning",
+	"development",
 	"review",
-	"implement",
-	"plan",
-	"brainstorm",
-	"research",
+	"testing",
 ] as const;
 
-export type MaestroDelegateRole = (typeof MAESTRO_DELEGATE_ROLES)[number];
-export type MaestroConfigScope = "global" | "workspace";
-export type MaestroReasoningEffort = "low" | "medium" | "high" | "max";
+export type TeammateModelTaskType = (typeof TEAMMATE_MODEL_TASK_TYPES)[number];
+export type TeammateModelConfigScope = "global" | "workspace";
 
-export type MaestroCliToolConfig = {
-	enabled?: boolean;
-	primaryModel?: string;
-	secondaryModel?: string;
-	reasoningEffort?: MaestroReasoningEffort;
-	tags?: string[];
-	type?: string;
+export type TeammateModelRoutingFile = {
+	version?: number;
+	/** Legacy/default model supported by PiDeck; current teammate runtimes consume expanded mappings. */
+	global?: string | null;
+	mappings?: Partial<Record<TeammateModelTaskType, string | null>>;
+	thinkingLevels?: Partial<Record<TeammateModelTaskType, string | null>>;
 	[key: string]: unknown;
 };
 
-export type MaestroRoleMapping = {
-	tool?: string;
-	fallbackChain?: string[];
-	[key: string]: unknown;
-};
-
-export type MaestroCliToolsFile = {
-	version?: string;
-	tools?: Record<string, MaestroCliToolConfig>;
-	roles?: Record<string, MaestroRoleMapping>;
-	[key: string]: unknown;
-};
-
-export type MaestroConfigSource = ConfigFileReadResult<MaestroCliToolsFile> & {
-	scope: MaestroConfigScope;
+export type TeammateModelConfigSource = ConfigFileReadResult<TeammateModelRoutingFile> & {
+	scope: TeammateModelConfigScope;
 	path: string;
 	exists: boolean;
 };
 
-export type MaestroConfigSnapshot = {
-	global: MaestroConfigSource;
-	workspace?: MaestroConfigSource;
-	effective: MaestroCliToolsFile;
+export type TeammateModelConfigSnapshot = {
+	global: TeammateModelConfigSource;
+	workspace?: TeammateModelConfigSource;
+	effective: TeammateModelRoutingFile;
 };
 
-export type MaestroConfigSaveRequest = {
-	scope: MaestroConfigScope;
+export type TeammateModelConfigSaveRequest = {
+	scope: TeammateModelConfigScope;
 	workspacePath?: string;
-	config: MaestroCliToolsFile;
-	/** Explicit entry deletion is used to restore workspace inheritance. */
-	removeTools?: string[];
-	removeRoles?: MaestroDelegateRole[];
+	config: TeammateModelRoutingFile;
+	removeGlobal?: boolean;
+	removeMappings?: TeammateModelTaskType[];
 };
 
 export type PiSkillLocation = {

@@ -1,14 +1,11 @@
 export type ConfigTab = "models" | "auth" | "settings" | "maestro" | "trust" | "raw";
 
 export type {
-	MaestroCliToolConfig,
-	MaestroCliToolsFile,
-	MaestroConfigSaveRequest,
-	MaestroConfigScope,
-	MaestroConfigSnapshot,
-	MaestroDelegateRole,
-	MaestroReasoningEffort,
-	MaestroRoleMapping,
+	TeammateModelConfigSaveRequest,
+	TeammateModelConfigScope,
+	TeammateModelConfigSnapshot,
+	TeammateModelRoutingFile,
+	TeammateModelTaskType,
 } from "../../../shared/types";
 
 // ── 匹配 pi 实际文件格式的类型 ────────────────────────
