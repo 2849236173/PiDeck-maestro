@@ -1,9 +1,9 @@
 import { app, type BrowserWindow, Notification } from "electron";
-import { randomUUID } from "node:crypto";
-import { open, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, statSync, watch, type FSWatcher } from "node:fs";
 import { createServer as createNetServer } from "node:net";
-import { join, dirname, basename, relative } from "node:path";
+import { join, dirname, basename, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import type {
 	AgentRuntimeState,
@@ -13,7 +13,10 @@ import type {
 	CreateAgentInput,
 	ForkMessage,
 	ImageContent,
+	PlanDraftSnapshot,
 	Project,
+	SavePlanDraftInput,
+	ApprovePlanDraftInput,
 	SendPromptInput,
 	SendPromptResult,
 	ThinkingUpdate,
@@ -2849,6 +2852,194 @@ export class AgentManager {
 		if (state?.sessionName) runtime.tab.title = state.sessionName;
 		await this.loadMessages(agentId).catch(() => undefined);
 		this.emitState();
+	}
+
+	private normalizePlanWorkspacePath(projectPath: string) {
+		const normalized = resolve(projectPath).replaceAll("\\", "/").replace(/\/$/, "");
+		return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+	}
+
+	private planChecksum(markdown: string) {
+		return createHash("sha256").update(markdown, "utf8").digest("hex");
+	}
+
+	private planHandoffKey(workspaceId: string, sessionId: string | undefined, revision: number, checksum: string) {
+		return createHash("sha256")
+			.update(`${workspaceId}\0${sessionId ?? "workspace"}\0${revision}\0${checksum}`)
+			.digest("hex");
+	}
+
+	private planArchiveTimestamp(iso: string) {
+		return iso.replace(/[-:]/g, "").replace(".", "").replace(/(\d{8})T(\d{6})(\d{3})Z/, "$1T$2$3Z");
+	}
+
+	private async atomicWritePlanText(filePath: string, content: string) {
+		await mkdir(dirname(filePath), { recursive: true });
+		const temporaryPath = `${filePath}.${process.pid}-${randomUUID()}.tmp`;
+		try {
+			await writeFile(temporaryPath, content, "utf8");
+			await rename(temporaryPath, filePath);
+		} catch (error) {
+			await rm(temporaryPath, { force: true }).catch(() => undefined);
+			throw error;
+		}
+	}
+
+	private async atomicWritePlanJson(filePath: string, value: unknown) {
+		await this.atomicWritePlanText(filePath, `${JSON.stringify(value, null, 2)}\n`);
+	}
+
+	private getPlanPaths(agentId: string) {
+		const runtime = this.requireRuntime(agentId);
+		const project = this.getProject(runtime.tab.projectId);
+		if (!project) throw new Error(`Project not found: ${runtime.tab.projectId}`);
+		const sessionId = runtime.tab.sessionId?.trim();
+		if (!sessionId) throw new Error("当前会话还没有可用的 Plan session id");
+		const workspacePath = this.normalizePlanWorkspacePath(project.path);
+		const workspaceSlug = basename(resolve(project.path))
+			.toLowerCase()
+			.replace(/[^a-z0-9._-]+/g, "-")
+			.replace(/^-+|-+$/g, "") || "workspace";
+		const workspaceId = `${workspaceSlug}-${createHash("sha256").update(workspacePath).digest("hex").slice(0, 8)}`;
+		const sessionSlug = sessionId
+			.toLowerCase()
+			.replace(/[^a-z0-9._-]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+			.slice(0, 48) || "session";
+		const sessionStorageId = `${sessionSlug}-${createHash("sha256").update(sessionId).digest("hex").slice(0, 8)}`;
+		const plansDir = join(homedir(), ".pi", "workspaces", workspaceId, "sessions", sessionStorageId, "plans");
+		return {
+			workspaceId,
+			workspacePath,
+			sessionId,
+			sessionFile: runtime.tab.sessionPath,
+			sessionName: runtime.tab.title,
+			plansDir,
+			approvalsDir: join(plansDir, "approvals"),
+			currentPath: join(plansDir, "current.md"),
+			manifestPath: join(plansDir, "manifest.json"),
+			pendingPath: join(plansDir, "approval.pending.json"),
+		};
+	}
+
+	private async readPlanManifest(paths: ReturnType<AgentManager["getPlanPaths"]>) {
+		try {
+			return JSON.parse(await readFile(paths.manifestPath, "utf8")) as any;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+			return undefined;
+		}
+	}
+
+	private planSnapshot(agentId: string, paths: ReturnType<AgentManager["getPlanPaths"]>, markdown: string, manifest: any): PlanDraftSnapshot {
+		return {
+			agentId,
+			path: paths.currentPath,
+			manifestPath: paths.manifestPath,
+			markdown,
+			revision: typeof manifest?.revision === "number" ? manifest.revision : 0,
+			status: manifest?.status === "approved" || manifest?.status === "draft"
+				? manifest.status
+				: markdown ? "draft" : "missing",
+			...(typeof manifest?.updatedAt === "string" ? { updatedAt: manifest.updatedAt } : {}),
+			...(typeof manifest?.approvedAt === "string" ? { approvedAt: manifest.approvedAt } : {}),
+			...(typeof manifest?.approvedPath === "string" ? { approvedPath: manifest.approvedPath } : {}),
+			...(typeof manifest?.handoffKey === "string" ? { handoffKey: manifest.handoffKey } : {}),
+		};
+	}
+
+	async getPlanDraft(agentId: string): Promise<PlanDraftSnapshot> {
+		const paths = this.getPlanPaths(agentId);
+		let markdown = "";
+		try {
+			markdown = await readFile(paths.currentPath, "utf8");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
+		return this.planSnapshot(agentId, paths, markdown, await this.readPlanManifest(paths));
+	}
+
+	async savePlanDraft(input: SavePlanDraftInput): Promise<PlanDraftSnapshot> {
+		const paths = this.getPlanPaths(input.agentId);
+		const current = await this.getPlanDraft(input.agentId);
+		if (
+			input.expectedRevision !== undefined &&
+			current.status !== "missing" &&
+			input.expectedRevision !== current.revision
+		) {
+			throw new Error(`Plan revision conflict: expected ${input.expectedRevision}, actual ${current.revision}`);
+		}
+		const existingManifest = await this.readPlanManifest(paths);
+		const revision = current.status === "missing" ? 1 : current.revision + 1;
+		const updatedAt = new Date().toISOString();
+		const checksum = this.planChecksum(input.markdown);
+		const manifest = {
+			version: 1,
+			workspaceId: paths.workspaceId,
+			workspacePath: paths.workspacePath,
+			sessionId: paths.sessionId,
+			...(paths.sessionFile ? { sessionFile: paths.sessionFile } : {}),
+			...(paths.sessionName ? { sessionName: paths.sessionName } : {}),
+			revision,
+			status: "draft",
+			draftChecksum: checksum,
+			updatedAt,
+			approvals: Array.isArray(existingManifest?.approvals) ? existingManifest.approvals : [],
+		};
+		await mkdir(paths.approvalsDir, { recursive: true });
+		await this.atomicWritePlanText(paths.currentPath, input.markdown);
+		await this.atomicWritePlanJson(paths.manifestPath, manifest);
+		return this.getPlanDraft(input.agentId);
+	}
+
+	async approvePlanDraft(input: ApprovePlanDraftInput): Promise<PlanDraftSnapshot> {
+		const draft = await this.savePlanDraft(input);
+		const paths = this.getPlanPaths(input.agentId);
+		const approvedAt = new Date().toISOString();
+		const checksum = this.planChecksum(input.markdown);
+		const handoffKey = this.planHandoffKey(paths.workspaceId, paths.sessionId, draft.revision, checksum);
+		const archiveName = `${this.planArchiveTimestamp(approvedAt)}-r${String(draft.revision).padStart(4, "0")}-${checksum.slice(0, 8)}-h${handoffKey}.md`;
+		const approvedPath = join("approvals", archiveName);
+		const archivePath = join(paths.approvalsDir, archiveName);
+		const pending = {
+			version: 1,
+			token: `pideck-${randomUUID()}`,
+			archiveName,
+			revision: draft.revision,
+			checksum,
+			createdAt: approvedAt,
+		};
+		let manifest: any;
+		try {
+			manifest = await this.readPlanManifest(paths);
+			await this.atomicWritePlanJson(paths.pendingPath, pending);
+			await this.atomicWritePlanText(archivePath, input.markdown);
+			manifest = {
+				...manifest,
+				version: 1,
+				workspaceId: paths.workspaceId,
+				workspacePath: paths.workspacePath,
+				sessionId: paths.sessionId,
+				...(paths.sessionFile ? { sessionFile: paths.sessionFile } : {}),
+				...(paths.sessionName ? { sessionName: paths.sessionName } : {}),
+				revision: draft.revision,
+				status: "approved",
+				draftChecksum: checksum,
+				updatedAt: approvedAt,
+				approvedAt,
+				approvedPath,
+				approvedChecksum: checksum,
+				handoffKey,
+				approvals: [...(Array.isArray(manifest?.approvals) ? manifest.approvals : []), approvedPath],
+			};
+			await this.atomicWritePlanJson(paths.manifestPath, manifest);
+		} catch (error) {
+			await rm(archivePath, { force: true }).catch(() => undefined);
+			throw error;
+		} finally {
+			await rm(paths.pendingPath, { force: true }).catch(() => undefined);
+		}
+		return this.getPlanDraft(input.agentId);
 	}
 
 	async getCommands(agentId: string) {

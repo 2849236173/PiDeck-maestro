@@ -22004,3 +22004,103 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
     grid-template-columns: 1fr;
   }
 }
+
+.plan-confirm-modal {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.plan-confirm-shell {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--space-3);
+	padding: var(--space-4);
+}
+
+.plan-confirm-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	color: var(--color-text-secondary);
+	font-size: var(--font-size-xs);
+}
+
+.plan-confirm-meta code {
+	max-width: 70%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-family-mono);
+}
+
+.plan-confirm-error {
+	margin: 0;
+}
+
+.plan-confirm-preview,
+.plan-confirm-editor,
+.plan-confirm-feedback {
+	min-height: 0;
+	flex: 1;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-primary);
+}
+
+.plan-confirm-preview {
+	overflow: auto;
+	padding: var(--space-4);
+}
+
+.plan-confirm-editor {
+	overflow: hidden;
+}
+
+.plan-confirm-feedback {
+	padding: var(--space-4);
+}
+
+.plan-confirm-feedback label {
+	display: flex;
+	height: 100%;
+	flex-direction: column;
+	gap: var(--space-2);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-sm);
+}
+
+.plan-confirm-feedback textarea {
+	min-height: 220px;
+	flex: 1;
+	resize: vertical;
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-sm);
+	background: var(--color-bg-secondary);
+	color: var(--color-text-primary);
+	font-family: var(--font-family-base);
+	font-size: var(--font-size-sm);
+	line-height: var(--line-height-relaxed);
+	padding: var(--space-3);
+}
+
+.plan-confirm-feedback textarea:focus-visible {
+	outline: var(--focus-ring);
+	outline-offset: 2px;
+}
+
+.plan-confirm-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--space-2);
+}
+
+.plan-confirm-actions .ui-button span {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+}

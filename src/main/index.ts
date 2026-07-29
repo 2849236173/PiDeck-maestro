@@ -69,6 +69,8 @@ import type {
 	FeishuConnectInput,
 	FeishuTestResult,
 	SendPromptInput,
+	SavePlanDraftInput,
+	ApprovePlanDraftInput,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -3299,6 +3301,15 @@ function registerIpc() {
 			void appLogger.info("agent", "Agent thinking level changed", { agentId, level });
 			return result;
 		},
+	);
+	ipcMain.handle(ipcChannels.agentsPlanDraftGet, (_event, agentId: string) =>
+		agentManager.getPlanDraft(agentId),
+	);
+	ipcMain.handle(ipcChannels.agentsPlanDraftSave, (_event, input: SavePlanDraftInput) =>
+		agentManager.savePlanDraft(input),
+	);
+	ipcMain.handle(ipcChannels.agentsPlanDraftApprove, (_event, input: ApprovePlanDraftInput) =>
+		agentManager.approvePlanDraft(input),
 	);
 	ipcMain.handle("agents:commands", async (_event, agentId: string) => {
 		try {

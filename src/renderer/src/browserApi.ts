@@ -211,6 +211,30 @@ export function createBrowserApi(): PiDesktopApi {
 				);
 				return result.state;
 			},
+			getPlanDraft: async (agentId) => ({
+				agentId,
+				path: "browser/current.md",
+				markdown: "# Browser Preview Plan\n\nNo desktop plan bridge is available in browser preview mode.",
+				revision: 0,
+				status: "draft",
+			}),
+			savePlanDraft: async (input) => ({
+				agentId: input.agentId,
+				path: "browser/current.md",
+				markdown: input.markdown,
+				revision: (input.expectedRevision ?? 0) + 1,
+				status: "draft",
+			}),
+			approvePlanDraft: async (input) => ({
+				agentId: input.agentId,
+				path: "browser/current.md",
+				markdown: input.markdown,
+				revision: (input.expectedRevision ?? 0) + 1,
+				status: "approved",
+				approvedAt: new Date().toISOString(),
+				approvedPath: "approvals/browser-approved.md",
+				handoffKey: "browser-handoff-key",
+			}),
 			onState: (callback) => subscribe(stateListeners, callback),
 			onMessages: (callback) => subscribe(messageListeners, callback),
 		},

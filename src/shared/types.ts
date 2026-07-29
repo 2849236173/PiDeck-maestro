@@ -1236,6 +1236,31 @@ export type SendPromptResult =
 	| { accepted: false; error: string; delivery?: "rejected" }
 	| { accepted: false; error: string; delivery: "unknown" };
 
+export type PlanDraftSnapshot = {
+	agentId: string;
+	path: string;
+	manifestPath?: string;
+	markdown: string;
+	revision: number;
+	status: "draft" | "approved" | "missing";
+	updatedAt?: string;
+	approvedAt?: string;
+	approvedPath?: string;
+	handoffKey?: string;
+};
+
+export type SavePlanDraftInput = {
+	agentId: string;
+	markdown: string;
+	expectedRevision?: number;
+};
+
+export type ApprovePlanDraftInput = {
+	agentId: string;
+	markdown: string;
+	expectedRevision?: number;
+};
+
 /** 实时思考内容更新，用于流式展示模型推理过程 */
 export type ThinkingUpdate = {
 	agentId: string;

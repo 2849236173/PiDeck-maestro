@@ -62,6 +62,7 @@ const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m
 import type { ConfigSection } from "./ConfigModal";
 import { MaestroHealthPrompt } from "./components/app/MaestroHealthPrompt";
 import { CompactionSettingsModal } from "./components/app/CompactionSettingsModal";
+import { PlanConfirmModal, type PlanConfirmAction } from "./components/app/PlanConfirmModal";
 import { TrustConfirmModal } from "./components/app/TrustConfirmModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
@@ -1206,6 +1207,8 @@ export function App() {
   const [piUpdateResult, setPiUpdateResult] = useState<PiCliUpdateResult | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [compactionSettingsOpen, setCompactionSettingsOpen] = useState(false);
+  const [planConfirmOpen, setPlanConfirmOpen] = useState(false);
+  const seenPlanPromptMessageIdsRef = useRef<Set<string>>(new Set());
   const [configInitialSection, setConfigInitialSection] = useState<ConfigSection>("config");
   const [maestroHealthPrompt, setMaestroHealthPrompt] = useState<MaestroExtensionHealth | null>(null);
   const maestroHealthCheckedRef = useRef(false);
@@ -1684,6 +1687,21 @@ export function App() {
     () => groupToolMessages(paginatedMessages),
     [paginatedMessages],
   );
+
+  useEffect(() => {
+    if (!activeAgentId || planConfirmOpen) return;
+    for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
+      const message = activeMessages[index];
+      if (message.role !== "tool") continue;
+      if (seenPlanPromptMessageIdsRef.current.has(message.id)) continue;
+      const toolName = typeof message.meta?.toolName === "string" ? message.meta.toolName : "";
+      if (toolName !== "plan-confirm" && toolName !== "plan-review") continue;
+      if (message.meta?.status === "running") continue;
+      seenPlanPromptMessageIdsRef.current.add(message.id);
+      setPlanConfirmOpen(true);
+      return;
+    }
+  }, [activeAgentId, activeMessages, planConfirmOpen]);
 
   // 多选分享：图片只克隆已勾选的可见消息，避免截到整屏会话或被滚动容器裁掉。
   const handleMultiSelectCopy = useCallback(async (selectedIds: Set<string>, kind: "text" | "markdown" | "image") => {
@@ -4584,6 +4602,52 @@ export function App() {
     }
   }
 
+  async function handlePlanConfirmAction(action: PlanConfirmAction) {
+    if (!activeAgentId || isPendingAgentId(activeAgentId)) return;
+
+    if (action.kind === "approve") {
+      const approved = await api.agents.approvePlanDraft({
+        agentId: activeAgentId,
+        markdown: action.draft.markdown,
+        expectedRevision: action.draft.revision,
+      });
+      await sendPrompt({
+        agentId: activeAgentId,
+        message: [
+          "用户已同意当前计划，PiDeck 已写入正式批准状态。请按该计划开始执行。",
+          `Plan draft: ${approved.path}`,
+          `Revision: ${approved.revision}`,
+          approved.approvedPath ? `Approved archive: ${approved.approvedPath}` : undefined,
+          approved.handoffKey ? `Handoff key: ${approved.handoffKey}` : undefined,
+        ].filter(Boolean).join("\n"),
+        images: [],
+        agentMode: "normal",
+      });
+      setPlanConfirmOpen(false);
+      return;
+    }
+
+    const message = action.kind === "reject"
+      ? [
+          "用户不同意当前计划，请根据以下理由修改计划并重新展示确认：",
+          action.reason,
+          `Plan draft: ${action.draft.path}`,
+        ].join("\n\n")
+      : [
+          "用户要求修改当前计划，请根据以下修改要求更新计划并重新展示确认：",
+          action.request,
+          `Plan draft: ${action.draft.path}`,
+        ].join("\n\n");
+
+    await sendPrompt({
+      agentId: activeAgentId,
+      message,
+      images: [],
+      agentMode: "normal",
+    });
+    setPlanConfirmOpen(false);
+  }
+
   async function compactAgent(compactPrompt?: string, agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
     setCompacting(true);
@@ -5166,6 +5230,15 @@ export function App() {
     const trimmedMessage = message.trim();
 
     // 已删除内置 /goal 拦截，命令直接发给 agent。
+
+    // ── Plan Review / Confirm 桌面计划确认窗口 ──
+    if (/^\/(?:plan-review|plan-confirm)(?:\s|$)/.test(trimmedMessage)) {
+      setPromptForAgent(targetAgentId, "");
+      setAttachedImagesForAgent(targetAgentId, []);
+      setSuggestionsOpen(false);
+      setPlanConfirmOpen(true);
+      return;
+    }
 
     // ── /maestro-compaction 桌面设置面板 ──
     if (/^\/maestro-compaction(?:\s|$)/.test(trimmedMessage)) {
@@ -9405,6 +9478,15 @@ filePath={gitDrawerDiff.filePath}
         project={activeProject}
         onClose={() => setCompactionSettingsOpen(false)}
       />
+
+      {activeAgentId && !isPendingAgentId(activeAgentId) && (
+        <PlanConfirmModal
+          agentId={activeAgentId}
+          open={planConfirmOpen}
+          onClose={() => setPlanConfirmOpen(false)}
+          onAction={handlePlanConfirmAction}
+        />
+      )}
 
       {confirmDialog && (
         <ConfirmDialog

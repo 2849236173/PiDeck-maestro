@@ -48,6 +48,7 @@ import type {
 	GitBranchInfo,
 	ImageContent,
 	CommitDetail,
+	ApprovePlanDraftInput,
 	GitCommitFileDiff,
 	GitWorkspaceDiffGroup,
 	GitWorkspaceFileDiff,
@@ -61,6 +62,7 @@ import type {
 	MaestroExtensionHealth,
 	PiInstallStatus,
 	PiInstallExecResult,
+	PlanDraftSnapshot,
 	NpmAvailabilityResult,
 	PiPromptTemplateListResult,
 	PiPromptTemplateSummary,
@@ -73,6 +75,7 @@ import type {
 	PromptStoreSearchResult,
 	PromptStoreItem,
 	ScratchPadData,
+	SavePlanDraftInput,
 	SendPromptInput,
 	SendPromptResult,
 	SessionSummary,
@@ -888,6 +891,21 @@ const api = {
 				agentId,
 				level,
 			) as Promise<AgentRuntimeState>,
+		getPlanDraft: (agentId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsPlanDraftGet,
+				agentId,
+			) as Promise<PlanDraftSnapshot>,
+		savePlanDraft: (input: SavePlanDraftInput) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsPlanDraftSave,
+				input,
+			) as Promise<PlanDraftSnapshot>,
+		approvePlanDraft: (input: ApprovePlanDraftInput) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsPlanDraftApprove,
+				input,
+			) as Promise<PlanDraftSnapshot>,
 		commands: (agentId: string) =>
 			ipcRenderer.invoke("agents:commands", agentId) as Promise<PiCommand[]>,
 		onState: (callback: (tabs: AgentTab[]) => void) =>
