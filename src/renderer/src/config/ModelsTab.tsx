@@ -216,11 +216,15 @@ export function ModelsTab(props: {
 	const modelIdInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 	const getModelInputKey = (providerName: string, index: number) =>
 		`${providerName}\u0000${index}`;
-	const getCompat = (providerName: string) => ({
-		supportsDeveloperRole: false,
-		supportsReasoningEffort: false,
-		...(data.providers[providerName].compat as Record<string, unknown> | undefined),
-	});
+	const getCompat = (providerName: string) => {
+		const provider = data.providers[providerName];
+		const hasReasoningModel = provider.models.some((model) => model.reasoning === true);
+		return {
+			supportsDeveloperRole: false,
+			supportsReasoningEffort: hasReasoningModel,
+			...(provider.compat as Record<string, unknown> | undefined),
+		};
+	};
 
 	useLayoutEffect(() => {
 		if (!pendingModelFocusKey) return;
@@ -761,7 +765,7 @@ export function ModelsTab(props: {
 																const compat = { ...getCompat(name) };
 																compat.supportsDeveloperRole = e.target.checked;
 																// 确保两个兼容性字段都显式写入，避免序列化后 JSON 为空导致 pi 后端无法正确判断
-																compat.supportsReasoningEffort ??= false;
+																compat.supportsReasoningEffort ??= data.providers[name].models.some((model) => model.reasoning === true);
 																props.onChangeProvider(name, "compat", compat);
 															}}
 														/>

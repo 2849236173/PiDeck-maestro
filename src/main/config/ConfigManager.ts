@@ -7,6 +7,10 @@ import { TEAMMATE_MODEL_TASK_TYPES } from "../../shared/types";
 import type {
 	ConfigFileDiagnostic,
 	ConfigFileReadResult,
+	CompactionConfigPatch,
+	CompactionConfigSaveRequest,
+	CompactionConfigSnapshot,
+	CompactionConfigSource,
 	TeammateModelConfigSaveRequest,
 	TeammateModelConfigSnapshot,
 	TeammateModelConfigSource,
@@ -23,6 +27,12 @@ import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const TEAMMATE_MODELS_FILE = "teammate-models.json";
+const DEFAULT_COMPACTION_CONFIG: Required<Pick<CompactionConfigPatch, "enabled" | "reserveTokens" | "keepRecentTokens">> & { soft: { enabled: boolean } } = {
+	enabled: true,
+	reserveTokens: 16_384,
+	keepRecentTokens: 20_000,
+	soft: { enabled: true },
+};
 
 // ── models.json 结构 ──────────────────────────────────
 // { providers: { [providerName]: { baseUrl, api, apiKey, models: [...] } } }
@@ -268,6 +278,158 @@ export class ConfigManager {
 				delete merged.mappings?.[taskType];
 			}
 			await this.writeJsonFileRaw(source.path, merged);
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	private resolveCompactionSettingsPath(scope: "global" | "workspace", workspacePath?: string) {
+		if (scope === "global") return join(this.configDir, "settings.json");
+		if (!workspacePath?.trim()) {
+			throw new Error("Workspace path is required for project compaction configuration");
+		}
+		const resolvedWorkspace = this.wslEnvironment
+			? toWindowsHostPath(workspacePath, this.wslEnvironment)
+			: workspacePath;
+		if (!isAbsolute(resolvedWorkspace)) throw new Error("Workspace path must be absolute");
+		return join(resolvedWorkspace, ".pi", "settings.json");
+	}
+
+	private normalizeCompactionConfig(value: unknown): CompactionConfigPatch {
+		if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+		const data = value as Record<string, unknown>;
+		const hard = data.hard && typeof data.hard === "object" && !Array.isArray(data.hard)
+			? data.hard as Record<string, unknown>
+			: {};
+		const soft = data.soft && typeof data.soft === "object" && !Array.isArray(data.soft)
+			? data.soft as Record<string, unknown>
+			: {};
+		const patch: CompactionConfigPatch = {};
+		if (typeof data.enabled === "boolean") patch.enabled = data.enabled;
+		const reserveTokens = this.pickPositiveInteger(data.reserveTokens, hard.reserveTokens);
+		if (reserveTokens !== undefined) patch.reserveTokens = reserveTokens;
+		const keepRecentTokens = this.pickPositiveInteger(data.keepRecentTokens, hard.keepRecentTokens);
+		if (keepRecentTokens !== undefined) patch.keepRecentTokens = keepRecentTokens;
+		if (typeof data.model === "string" && data.model.trim()) patch.model = data.model.trim();
+		if (typeof soft.enabled === "boolean") patch.soft = { enabled: soft.enabled };
+		return patch;
+	}
+
+	private pickPositiveInteger(...values: unknown[]) {
+		for (const value of values) {
+			if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.floor(value);
+		}
+		return undefined;
+	}
+
+	private mergeCompactionConfig(base: CompactionConfigPatch, patch: CompactionConfigPatch): CompactionConfigPatch {
+		const merged: CompactionConfigPatch = { ...base };
+		if (typeof patch.enabled === "boolean") merged.enabled = patch.enabled;
+		if (typeof patch.reserveTokens === "number") merged.reserveTokens = Math.floor(patch.reserveTokens);
+		if (typeof patch.keepRecentTokens === "number") merged.keepRecentTokens = Math.floor(patch.keepRecentTokens);
+		if (typeof patch.model === "string") {
+			const model = patch.model.trim();
+			if (model) merged.model = model;
+			else delete merged.model;
+		}
+		if (patch.soft && typeof patch.soft.enabled === "boolean") {
+			merged.soft = { ...(merged.soft ?? {}), enabled: patch.soft.enabled };
+		}
+		return merged;
+	}
+
+	private async readCompactionSource(
+		scope: "global" | "workspace",
+		workspacePath?: string,
+	): Promise<CompactionConfigSource> {
+		const filePath = this.resolveCompactionSettingsPath(scope, workspacePath);
+		try {
+			const raw = await readFile(filePath, "utf8");
+			try {
+				const value = JSON.parse(raw) as unknown;
+				if (!value || typeof value !== "object" || Array.isArray(value)) {
+					throw new Error("settings.json 的根节点必须是对象");
+				}
+				const settings = value as Record<string, unknown>;
+				return { scope, path: filePath, exists: true, raw, parsed: this.normalizeCompactionConfig(settings.compaction) };
+			} catch (error) {
+				return {
+					scope,
+					path: filePath,
+					exists: true,
+					raw,
+					parsed: {},
+					diagnostic: this.createJsonDiagnostic("settings.json", raw, error),
+				};
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return { scope, path: filePath, exists: false, raw: "", parsed: {} };
+			}
+			return {
+				scope,
+				path: filePath,
+				exists: false,
+				raw: "",
+				parsed: {},
+				diagnostic: this.createJsonDiagnostic("settings.json", "", error),
+			};
+		}
+	}
+
+	async getCompactionConfig(workspacePath?: string): Promise<CompactionConfigSnapshot> {
+		const [global, workspace] = await Promise.all([
+			this.readCompactionSource("global"),
+			workspacePath ? this.readCompactionSource("workspace", workspacePath) : Promise.resolve(undefined),
+		]);
+		return {
+			global,
+			...(workspace ? { workspace } : {}),
+			effective: this.mergeCompactionConfig(
+				DEFAULT_COMPACTION_CONFIG,
+				this.mergeCompactionConfig(global.parsed, workspace?.parsed ?? {}),
+			),
+		};
+	}
+
+	async saveCompactionConfig(request: CompactionConfigSaveRequest): Promise<ConfigValidationResult> {
+		if (!request || (request.scope !== "global" && request.scope !== "workspace")) {
+			return { valid: false, error: "压缩配置保存请求无效" };
+		}
+		const config = this.normalizeCompactionConfig(request.config);
+		if (config.reserveTokens !== undefined && config.reserveTokens < 1024) {
+			return { valid: false, error: "预留输出空间不能小于 1024" };
+		}
+		if (config.keepRecentTokens !== undefined && config.keepRecentTokens < 1024) {
+			return { valid: false, error: "保留最近上下文不能小于 1024" };
+		}
+		try {
+			const source = await this.readCompactionSource(request.scope, request.workspacePath);
+			if (source.diagnostic) {
+				return { valid: false, error: `无法保存：${source.path} 当前无法安全解析，请先修复原文件。` };
+			}
+			let settings: Record<string, unknown> = {};
+			if (source.raw.trim()) settings = JSON.parse(source.raw) as Record<string, unknown>;
+			const existingCompaction = settings.compaction && typeof settings.compaction === "object" && !Array.isArray(settings.compaction)
+				? settings.compaction as Record<string, unknown>
+				: {};
+			const existingSoft = existingCompaction.soft && typeof existingCompaction.soft === "object" && !Array.isArray(existingCompaction.soft)
+				? existingCompaction.soft as Record<string, unknown>
+				: {};
+			settings.compaction = {
+				...existingCompaction,
+				enabled: config.enabled ?? DEFAULT_COMPACTION_CONFIG.enabled,
+				reserveTokens: config.reserveTokens ?? DEFAULT_COMPACTION_CONFIG.reserveTokens,
+				keepRecentTokens: config.keepRecentTokens ?? DEFAULT_COMPACTION_CONFIG.keepRecentTokens,
+				...(config.model ? { model: config.model } : {}),
+				...(!config.model ? { model: undefined } : {}),
+				soft: {
+					...existingSoft,
+					enabled: config.soft?.enabled ?? DEFAULT_COMPACTION_CONFIG.soft.enabled,
+				},
+			};
+			await this.writeJsonFileRaw(source.path, settings);
 			return { valid: true };
 		} catch (error) {
 			return { valid: false, error: error instanceof Error ? error.message : String(error) };

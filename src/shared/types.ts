@@ -599,6 +599,36 @@ export type TeammateModelConfigSaveRequest = {
 	removeMappings?: TeammateModelTaskType[];
 };
 
+export type CompactionConfigScope = "global" | "workspace";
+
+export type CompactionConfigPatch = {
+	enabled?: boolean;
+	reserveTokens?: number;
+	keepRecentTokens?: number;
+	model?: string;
+	soft?: {
+		enabled?: boolean;
+	};
+};
+
+export type CompactionConfigSource = ConfigFileReadResult<CompactionConfigPatch> & {
+	scope: CompactionConfigScope;
+	path: string;
+	exists: boolean;
+};
+
+export type CompactionConfigSnapshot = {
+	global: CompactionConfigSource;
+	workspace?: CompactionConfigSource;
+	effective: CompactionConfigPatch;
+};
+
+export type CompactionConfigSaveRequest = {
+	scope: CompactionConfigScope;
+	workspacePath?: string;
+	config: CompactionConfigPatch;
+};
+
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;

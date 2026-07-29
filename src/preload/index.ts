@@ -22,6 +22,8 @@ import type {
 	OpenCodeImportReport,
 	OpenCodeSessionSummary,
 	ConfigFileDiagnostic,
+	CompactionConfigSaveRequest,
+	CompactionConfigSnapshot,
 	DraftMeta,
 	CreateAgentInput,
 	CreatePiSkillInput,
@@ -687,6 +689,11 @@ const api = {
 				ipcChannels.configGetTeammateModels,
 				workspacePath,
 			) as Promise<TeammateModelConfigSnapshot>,
+		getCompaction: (workspacePath?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.configGetCompaction,
+				workspacePath,
+			) as Promise<CompactionConfigSnapshot>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -705,6 +712,14 @@ const api = {
 		saveTeammateModels: (request: TeammateModelConfigSaveRequest) =>
 			ipcRenderer.invoke(
 				ipcChannels.configSaveTeammateModels,
+				request,
+			) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveCompaction: (request: CompactionConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveCompaction,
 				request,
 			) as Promise<{
 				valid: boolean;

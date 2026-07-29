@@ -3378,6 +3378,11 @@ function registerIpc() {
 		(_event, workspacePath?: string) =>
 			configManager.getTeammateModelRoutingConfig(workspacePath),
 	);
+	ipcMain.handle(
+		ipcChannels.configGetCompaction,
+		(_event, workspacePath?: string) =>
+			configManager.getCompactionConfig(workspacePath),
+	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3402,6 +3407,15 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configSaveTeammateModels, async (_event, request) => {
 		const result = await configManager.saveTeammateModelRoutingConfig(request);
 		void appLogger.info("config", "Teammate model routing config saved", {
+			scope: request?.scope,
+			workspacePath: request?.workspacePath,
+			valid: result.valid,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveCompaction, async (_event, request) => {
+		const result = await configManager.saveCompactionConfig(request);
+		void appLogger.info("config", "Compaction config saved", {
 			scope: request?.scope,
 			workspacePath: request?.workspacePath,
 			valid: result.valid,

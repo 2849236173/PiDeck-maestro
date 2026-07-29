@@ -66,6 +66,12 @@ interface SubAgentScanState {
 	lastHadToolUse: boolean;
 }
 
+type CompactWaiter = {
+	resolve: () => void;
+	reject: (error: Error) => void;
+	timer: NodeJS.Timeout;
+};
+
 /** 为 maestro UCL sidecar 分配一个空闲回环端口；失败时返回 undefined（功能降级，不阻塞 agent 启动） */
 async function allocateLoopbackPort(): Promise<number | undefined> {
 	return await new Promise((resolve) => {
@@ -163,6 +169,8 @@ export class AgentManager {
 	private readonly rpcLoggingAgents = new Set<string>();
 	/** 正在执行手动压缩操作的 agent，用于区分手动压缩重启和异常崩溃 */
 	private readonly compactingAgents = new Set<string>();
+	/** 手动 compact IPC 等待器；部分 pi 版本只发 compaction 事件，不返回 compact RPC response。 */
+	private readonly compactWaiters = new Map<string, Set<CompactWaiter>>();
 	/**
 	 * Pi 通过事件报告正在自动/手动压缩的 agent。
 	 * 自动压缩发生在 agent_end 之后，桌面端若不单独追踪，会过早把会话置为 idle，
@@ -1420,6 +1428,7 @@ export class AgentManager {
 		const runtime = this.requireRuntime(agentId);
 		const trimmedPrompt = prompt?.trim();
 		const startTime = Date.now();
+		let settledByEvent = false;
 
 		void this.appLogger?.info("agent", "Compact requested", {
 			agentId,
@@ -1429,36 +1438,53 @@ export class AgentManager {
 
 		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
 		this.compactingAgents.add(agentId);
+		runtime.tab.status = "running";
+		this.emitState();
+		void this.emitRuntimeState(agentId);
 
-		try {
-			const response = await runtime.process.client.request(
-				trimmedPrompt ? { type: "compact", prompt: trimmedPrompt } : { type: "compact" },
-				120_000,
-			);
+		const eventCompletion = this.waitForCompactCompletion(agentId, 120_000).then(() => {
+			settledByEvent = true;
+		});
+		const rpcCompletion = runtime.process.client.request(
+			trimmedPrompt ? { type: "compact", prompt: trimmedPrompt } : { type: "compact" },
+			120_000,
+		).then((response) => {
 			void this.appLogger?.info("agent", "Compact RPC response received", {
 				agentId,
 				elapsedMs: Date.now() - startTime,
 				rpcSuccess: response.success,
 				rpcError: response.error,
 			});
-
-			// 检查 RPC 返回的 success 字段：pi CLI 可能压缩成功但后续步骤抛异常，
-			// 此时 session 文件已写入但 RPC 仍返回错误。
 			if (!response.success) {
 				void this.appLogger?.warn("agent", "Compact RPC returned failure (session might still be written)", {
 					agentId,
 					error: response.error,
 				});
 			}
+		});
 
+		try {
+			await Promise.race([rpcCompletion, eventCompletion]);
+			if (settledByEvent) {
+				rpcCompletion.catch(() => undefined);
+			}
 			this.compactingAgents.delete(agentId);
-			// 压缩成功且进程未退出，直接加载消息
+			this.resolveCompactWaiters(agentId);
+			const statusAfterCompact = runtime.tab.status as AgentTab["status"];
+			if (statusAfterCompact !== "error" && statusAfterCompact !== "closed") {
+				runtime.tab.status = "idle";
+			}
 			await this.loadMessages(agentId).catch(() => undefined);
+			this.emitState();
+			void this.emitRuntimeState(agentId);
 			void this.appLogger?.info("agent", "Compact completed successfully", {
 				agentId,
 				totalElapsedMs: Date.now() - startTime,
+				settledByEvent,
 			});
 		} catch (error) {
+			rpcCompletion.catch(() => undefined);
+			eventCompletion.catch(() => undefined);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			const processAlive = runtime.process.isRunning();
 			void this.appLogger?.error("agent", "Compact failed", {
@@ -1470,6 +1496,7 @@ export class AgentManager {
 			});
 
 			this.compactingAgents.delete(agentId);
+			this.rejectCompactWaiters(agentId, error instanceof Error ? error : new Error(errorMsg));
 
 			// 如果进程在压缩期间退出（pi 压缩后自动重启进程的行为），
 			// RPC 请求会因连接断开而失败，但压缩实际已完成。
@@ -1494,6 +1521,51 @@ export class AgentManager {
 		}
 
 		return this.getRuntimeState(agentId);
+	}
+
+	private waitForCompactCompletion(agentId: string, timeoutMs: number): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				this.removeCompactWaiter(agentId, waiter);
+				reject(new Error("Compact timed out"));
+			}, timeoutMs);
+			timer.unref?.();
+			const waiter: CompactWaiter = {
+				resolve: () => {
+					clearTimeout(timer);
+					resolve();
+				},
+				reject: (error) => {
+					clearTimeout(timer);
+					reject(error);
+				},
+				timer,
+			};
+			const waiters = this.compactWaiters.get(agentId) ?? new Set<CompactWaiter>();
+			waiters.add(waiter);
+			this.compactWaiters.set(agentId, waiters);
+		});
+	}
+
+	private removeCompactWaiter(agentId: string, waiter: CompactWaiter) {
+		const waiters = this.compactWaiters.get(agentId);
+		if (!waiters) return;
+		waiters.delete(waiter);
+		if (waiters.size === 0) this.compactWaiters.delete(agentId);
+	}
+
+	private resolveCompactWaiters(agentId: string) {
+		const waiters = this.compactWaiters.get(agentId);
+		if (!waiters) return;
+		this.compactWaiters.delete(agentId);
+		for (const waiter of waiters) waiter.resolve();
+	}
+
+	private rejectCompactWaiters(agentId: string, error: Error) {
+		const waiters = this.compactWaiters.get(agentId);
+		if (!waiters) return;
+		this.compactWaiters.delete(agentId);
+		for (const waiter of waiters) waiter.reject(error);
 	}
 
 	/**
@@ -1622,6 +1694,7 @@ export class AgentManager {
 			}
 			// 进程退出型压缩可能来不及发 compaction_end；重连成功即表示 Pi 已可继续接收消息。
 			this.rpcCompactingAgents.delete(agentId);
+			this.resolveCompactWaiters(agentId);
 
 			// 重连成功后清除自动重连标记，允许下一次再触发
 			this.autoRestartAttempted.delete(agentId);
@@ -1971,19 +2044,25 @@ export class AgentManager {
 
 	async cycleThinking(agentId: string) {
 		const runtime = this.requireRuntime(agentId);
-		await runtime.process.client.request(
+		const response = await runtime.process.client.request(
 			{ type: "cycle_thinking_level" },
 			60_000,
 		);
+		if (!response.success) {
+			throw new Error(response.error ?? "Failed to cycle thinking level");
+		}
 		return this.getRuntimeState(agentId);
 	}
 
 	async setThinking(agentId: string, level: string) {
 		const runtime = this.requireRuntime(agentId);
-		await runtime.process.client.request(
+		const response = await runtime.process.client.request(
 			{ type: "set_thinking_level", level },
 			60_000,
 		);
+		if (!response.success) {
+			throw new Error(response.error ?? "Failed to change thinking level");
+		}
 		return this.getRuntimeState(agentId);
 	}
 
@@ -3584,6 +3663,7 @@ export class AgentManager {
 				this.emitState();
 				void this.emitRuntimeState(agentId);
 			}
+			this.resolveCompactWaiters(agentId);
 			void this.appLogger?.info("agent", "Compaction ended", {
 				agentId,
 				reason: typed.reason,

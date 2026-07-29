@@ -862,21 +862,26 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleSaveModels = async () => {
-		// 保存前规范化所有供应商的 compat 字段，确保布尔值显式写入而不依赖后端默认值
+		// 保存前规范化 compat 字段。若 provider 下存在 reasoning 模型，则默认开启
+		// reasoning_effort 支持；用户仍可在兼容性区域显式关闭。
 		const normalizedData = {
 			...modelsData,
 			providers: Object.fromEntries(
-				Object.entries(modelsData.providers).map(([name, provider]) => [
-					name,
-					{
-						...provider,
-						compat: {
-							supportsDeveloperRole: false,
-							supportsReasoningEffort: false,
-							...(provider.compat as Record<string, unknown> | undefined),
+				Object.entries(modelsData.providers).map(([name, provider]) => {
+					const existingCompat = provider.compat as Record<string, unknown> | undefined;
+					const hasReasoningModel = provider.models.some((model) => model.reasoning === true);
+					return [
+						name,
+						{
+							...provider,
+							compat: {
+								supportsDeveloperRole: false,
+								supportsReasoningEffort: hasReasoningModel,
+								...existingCompat,
+							},
 						},
-					},
-				]),
+					];
+				}),
 			),
 		};
 		await saveAndReload(

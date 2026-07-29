@@ -697,10 +697,32 @@ export function createPreviewApi(): PiDesktopApi {
 					},
 				},
 			}),
+			getCompaction: async (workspacePath) => ({
+				global: {
+					scope: "global" as const,
+					path: "C:/Users/14012/.pi/agent/settings.json",
+					exists: true,
+					raw: "{}",
+					parsed: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000, soft: { enabled: true } },
+				},
+				...(workspacePath
+					? {
+						workspace: {
+							scope: "workspace" as const,
+							path: `${workspacePath}/.pi/settings.json`,
+							exists: false,
+							raw: "",
+							parsed: {},
+						},
+					}
+					: {}),
+				effective: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000, soft: { enabled: true } },
+			}),
 			saveModels: async () => ({ valid: true }),
 			saveAuth: async () => ({ valid: true }),
 			saveSettings: async () => ({ valid: true }),
 			saveTeammateModels: async () => ({ valid: true }),
+			saveCompaction: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
 			export: async () =>
 				JSON.stringify({

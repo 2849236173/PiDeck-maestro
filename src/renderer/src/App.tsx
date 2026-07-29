@@ -61,6 +61,7 @@ import { createBrowserApi } from "./browserApi";
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
 import type { ConfigSection } from "./ConfigModal";
 import { MaestroHealthPrompt } from "./components/app/MaestroHealthPrompt";
+import { CompactionSettingsModal } from "./components/app/CompactionSettingsModal";
 import { TrustConfirmModal } from "./components/app/TrustConfirmModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
@@ -1204,6 +1205,7 @@ export function App() {
   const [piUpdateCheck, setPiUpdateCheck] = useState<PiUpdateCheckResult | null>(null);
   const [piUpdateResult, setPiUpdateResult] = useState<PiCliUpdateResult | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  const [compactionSettingsOpen, setCompactionSettingsOpen] = useState(false);
   const [configInitialSection, setConfigInitialSection] = useState<ConfigSection>("config");
   const [maestroHealthPrompt, setMaestroHealthPrompt] = useState<MaestroExtensionHealth | null>(null);
   const maestroHealthCheckedRef = useRef(false);
@@ -5165,6 +5167,15 @@ export function App() {
 
     // 已删除内置 /goal 拦截，命令直接发给 agent。
 
+    // ── /maestro-compaction 桌面设置面板 ──
+    if (/^\/maestro-compaction(?:\s|$)/.test(trimmedMessage)) {
+      setPromptForAgent(targetAgentId, "");
+      setAttachedImagesForAgent(targetAgentId, []);
+      setSuggestionsOpen(false);
+      setCompactionSettingsOpen(true);
+      return;
+    }
+
     // ── /compact 命令处理 ──
     if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
       const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
@@ -8130,7 +8141,7 @@ export function App() {
                     ? `${activeRuntimeState.provider ? `${activeRuntimeState.provider}/` : ""}${activeRuntimeState.modelName}`
                     : t("app.model") + ": —"}
                 </button>
-                {activeRuntimeState?.thinkingLevel && (
+                {activeRuntimeState && (
                   <button
                     type="button"
                     className="composer-bar-btn thinking"
@@ -8139,8 +8150,9 @@ export function App() {
                     title={t("app.thinkingPickerTitle")}
                   >
                     {(() => {
-                      const level = THINKING_LEVELS.find((l) => l.value === activeRuntimeState.thinkingLevel);
-                      return level ? t(level.labelKey) : activeRuntimeState.thinkingLevel;
+                      const currentThinkingLevel = activeRuntimeState.thinkingLevel ?? "off";
+                      const level = THINKING_LEVELS.find((l) => l.value === currentThinkingLevel);
+                      return level ? t(level.labelKey) : currentThinkingLevel;
                     })()}
                   </button>
                 )}
@@ -9387,6 +9399,12 @@ filePath={gitDrawerDiff.filePath}
         }}
       />
       </Suspense>
+
+      <CompactionSettingsModal
+        open={compactionSettingsOpen}
+        project={activeProject}
+        onClose={() => setCompactionSettingsOpen(false)}
+      />
 
       {confirmDialog && (
         <ConfirmDialog
