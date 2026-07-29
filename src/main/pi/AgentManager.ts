@@ -139,12 +139,6 @@ export class AgentManager {
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
 	/**
-	 * agent_end 后等待 agent_settled 的超时时间（毫秒）。
-	 * 查询仍会拒绝 streaming/compaction/pending 状态，因此可以尽快补偿缺失事件，
-	 * 避免每轮固定多等数秒才能恢复可发送状态。
-	 */
-	private static readonly AGENT_SETTLED_TIMEOUT_MS = 750;
-	/**
 	 * 超过该大小的历史会话跳过 get_messages RPC，改为直接从 JSONL 文件尾部读取最近 N 条消息。
 	 * pi 当前不支持 limit/cursor，40MB JSONL 会以单行大 JSON 返回，主进程 JSON.parse 会短暂冻结整个应用。
 	 * 文件直接读取仅解析近尾部少量消息，避免大会话加载导致的界面冻结。
@@ -3695,13 +3689,6 @@ export class AgentManager {
 			// 但不要把它当作最终空闲信号，最终状态由 agent_settled 处理。
 			void this.emitRuntimeState(agentId);
 
-			// 兜底：如果 Pi 由于某些边缘情况未发送 agent_settled，
-			// 定时查询 get_state 确认是否已无工作可做，避免 UI 动画永久卡住。
-			// agent_settled 正常触发时 markIdleIfPiReportsNoWork 会因 status!=="running" 提前返回。
-			const settledTimer = setTimeout(() => {
-				void this.markIdleIfPiReportsNoWork(agentId);
-			}, AgentManager.AGENT_SETTLED_TIMEOUT_MS);
-			settledTimer.unref?.();
 		}
 
 		if (typed.type === "agent_settled") {

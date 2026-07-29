@@ -61,7 +61,14 @@ test("tool edges stay local and progress IPC remains coalesced", () => {
   assert.doesNotMatch(toolStart, /emitRuntimeState/);
   assert.doesNotMatch(toolEnd, /emitRuntimeState/);
   assert.doesNotMatch(toolUpdate, /flushMessageEmit/);
-  assert.match(agentManagerSource, /AGENT_SETTLED_TIMEOUT_MS = 750/);
+
+  // 常规对话严格以 Pi 的 agent_settled 为空闲终点，不从 agent_end 定时推断。
+  assert.doesNotMatch(agentManagerSource, /AGENT_SETTLED_TIMEOUT_MS/);
+  const agentEnd = sourceBetween(
+    'if (typed.type === "agent_end")',
+    'if (typed.type === "agent_settled")',
+  );
+  assert.doesNotMatch(agentEnd, /markIdleIfPiReportsNoWork|setTimeout/);
 });
 
 test("mergeAgentRuntimeState skips update when nothing changed", () => {
