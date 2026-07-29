@@ -186,7 +186,6 @@ export const ipcChannels = {
 	agentsSetThinking: "agents:set-thinking",
 	agentsState: "agents:state",
 	projectsListModels: "projects:list-models",
-	agentsEvent: "agents:event",
 	agentsMessage: "agents:message",
 	/** 渲染进程 → 主进程：增量推送边界失配时拉取全量消息重同步 */
 	agentsPullMessages: "agents:pull-messages",

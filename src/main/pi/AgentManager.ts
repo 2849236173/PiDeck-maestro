@@ -140,10 +140,10 @@ export class AgentManager {
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
 	/**
 	 * agent_end 后等待 agent_settled 的超时时间（毫秒）。
-	 * 如果 Pi 在此时间内未发送 agent_settled，桌面端将主动查询 get_state 并尝试恢复 idle。
-	 * 这补偿了 Pi 在某些边缘情况下不发送 agent_settled 导致动画永久卡住的问题。
+	 * 查询仍会拒绝 streaming/compaction/pending 状态，因此可以尽快补偿缺失事件，
+	 * 避免每轮固定多等数秒才能恢复可发送状态。
 	 */
-	private static readonly AGENT_SETTLED_TIMEOUT_MS = 5000;
+	private static readonly AGENT_SETTLED_TIMEOUT_MS = 750;
 	/**
 	 * 超过该大小的历史会话跳过 get_messages RPC，改为直接从 JSONL 文件尾部读取最近 N 条消息。
 	 * pi 当前不支持 limit/cursor，40MB JSONL 会以单行大 JSON 返回，主进程 JSON.parse 会短暂冻结整个应用。
@@ -859,6 +859,9 @@ export class AgentManager {
 		});
 		// 转发 RPC 日志到前端，用于调试面板展示请求/响应/事件
 		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
+			// RPC payload 可能包含持续增长的 partial message 或大型工具结果。
+			// 未显式开启日志时不构建摘要、不跨 IPC 复制，避免每个流式事件重复序列化。
+			if (!this.rpcLoggingAgents.has(id)) return;
 			const data = entry.data as Record<string, any>;
 			let summary: string;
 			if (entry.direction === "send") {
@@ -892,10 +895,7 @@ export class AgentManager {
 				time: Date.now(),
 			};
 			this.emit(ipcChannels.agentsRpcLog, logEntry);
-			// 只有用户手动开启 RPC 日志记录的 agent 才落盘
-			if (this.rpcLoggingAgents.has(id)) {
-				this.rpcLogger?.push(logEntry);
-			}
+			this.rpcLogger?.push(logEntry);
 		});
 		process.on("exit", (payload: { code: number | null; signal: string | null }) => {
 			// 模型配置刷新期间的进程退出由 refreshModels() 负责重连，此处静默忽略
@@ -1544,6 +1544,7 @@ export class AgentManager {
 			});
 		});
 		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
+			if (!this.rpcLoggingAgents.has(agentId)) return;
 			const data = entry.data as Record<string, any>;
 			let summary: string;
 			if (entry.direction === "send") {
@@ -3501,7 +3502,8 @@ export class AgentManager {
 		for (const listener of this.localEventListeners) {
 			try { listener(agentId, event); } catch {}
 		}
-		this.emit(ipcChannels.agentsEvent, { agentId, event });
+		// 原始事件只供主进程集成消费。renderer 没有订阅 API；避免把每个 text delta
+		// 和大型工具结果再次通过 structured clone 跨进程复制。
 
 		if (!event || typeof event !== "object") return;
 		const typed = event as Record<string, any>;
@@ -3760,8 +3762,8 @@ export class AgentManager {
 				runtime.tab.status = "running";
 				this.emitState();
 			}
-			// 完整 runtime 信息异步补发；工具边沿已经同步推送，不依赖此请求的完成顺序。
-			void this.emitRuntimeState(agentId);
+			// 工具边沿已经由 applyActiveToolCallState 同步推送；避免为每个 start
+			// 再查询两条 RPC 并扫描整份 session JSONL。
 		}
 
 		if (typed.type === "tool_execution_end") {
@@ -3797,15 +3799,15 @@ export class AgentManager {
 				runtime.tab.status = "running";
 				this.emitState();
 			}
-			// 完整 runtime 信息异步补发；序号保证它不会倒灌旧工具状态。
-			void this.emitRuntimeState(agentId);
+			// 工具边沿已经由 applyActiveToolCallState 同步推送；完整模型/token 状态
+			// 由 agent 生命周期节点刷新，避免连续工具间堆积 get_state/get_session_stats。
 		}
 
 		if (typed.type === "tool_execution_update") {
 			this.upsertToolMessage(agentId, typed, "running");
 			this.syncSubAgentsFromToolEvent(agentId, typed, "running");
-			// 立即 flush 工具更新事件，让用户能看到 bash 等长时间工具的实时进度
-			this.flushMessageEmit(agentId);
+			// upsert 已进入 50ms 合并窗口；高频进度最多 20fps，避免每个 update
+			// 都 structured-clone 消息尾部，同时保持长工具的实时反馈。
 		}
 
 		if (typed.type === "extension_ui_request") {
@@ -4382,14 +4384,6 @@ export class AgentManager {
 		const agentProgress = extractedAgentProgress ?? (
 			Array.isArray(previousAgentProgress) ? previousAgentProgress : undefined
 		);
-		// DEBUG: 输出进度提取日志
-		if (status === "running" && (toolName === "teammate" || toolName === "delegate" || toolName === "explorer")) {
-			console.log(`[AgentManager] Tool update: ${toolName}, hasResult: ${!!result}, agentProgress items: ${agentProgress?.length ?? 0}`);
-			if (result && typeof result === "object") {
-				const details = (result as any).details;
-				console.log(`[AgentManager] details.progress: ${Array.isArray(details?.progress) ? details.progress.length : 'N/A'}, details.childCalls: ${Array.isArray(details?.childCalls) ? details.childCalls.length : 'N/A'}`);
-			}
-		}
 		const meta = {
 			status,
 			toolName,

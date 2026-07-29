@@ -6,6 +6,16 @@ import ts from "typescript";
 import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
+const agentManagerSource = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+const ipcSource = readFileSync("src/shared/ipc.ts", "utf8");
+
+function sourceBetween(start, end) {
+  const startIndex = agentManagerSource.indexOf(start);
+  const endIndex = agentManagerSource.indexOf(end, startIndex + start.length);
+  assert.notEqual(startIndex, -1, `missing source marker: ${start}`);
+  assert.notEqual(endIndex, -1, `missing source marker: ${end}`);
+  return agentManagerSource.slice(startIndex, endIndex);
+}
 
 function loadModule(sourcePath) {
   const source = readFileSync(sourcePath, "utf8");
@@ -21,6 +31,38 @@ function loadModule(sourcePath) {
   vm.runInNewContext(outputText, sandbox, { filename: sourcePath });
   return module.exports;
 }
+
+test("main process avoids duplicate high-frequency event and log IPC", () => {
+  assert.doesNotMatch(ipcSource, /agentsEvent|agents:event/);
+  assert.doesNotMatch(agentManagerSource, /ipcChannels\.agentsEvent/);
+
+  const loggingGuards = agentManagerSource.match(
+    /if \(!this\.rpcLoggingAgents\.has\((?:id|agentId)\)\) return;/g,
+  ) ?? [];
+  assert.equal(loggingGuards.length, 2, "create and reattach paths must both gate RPC payloads");
+});
+
+test("tool edges stay local and progress IPC remains coalesced", () => {
+  const toolStart = sourceBetween(
+    'if (typed.type === "tool_execution_start")',
+    'if (typed.type === "tool_execution_end")',
+  );
+  const toolEnd = sourceBetween(
+    'if (typed.type === "tool_execution_end")',
+    'if (typed.type === "tool_execution_update")',
+  );
+  const toolUpdate = sourceBetween(
+    'if (typed.type === "tool_execution_update")',
+    'if (typed.type === "extension_ui_request")',
+  );
+
+  assert.match(toolStart, /applyActiveToolCallState/);
+  assert.match(toolEnd, /applyActiveToolCallState/);
+  assert.doesNotMatch(toolStart, /emitRuntimeState/);
+  assert.doesNotMatch(toolEnd, /emitRuntimeState/);
+  assert.doesNotMatch(toolUpdate, /flushMessageEmit/);
+  assert.match(agentManagerSource, /AGENT_SETTLED_TIMEOUT_MS = 750/);
+});
 
 test("mergeAgentRuntimeState skips update when nothing changed", () => {
   const { mergeAgentRuntimeState } = loadModule(
