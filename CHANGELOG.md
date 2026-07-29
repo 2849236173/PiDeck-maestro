@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.6-12 - 2026-07-29
+
+### Maestro integration and runtime stability
+
+- Improved the recommended Maestro extension bundle and stopped treating the standalone teammate package as a separate health-check target.
+- Hardened Maestro health checks, local extension version detection, and cross-platform Skill discovery across Windows, WSL, Linux, and macOS.
+- Reduced IPC and state-refresh work on the Agent tool-event hot path to improve responsiveness in large sessions.
+- Derived Agent idle state from settled runtime state to avoid stale tool/activity indicators.
+- Added regression coverage for sub-agent sessions, extension management, session refresh, and Maestro health prompts.
+
 ## v0.6.6-11 - 2026-07-28
 
 ### Corrected Maestro teammate model routing

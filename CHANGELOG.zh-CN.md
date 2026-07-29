@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.6.6-12 - 2026-07-29
+
+### Maestro 集成与运行稳定性
+
+- 优化 Maestro 扩展推荐安装：统一展示 `pi-maestro-flow` 与 `pi-maestro-teammate`，避免重复检查独立 teammate 包。
+- 改进 Maestro 健康检查、扩展版本识别和跨平台 Skill 扫描，覆盖 Windows、WSL、Linux 与 macOS 路径。
+- 降低 Agent 工具事件热路径的 IPC 和状态刷新开销，减少大历史会话中的 UI 卡顿。
+- 将 Agent 是否空闲交给已收敛的运行时状态判断，避免工具结束与界面状态不同步。
+- 增加子代理会话、扩展管理、会话刷新和 Maestro 健康提示的回归测试。
+
 ## v0.6.6-11 - 2026-07-28
 
 ### 纠正 Maestro teammate 模型路由
