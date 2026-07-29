@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { Copy, Download, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, ToggleLeft, ToggleRight, Trash2, Workflow } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
+import { Button } from "../components/ui/Button";
+import { IconButton } from "../components/ui/IconButton";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { openInSystemBrowser } from "../utils/openExternal";
 
 type ExtensionsApi = {
 	list: () => Promise<PiExtensionListResult>;
@@ -18,6 +21,31 @@ function getExtensionsApi(): ExtensionsApi {
 	if (!api) throw new Error("PiDeck extensions API is not available");
 	return api;
 }
+
+type RecommendedBundlePackage = {
+	name: string;
+	source: string;
+	npmUrl: string;
+	descriptionKey: string;
+};
+
+const MAESTRO_BUNDLE: { name: string; packages: RecommendedBundlePackage[] } = {
+	name: "Maestro",
+	packages: [
+		{
+			name: "pi-maestro-flow",
+			source: "npm:pi-maestro-flow",
+			npmUrl: "https://www.npmjs.com/package/pi-maestro-flow",
+			descriptionKey: "config.maestroBundle.flowDescription",
+		},
+		{
+			name: "pi-maestro-teammate",
+			source: "npm:pi-maestro-teammate",
+			npmUrl: "https://www.npmjs.com/package/pi-maestro-teammate",
+			descriptionKey: "config.maestroBundle.teammateDescription",
+		},
+	],
+};
 
 /** 预设推荐扩展包 */
 const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
@@ -116,6 +144,44 @@ export function ExtensionsTab(props: {
 		}
 	};
 
+	const handleInstallBundle = async () => {
+		const installedSources = new Set(props.data.extensions.map((extension) => extension.source));
+		const missingPackages = MAESTRO_BUNDLE.packages.filter(
+			(pkg) => !installedSources.has(pkg.source),
+		);
+		if (missingPackages.length === 0) return;
+
+		setInstallingSources((current) => {
+			const next = new Set(current);
+			for (const pkg of missingPackages) next.add(pkg.source);
+			return next;
+		});
+		try {
+			// Pi 的安装接口一次接收一个 source；顺序安装便于失败时保留已完成的包并准确刷新状态。
+			for (const pkg of missingPackages) {
+				await getExtensionsApi().install(pkg.source);
+			}
+			showNotice(t("config.maestroBundle.installedNotice"), 2400);
+		} catch (e) {
+			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+		} finally {
+			setInstallingSources((current) => {
+				const next = new Set(current);
+				for (const pkg of missingPackages) next.delete(pkg.source);
+				return next;
+			});
+			props.onRefresh();
+		}
+	};
+
+	const handleCopyBundleCommands = () => {
+		const commands = MAESTRO_BUNDLE.packages
+			.map((pkg) => `pi install ${pkg.source}`)
+			.join("\n");
+		void navigator.clipboard.writeText(commands);
+		showNotice(t("app.codeCopied"), 1200);
+	};
+
 	const handleUpdateExtensions = async () => {
 		setUpdating("all");
 		setUpdateResult(null);
@@ -129,6 +195,15 @@ export function ExtensionsTab(props: {
 			setUpdating(null);
 		}
 	};
+
+	const installedSources = new Set(props.data.extensions.map((extension) => extension.source));
+	const maestroInstalledCount = MAESTRO_BUNDLE.packages.filter((pkg) =>
+		installedSources.has(pkg.source),
+	).length;
+	const maestroMissingCount = MAESTRO_BUNDLE.packages.length - maestroInstalledCount;
+	const maestroInstalling = MAESTRO_BUNDLE.packages.some((pkg) =>
+		installingSources.has(pkg.source),
+	);
 
 	return (
 		<div className="extensions-tab">
@@ -178,6 +253,77 @@ export function ExtensionsTab(props: {
 					{t("config.recommendedPackagesHint")}
 				</p>
 				<div className="extensions-recommended-list">
+					<section className="extensions-bundle-card" aria-labelledby="maestro-bundle-title">
+						<div className="extensions-bundle-header">
+							<div className="extensions-bundle-title">
+								<span className="extensions-bundle-icon" aria-hidden="true">
+									<Workflow size={18} strokeWidth={1.8} />
+								</span>
+								<div>
+									<strong id="maestro-bundle-title">{MAESTRO_BUNDLE.name}</strong>
+									<p>{t("config.maestroBundle.description")}</p>
+								</div>
+							</div>
+							<span className={maestroMissingCount === 0 ? "config-im-connected-badge" : "extensions-bundle-progress"}>
+								{maestroMissingCount === 0
+									? t("config.installed")
+									: t("config.maestroBundle.installedCount", {
+										installed: maestroInstalledCount,
+										total: MAESTRO_BUNDLE.packages.length,
+									})}
+							</span>
+						</div>
+
+						<div className="extensions-bundle-packages">
+							{MAESTRO_BUNDLE.packages.map((pkg) => {
+								const installed = installedSources.has(pkg.source);
+								return (
+									<a
+										key={pkg.source}
+										className="extensions-bundle-package"
+										href={pkg.npmUrl}
+										target="_blank"
+										rel="noreferrer"
+										onClick={(event) => {
+											event.preventDefault();
+											openInSystemBrowser(pkg.npmUrl);
+										}}
+									>
+										<span>
+											<strong>{pkg.name}</strong>
+											<small>{t(pkg.descriptionKey)}</small>
+										</span>
+										<span className="extensions-bundle-package-status">
+											{installed && <span>{t("config.installed")}</span>}
+											<ExternalLink size={13} strokeWidth={1.8} aria-hidden="true" />
+										</span>
+									</a>
+								);
+							})}
+						</div>
+
+						<div className="extensions-bundle-actions">
+							<IconButton
+								label={t("config.maestroBundle.copyCommands")}
+								onClick={handleCopyBundleCommands}
+							>
+								<Copy size={14} strokeWidth={1.8} aria-hidden="true" />
+							</IconButton>
+							<Button
+								variant="primary"
+								buttonSize="sm"
+								loading={maestroInstalling}
+								disabled={maestroMissingCount === 0}
+								onClick={() => void handleInstallBundle()}
+							>
+								<Download size={15} strokeWidth={1.8} aria-hidden="true" />
+								{maestroMissingCount === 0
+									? t("config.installed")
+									: t("config.maestroBundle.installMissing", { count: maestroMissingCount })}
+							</Button>
+						</div>
+					</section>
+
 					{RECOMMENDED_PACKAGES.map((pkg) => {
 						const alreadyInstalled = props.data.extensions.some((ext) => ext.source === pkg.installCmd);
 						const installing = installingSources.has(pkg.installCmd);

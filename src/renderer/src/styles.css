@@ -17979,6 +17979,138 @@ a.config-btn {
 }
 
 /* 推荐扩展大列表 */
+.extensions-bundle-card {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border-subtle));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-panel);
+}
+
+.extensions-bundle-header,
+.extensions-bundle-title,
+.extensions-bundle-actions,
+.extensions-bundle-package,
+.extensions-bundle-package-status {
+  display: flex;
+  align-items: center;
+}
+
+.extensions-bundle-header {
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.extensions-bundle-title {
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.extensions-bundle-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-muted);
+  color: var(--color-accent);
+}
+
+.extensions-bundle-title strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-control);
+}
+
+.extensions-bundle-title p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+}
+
+.extensions-bundle-progress {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-micro);
+}
+
+.extensions-bundle-packages {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: var(--space-3);
+  border-block: 1px solid var(--color-border-subtle);
+}
+
+.extensions-bundle-package {
+  min-width: 0;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.extensions-bundle-package + .extensions-bundle-package {
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.extensions-bundle-package:hover {
+  background: var(--color-bg-hover);
+}
+
+.extensions-bundle-package:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.extensions-bundle-package > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.extensions-bundle-package strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extensions-bundle-package small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-body);
+}
+
+.extensions-bundle-package-status {
+  flex-shrink: 0;
+  gap: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+}
+
+.extensions-bundle-package-status span {
+  color: var(--color-success);
+}
+
+.extensions-bundle-actions {
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+}
+
+.extensions-bundle-actions .ui-button > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .extensions-recommended-list {
   display: flex;
   flex-direction: column;
@@ -18034,6 +18166,17 @@ a.config-btn {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+@media (max-width: 900px) {
+  .extensions-bundle-packages {
+    grid-template-columns: 1fr;
+  }
+
+  .extensions-bundle-package + .extensions-bundle-package {
+    border-top: 1px solid var(--color-border-subtle);
+    border-left: none;
+  }
 }
 
 /* 推荐与已安装之间的分隔线 */
