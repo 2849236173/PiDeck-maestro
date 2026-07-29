@@ -224,7 +224,7 @@ test("shows installed package versions on the first non-refresh extension list",
 	}
 });
 
-test("Maestro health checks both installations and only queries flow updates", async () => {
+test("Maestro health checks only flow installation and its updates", async () => {
 	const { ExtensionManager } = loadExtensionManager();
 	const manager = new ExtensionManager({}, () => ({}));
 	manager.list = async () => ({
@@ -253,8 +253,8 @@ test("Maestro health checks both installations and only queries flow updates", a
 	assert.equal(health.packages[0].currentVersion, "1.2.3");
 	assert.equal(health.packages[0].latestVersion, "1.3.0");
 	assert.equal(health.packages[0].hasUpdate, true);
-	assert.equal(health.packages[1].source, "npm:pi-maestro-teammate");
-	assert.equal(health.packages[1].installed, false);
+	assert.equal(health.packages.length, 1);
+	assert.equal(health.packages.some((pkg) => pkg.source === "npm:pi-maestro-teammate"), false);
 });
 
 test("Maestro health skips registry access when update checks are disabled", async () => {
@@ -274,8 +274,10 @@ test("Maestro health skips registry access when update checks are disabled", asy
 	const health = await manager.checkMaestroHealth(false);
 
 	assert.equal(health.checkedUpdates, false);
-	assert.equal(health.packages.every((pkg) => pkg.installed), true);
-	assert.equal(health.packages.every((pkg) => !pkg.hasUpdate), true);
+	assert.equal(health.packages.length, 1);
+	assert.equal(health.packages[0].source, "npm:pi-maestro-flow");
+	assert.equal(health.packages[0].installed, true);
+	assert.equal(health.packages[0].hasUpdate, false);
 });
 
 test("defaults installed legacy built-ins to disabled only once", async () => {

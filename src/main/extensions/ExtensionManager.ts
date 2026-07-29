@@ -210,19 +210,23 @@ export class ExtensionManager {
 
 	async checkMaestroHealth(checkForUpdates = true): Promise<MaestroExtensionHealth> {
 		const installed = await this.list(false);
-		const packages: MaestroExtensionPackageStatus[] = MAESTRO_EXTENSION_PACKAGES.map((pkg) => {
-			const extension = installed.extensions.find(
-				(candidate) => candidate.source === pkg.source || candidate.source.startsWith(`${pkg.source}@`),
-			);
-			return {
-				name: pkg.name,
-				source: pkg.source,
-				installed: Boolean(extension),
-				enabled: extension?.enabled,
-				currentVersion: extension?.currentVersion,
-				hasUpdate: false,
-			};
-		});
+		// 新版 pi-maestro-flow 已内置 teammate 扩展；启动健康检查只以 flow 为准，
+		// 避免未单独安装 pi-maestro-teammate 时产生过时的缺失提示。
+		const packages: MaestroExtensionPackageStatus[] = MAESTRO_EXTENSION_PACKAGES
+			.filter((pkg) => pkg.source === "npm:pi-maestro-flow")
+			.map((pkg) => {
+				const extension = installed.extensions.find(
+					(candidate) => candidate.source === pkg.source || candidate.source.startsWith(`${pkg.source}@`),
+				);
+				return {
+					name: pkg.name,
+					source: pkg.source,
+					installed: Boolean(extension),
+					enabled: extension?.enabled,
+					currentVersion: extension?.currentVersion,
+					hasUpdate: false,
+				};
+			});
 
 		const flow = packages.find((pkg) => pkg.source === "npm:pi-maestro-flow");
 		if (checkForUpdates && flow?.installed) {

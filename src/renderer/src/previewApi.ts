@@ -541,12 +541,6 @@ export function createPreviewApi(): PiDesktopApi {
 						installed: false,
 						hasUpdate: false,
 					},
-					{
-						name: "pi-maestro-teammate",
-						source: "npm:pi-maestro-teammate",
-						installed: false,
-						hasUpdate: false,
-					},
 				],
 				checkedUpdates: checkForUpdates,
 			}),
