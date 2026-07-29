@@ -2,8 +2,6 @@
 
 ## v0.6.6-12 - 2026-07-29
 
-### Maestro 集成与运行稳定性
-
 ### Maestro 扩展与 Skill
 
 - 扩展页将 `pi-maestro-flow` 与 `pi-maestro-teammate` 作为推荐组合安装；新版健康检查以已内置 teammate 运行时的 `pi-maestro-flow` 为准，不再对独立 teammate 包给出误导性的缺失提示。

@@ -2,8 +2,6 @@
 
 ## v0.6.6-12 - 2026-07-29
 
-### Maestro integration and runtime stability
-
 ### Maestro extensions and Skills
 
 - The Extensions page presents `pi-maestro-flow` and `pi-maestro-teammate` as a recommended bundle. Health checks now use `pi-maestro-flow` as the authoritative installation because current Flow releases include the teammate runtime, avoiding stale standalone-package warnings.
