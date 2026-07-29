@@ -9,13 +9,13 @@ function cssRule(selector) {
   return styles.match(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`))?.[1];
 }
 
-test("通知锚定在新会话控件下方而不是全局 toast", () => {
+test("通知使用不遮挡会话控件的右下角全局 toast", () => {
   assert.match(app, /showNotice\(notifyRequest\.message/);
-  assert.match(app, /className="app-notice"/);
+  assert.match(app, /"app-notice app-notice-error"/);
 
   const notice = cssRule("\\.app-notice");
   assert.ok(notice, "通知样式必须存在");
-  assert.match(notice, /position:\s*absolute;/);
-  assert.match(notice, /top:\s*calc\(100% \+ 20px\);/);
-  assert.match(notice, /right:\s*0;/);
+  assert.match(notice, /position:\s*fixed;/);
+  assert.match(notice, /bottom:\s*24px;/);
+  assert.match(notice, /right:\s*24px;/);
 });

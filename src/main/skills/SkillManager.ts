@@ -18,9 +18,12 @@ import type {
 	PiSkillLocation,
 	PiSkillSummary,
 } from "../../shared/types";
-import type { WslEnvironment } from "../wsl/WslPaths";
+import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 
 const SKILL_FILE = "SKILL.md";
+
+type InstalledPackageRoot = { source: string; path: string };
+type InstalledPackageProvider = () => Promise<InstalledPackageRoot[]>;
 
 /**
  * 管理 pi 全局 Skill 目录。
@@ -28,13 +31,18 @@ const SKILL_FILE = "SKILL.md";
  */
 export class SkillManager {
 	private locations: PiSkillLocation[];
+	private wslEnvironment: WslEnvironment | null = null;
 
-	constructor(home?: string) {
+	constructor(
+		home?: string,
+		private readonly getInstalledPackageRoots: InstalledPackageProvider = async () => [],
+	) {
 		this.locations = this.buildLocations(home ?? homedir());
 	}
 
 	/** 将 skill 目录切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
 	configureWsl(environment: WslEnvironment | null) {
+		this.wslEnvironment = environment;
 		this.locations = this.buildLocations(environment?.windowsHome ?? homedir());
 	}
 
@@ -56,19 +64,26 @@ export class SkillManager {
 	}
 
 	async list(): Promise<PiSkillListResult> {
-		const skills = (
-			await Promise.all(this.locations.map((location) => this.scanLocation(location)))
-		).flat();
-		// 按 name 去重，优先保留 pi-global 目录下的条目
-		// （避免 ~/.pi/agent/skills/ 和 ~/.agents/skills/ 不同步导致同名重复）
-		const seen = new Map<string, PiSkillSummary>();
-		for (const skill of skills) {
+		const [localSkills, packageSkills] = await Promise.all([
+			Promise.all(this.locations.map((location) => this.scanLocation(location))).then((groups) => groups.flat()),
+			this.scanInstalledPackageSkills(),
+		]);
+		// 仅在两个用户全局目录之间按 name 去重，优先 pi-global；包内 Skill 保留独立条目，
+		// 即使被同名用户 Skill 覆盖也应可见，便于确认安装包实际提供了哪些能力。
+		const localByName = new Map<string, PiSkillSummary>();
+		for (const skill of localSkills) {
 			const key = skill.name.toLowerCase();
-			if (!seen.has(key) || (seen.get(key)!.sourceId !== "pi-global" && skill.sourceId === "pi-global")) {
-				seen.set(key, skill);
+			if (!localByName.has(key) || (localByName.get(key)!.sourceId !== "pi-global" && skill.sourceId === "pi-global")) {
+				localByName.set(key, skill);
 			}
 		}
-		return { locations: this.locations, skills: Array.from(seen.values()) };
+		const seenPackagePaths = new Set<string>();
+		const uniquePackageSkills = packageSkills.filter((skill) => {
+			if (seenPackagePaths.has(skill.path)) return false;
+			seenPackagePaths.add(skill.path);
+			return true;
+		});
+		return { locations: this.locations, skills: [...localByName.values(), ...uniquePackageSkills] };
 	}
 
 	async create(input: CreatePiSkillInput): Promise<PiSkillSummary> {
@@ -92,6 +107,7 @@ export class SkillManager {
 
 	async toggle(skillPath: string, enabled: boolean): Promise<PiSkillSummary> {
 		const skill = await this.findByPath(skillPath);
+		if (skill.readOnly) throw new Error("扩展包提供的 Skill 为只读，请通过更新扩展包管理其内容");
 		const raw = await readFile(skill.path, "utf8");
 		const next = this.setFrontmatterBoolean(raw, "disable-model-invocation", !enabled);
 		await writeFile(skill.path, next, "utf8");
@@ -100,6 +116,7 @@ export class SkillManager {
 
 	async delete(skillPath: string): Promise<void> {
 		const skill = await this.findByPath(skillPath);
+		if (skill.readOnly) throw new Error("扩展包提供的 Skill 为只读，不能单独删除");
 		// 目录型 skill 删除整个目录；根 markdown skill 仅删除单个 md 文件。
 		await rm(skill.type === "directory" ? skill.dir : skill.path, {
 			recursive: true,
@@ -118,7 +135,7 @@ export class SkillManager {
 	}
 
 	private async scanLocation(location: PiSkillLocation): Promise<PiSkillSummary[]> {
-		await mkdir(location.path, { recursive: true });
+		if (!location.readOnly) await mkdir(location.path, { recursive: true });
 		const entries = await readdir(location.path, { withFileTypes: true }).catch(() => []);
 		const skills: PiSkillSummary[] = [];
 		const ancestors = new Set<string>();
@@ -134,6 +151,29 @@ export class SkillManager {
 			}
 		}
 		return skills.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	private async scanInstalledPackageSkills(): Promise<PiSkillSummary[]> {
+		const roots = await this.getInstalledPackageRoots().catch(() => []);
+		const groups = await Promise.all(roots.map(async (pkg) => {
+			try {
+				const packageRoot = this.wslEnvironment
+					? toWindowsHostPath(pkg.path, this.wslEnvironment)
+					: pkg.path;
+				const packageName = pkg.source.replace(/^(?:npm|file|github|git):/i, "");
+				return await this.scanLocation({
+					id: "extension-packages",
+					label: `${packageName} · .pi/skills`,
+					path: join(packageRoot, ".pi", "skills"),
+					rootMarkdownEnabled: true,
+					readOnly: true,
+				});
+			} catch {
+				// 单个包路径损坏或暂时不可访问时跳过该包，保留其它全局/包内 Skills。
+				return [];
+			}
+		}));
+		return groups.flat();
 	}
 
 	private async getEntryKind(
@@ -197,6 +237,7 @@ export class SkillManager {
 			sourceId: location.id,
 			sourceLabel: location.label,
 			type,
+			readOnly: location.readOnly,
 			enabled: frontmatter["disable-model-invocation"] !== "true",
 			valid: warnings.length === 0,
 			warnings,
@@ -247,12 +288,13 @@ export class SkillManager {
 	/** 重命名 Skill：重命名目录并更新 SKILL.md 中的 name 字段 */
 	async rename(skillPath: string, newName: string): Promise<PiSkillSummary> {
 		const skill = await this.findByPath(skillPath);
+		if (skill.readOnly) throw new Error("扩展包提供的 Skill 为只读，不能重命名");
 		const normalizedNew = this.normalizeSkillName(newName);
 		if (!normalizedNew) throw new Error("Skill 名称不能为空");
 
 		const displayName = newName.trim();
 		const oldDir = skill.dir;
-		const parentDir = skill.dir.split(/[\\/]/).slice(0, -1).join("\\");
+		const parentDir = dirname(skill.dir);
 		const newDir = join(parentDir, normalizedNew);
 
 		if (oldDir === newDir) throw new Error("新旧名称相同");
@@ -267,8 +309,6 @@ export class SkillManager {
 
 		// 重命名后路径变为新路径
 		const newSkillPath = join(newDir, skill.path.split(/[\\/]/).pop()!);
-		// 找对应的 location（搜索所有 locations）
-		const { skills } = await this.list();
 		const reloaded = await this.readSkill(
 			newSkillPath,
 			this.locations.find((l) => newSkillPath.startsWith(l.path)) ?? this.locations[0],

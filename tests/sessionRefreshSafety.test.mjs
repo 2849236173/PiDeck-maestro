@@ -35,6 +35,6 @@ test("bounds session list requests so a hung scan releases the single-flight loc
   assert.match(scanner, /new AbortController\(\)/);
   assert.match(scanner, /controller\.abort\(new Error\("Session scan timed out"\)\)/);
   assert.match(scanner, /clearTimeout\(scanTimer\)/);
-  assert.match(scanner, /collectWslJsonl\(signal\)/);
+  assert.match(scanner, /collectWslJsonl\(root, signal\)/);
   assert.match(scanner, /signal,\s*windowsHide: true/);
 });

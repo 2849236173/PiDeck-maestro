@@ -40,7 +40,15 @@ function loadExtensionManager(fsOverrides = {}, piAgentPaths, pathModule = requi
 	const wslPaths = loadWslPaths();
 	const sandbox = {
 		exports: {},
-		require: (id) => {
+			require: (id) => {
+			if (id === "../../shared/types") {
+				return {
+					MAESTRO_EXTENSION_PACKAGES: [
+						{ name: "pi-maestro-flow", source: "npm:pi-maestro-flow" },
+						{ name: "pi-maestro-teammate", source: "npm:pi-maestro-teammate" },
+					],
+				};
+			}
 			if (id === "node:fs/promises") {
 				return { ...require(id), ...fsOverrides };
 			}
@@ -90,8 +98,10 @@ test("reads an installed WSL npm extension version through its canonical host pa
 		const version = await manager.readInstalledVersion(
 			"/root/.pi/agent/extensions/npm/fixture-extension",
 		);
+		const invalidVersion = await manager.readInstalledVersion("relative/package");
 
 		assert.equal(version, "1.2.3");
+		assert.equal(invalidVersion, undefined);
 		assert.equal(requestedPaths.length, 1);
 		assert.equal(
 			requestedPaths[0].replace(/\\/g, "/"),
@@ -178,6 +188,94 @@ test("reads local extension versions with native Linux POSIX paths", async () =>
 	assert.equal(extensions.length, 1);
 	assert.equal(extensions[0].path, "/opt/pi-agent/extensions/linux-extension");
 	assert.equal(extensions[0].currentVersion, "3.1.4");
+});
+
+test("shows installed package versions on the first non-refresh extension list", async () => {
+	const fixtureDir = mkdtempSync(join(tmpdir(), "pideck-extension-list-version-"));
+	writeFileSync(
+		join(fixtureDir, "package.json"),
+		JSON.stringify({ name: "pi-maestro-flow", version: "4.5.6" }),
+		"utf8",
+	);
+
+	try {
+		const { ExtensionManager } = loadExtensionManager();
+		const manager = new ExtensionManager({}, () => ({}));
+		let registryQueries = 0;
+		manager.runPi = async () => `User packages:\n  npm:pi-maestro-flow\n    ${fixtureDir}\n  file:../local-extension\n    ${fixtureDir}\n`;
+		manager.scanLocalExtensions = async () => [];
+		manager.ensureBuiltInDefaultsDisabled = async () => undefined;
+		manager.getDisabledExtensions = async () => new Set();
+		manager.npmViewVersion = async () => {
+			registryQueries += 1;
+			return "9.9.9";
+		};
+
+		const result = await manager.list(false);
+
+		assert.equal(result.extensions.length, 2);
+		assert.equal(result.extensions[0].currentVersion, "4.5.6");
+		assert.equal(result.extensions[1].source, "file:../local-extension");
+		assert.equal(result.extensions[1].currentVersion, "4.5.6");
+		assert.equal(result.extensions[0].latestVersion, undefined);
+		assert.equal(registryQueries, 0);
+	} finally {
+		rmSync(fixtureDir, { recursive: true, force: true });
+	}
+});
+
+test("Maestro health checks both installations and only queries flow updates", async () => {
+	const { ExtensionManager } = loadExtensionManager();
+	const manager = new ExtensionManager({}, () => ({}));
+	manager.list = async () => ({
+		extensions: [
+			{
+				id: "user:npm:pi-maestro-flow",
+				source: "npm:pi-maestro-flow",
+				scope: "user",
+				enabled: true,
+				currentVersion: "1.2.3",
+			},
+		],
+		raw: "",
+	});
+	const queried = [];
+	manager.npmViewVersion = async (name) => {
+		queried.push(name);
+		return "1.3.0";
+	};
+
+	const health = await manager.checkMaestroHealth(true);
+
+	assert.deepEqual(queried, ["pi-maestro-flow"]);
+	assert.equal(health.checkedUpdates, true);
+	assert.equal(health.packages[0].installed, true);
+	assert.equal(health.packages[0].currentVersion, "1.2.3");
+	assert.equal(health.packages[0].latestVersion, "1.3.0");
+	assert.equal(health.packages[0].hasUpdate, true);
+	assert.equal(health.packages[1].source, "npm:pi-maestro-teammate");
+	assert.equal(health.packages[1].installed, false);
+});
+
+test("Maestro health skips registry access when update checks are disabled", async () => {
+	const { ExtensionManager } = loadExtensionManager();
+	const manager = new ExtensionManager({}, () => ({}));
+	manager.list = async () => ({
+		extensions: [
+			{ source: "npm:pi-maestro-flow", currentVersion: "1.2.3", scope: "user" },
+			{ source: "npm:pi-maestro-teammate", currentVersion: "2.0.0", scope: "user" },
+		],
+		raw: "",
+	});
+	manager.npmViewVersion = async () => {
+		throw new Error("registry must not be queried");
+	};
+
+	const health = await manager.checkMaestroHealth(false);
+
+	assert.equal(health.checkedUpdates, false);
+	assert.equal(health.packages.every((pkg) => pkg.installed), true);
+	assert.equal(health.packages.every((pkg) => !pkg.hasUpdate), true);
 });
 
 test("defaults installed legacy built-ins to disabled only once", async () => {

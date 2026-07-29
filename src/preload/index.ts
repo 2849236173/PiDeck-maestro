@@ -56,6 +56,7 @@ import type {
 	PiCliUpdateResult,
 	PiCommand,
 	PiExtensionListResult,
+	MaestroExtensionHealth,
 	PiInstallStatus,
 	PiInstallExecResult,
 	NpmAvailabilityResult,
@@ -630,6 +631,8 @@ const api = {
 		// forceRefresh=true 时跳过主进程缓存并补充 npm 版本信息。
 		list: (forceRefresh = false) =>
 			ipcRenderer.invoke(ipcChannels.extensionsList, forceRefresh) as Promise<PiExtensionListResult>,
+		checkMaestroHealth: (checkForUpdates = true) =>
+			ipcRenderer.invoke(ipcChannels.extensionsMaestroHealth, checkForUpdates) as Promise<MaestroExtensionHealth>,
 		uninstall: (source: string, scope?: "user" | "project" | "unknown") =>
 			ipcRenderer.invoke(ipcChannels.extensionsUninstall, source, scope) as Promise<void>,
 		install: (source: string) =>

@@ -30,7 +30,7 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 test("renderer startup reports bootstrap mount and global errors", () => {
 	assert.match(rendererMainSource, /Renderer bootstrap started/);
 	assert.match(rendererMainSource, /Renderer React tree mounted/);
-	assert.match(rendererMainSource, /Renderer startup uncaught error/);
-	assert.match(rendererMainSource, /Renderer startup unhandled rejection/);
+	assert.match(rendererMainSource, /Renderer uncaught error/);
+	assert.match(rendererMainSource, /Renderer unhandled rejection/);
 	assert.match(rendererMainSource, /Renderer root element missing/);
 });

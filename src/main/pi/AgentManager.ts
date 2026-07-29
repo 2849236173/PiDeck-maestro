@@ -1772,6 +1772,33 @@ export class AgentManager {
 		};
 	}
 
+	private finalizeRunningToolMessages(agentId: string) {
+		const messages = this.messages.get(agentId);
+		if (!messages) return;
+		const now = Date.now();
+		let changed = false;
+		for (const message of messages) {
+			if (message.role !== "tool" || message.meta?.status !== "running") continue;
+			const startedAt = typeof message.meta.startedAt === "number"
+				? message.meta.startedAt
+				: message.timestamp;
+			const toolName = typeof message.meta.toolName === "string" ? message.meta.toolName : "tool";
+			message.text = `✓ ${toolName}`;
+			message.timestamp = now;
+			message.meta = {
+				...message.meta,
+				status: "done",
+				durationMs: Math.max(0, now - startedAt),
+			};
+			changed = true;
+		}
+		if (!changed) return;
+		this.toolMessageIds.delete(agentId);
+		this.messages.set(agentId, messages);
+		this.scheduleMessageEmit(agentId);
+		this.flushMessageEmit(agentId);
+	}
+
 	private applyActiveToolCallState(agentId: string, state: ActiveToolCallState) {
 		if (state.calls.size > 0) {
 			this.activeToolCallsByAgent.set(agentId, state.calls);
@@ -3379,7 +3406,11 @@ export class AgentManager {
 		for (const subAgent of subAgents.values()) {
 			if (subAgent.status === 'pending' || subAgent.status === 'running' || subAgent.status === 'finalizing') {
 				const stalled = Boolean(subAgent.sessionFile) && now - subAgent.lastUpdate > AgentManager.SUB_AGENT_STALL_MS;
-				running.push(stalled ? { ...subAgent, stalled: true } : subAgent);
+				// stalled 仍保留活跃状态以支持恢复，但显示耗时冻结在越过停滞阈值的时刻；
+				// 后续文件更新会移除派生 endTime 并恢复实时计时。
+				running.push(stalled
+					? { ...subAgent, stalled: true, endTime: subAgent.endTime ?? subAgent.lastUpdate + AgentManager.SUB_AGENT_STALL_MS }
+					: { ...subAgent, stalled: undefined, endTime: undefined });
 			} else {
 				// 历史扫描可能从最终 assistant 消息直接识别出终态，旧路径没有写 endTime；
 				// 快照层统一用最后文件更新时间冻结耗时，避免已完成条目继续按 Date.now() 增长。
@@ -3650,6 +3681,14 @@ export class AgentManager {
 				if (runtime) runtime.tab.status = "error";
 			}
 			if (runtime) this.emitState();
+			this.finalizeRunningToolMessages(agentId);
+			// agent_end 是当前模型轮次的硬边界。若上游遗漏/错配 tool_execution_end ID，
+			// 此处必须收敛残留工具状态，否则下面的空闲兜底会被自身残留永久阻塞。
+			if (this.activeToolCallsByAgent.has(agentId)) {
+				this.activeToolCallsByAgent.delete(agentId);
+				this.toolExecutingByAgent.set(agentId, null);
+				this.emitToolRuntimeTransition(agentId, false);
+			}
 			// agent_end 后 runtimeState 可能暂时仍显示后续 compaction/retry；立即同步一次，
 			// 但不要把它当作最终空闲信号，最终状态由 agent_settled 处理。
 			void this.emitRuntimeState(agentId);
@@ -3726,21 +3765,31 @@ export class AgentManager {
 		}
 
 		if (typed.type === "tool_execution_end") {
-			this.upsertToolMessage(
-				agentId,
-				typed,
-				typed.isError ? "error" : "done",
-			);
-			this.syncSubAgentsFromToolEvent(agentId, typed, typed.isError ? "error" : "done");
-			// 工具执行结束是终态，立即 flush 把最终结果推给渲染进程，避免节流窗口内用户看不到完成状态。
-			this.flushMessageEmit(agentId);
-			// 清除本次 toolCall；并行批次仅在最后一个工具结束时发布 false，
-			// 否则 steer 会在其他工具仍运行时过早进入 pi 队列。
+			// 先解析真实活动调用 ID；部分 Pi/扩展终态会遗漏或重写 toolCallId。
+			// 单调用或工具名唯一时可安全回退，并用解析后的 ID 更新同一张工具卡/子代理。
 			const activeToolCalls = this.activeToolCallsByAgent.get(agentId) ?? new Map<string, string>();
 			const toolState = updateActiveToolCalls(activeToolCalls, {
 				type: "end",
-				toolCallId: String(typed.toolCallId ?? ""),
+				toolCallId: typed.toolCallId == null ? undefined : String(typed.toolCallId),
+				toolName: typeof typed.toolName === "string" ? typed.toolName : undefined,
 			});
+			const terminalEvent = toolState.endedToolCallId
+				? {
+					...typed,
+					toolCallId: toolState.endedToolCallId,
+					toolName: activeToolCalls.get(toolState.endedToolCallId) ?? typed.toolName,
+				}
+				: typed;
+			this.upsertToolMessage(
+				agentId,
+				terminalEvent,
+				typed.isError ? "error" : "done",
+			);
+			this.syncSubAgentsFromToolEvent(agentId, terminalEvent, typed.isError ? "error" : "done");
+			// 工具执行结束是终态，立即 flush 把最终结果推给渲染进程，避免节流窗口内用户看不到完成状态。
+			this.flushMessageEmit(agentId);
+			// 并行批次仅在匹配到最后一个工具时发布 false；有歧义的并行 end 留待后续
+			// 精确事件或 agent_end 轮次边界收敛，避免误删仍在运行的同名调用。
 			this.applyActiveToolCallState(agentId, toolState);
 			// 工具调用完成后保持 agent 状态为 running，等待后续的 agent_end 事件
 			// 这样在工具完成到 agent 生成回复之间，thinking bubble 仍然会显示

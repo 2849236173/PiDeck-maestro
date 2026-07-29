@@ -19,6 +19,10 @@ function git(...args) {
   }).trim();
 }
 
+function normalizeNewlines(value) {
+  return value.replace(/\r\n/g, "\n");
+}
+
 function write(relativePath, content) {
   writeFileSync(join(repositoryDir, relativePath), content);
 }
@@ -331,7 +335,7 @@ describe("GitService committed-file diff integration", () => {
     const layeredPath = join(repositoryDir, "discard-layered.txt");
     await service.discardFile(repositoryDir, "workingTree", layeredPath);
     assert.equal(execFileSync("git", ["show", ":discard-layered.txt"], { cwd: repositoryDir, encoding: "utf8" }), "staged\n");
-    assert.equal(readFileSync(layeredPath, "utf8"), "staged\n");
+    assert.equal(normalizeNewlines(readFileSync(layeredPath, "utf8")), "staged\n");
     assert.equal((await service.getStatus(repositoryDir)).index.some((resource) => resource.path === layeredPath), true);
 
     const deletedPath = join(repositoryDir, "discard-deleted.txt");
@@ -364,8 +368,8 @@ describe("GitService committed-file diff integration", () => {
     const outsidePath = join(repositoryDir, "discard-sibling", "outside.txt");
     await assert.rejects(() => service.discardFile(nestedRoot, "workingTree", outsidePath));
     await service.discardFile(nestedRoot, "workingTree", insidePath);
-    assert.equal(readFileSync(insidePath, "utf8"), "inside\n");
-    assert.equal(readFileSync(outsidePath, "utf8"), "outside changed\n");
+    assert.equal(normalizeNewlines(readFileSync(insidePath, "utf8")), "inside\n");
+    assert.equal(normalizeNewlines(readFileSync(outsidePath, "utf8")), "outside changed\n");
     git("reset", "--hard", "HEAD");
   });
 
@@ -379,7 +383,7 @@ describe("GitService committed-file diff integration", () => {
 
     const targetPath = join(repositoryDir, "rename-discard-target.txt");
     await service.discardFile(repositoryDir, "workingTree", targetPath);
-    assert.equal(readFileSync(targetPath, "utf8"), "rename head\n");
+    assert.equal(normalizeNewlines(readFileSync(targetPath, "utf8")), "rename head\n");
     write("rename-discard-target.txt", "rename staged update\n");
     await service.stageFiles(repositoryDir, [targetPath]);
     assert.equal(execFileSync("git", ["show", ":rename-discard-target.txt"], { cwd: repositoryDir, encoding: "utf8" }), "rename staged update\n");

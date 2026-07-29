@@ -59,6 +59,8 @@ import { subscribeToNotice, showNotice } from "./utils/notice";
 import { createPreviewApi } from "./previewApi";
 import { createBrowserApi } from "./browserApi";
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
+import type { ConfigSection } from "./ConfigModal";
+import { MaestroHealthPrompt } from "./components/app/MaestroHealthPrompt";
 import { TrustConfirmModal } from "./components/app/TrustConfirmModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
@@ -213,6 +215,7 @@ import type {
   PiInstallStatus,
   PiInstallExecResult,
   NpmAvailabilityResult,
+  MaestroExtensionHealth,
   PiUpdateCheckResult,
   Project,
   SessionSummary,
@@ -1201,6 +1204,9 @@ export function App() {
   const [piUpdateCheck, setPiUpdateCheck] = useState<PiUpdateCheckResult | null>(null);
   const [piUpdateResult, setPiUpdateResult] = useState<PiCliUpdateResult | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  const [configInitialSection, setConfigInitialSection] = useState<ConfigSection>("config");
+  const [maestroHealthPrompt, setMaestroHealthPrompt] = useState<MaestroExtensionHealth | null>(null);
+  const maestroHealthCheckedRef = useRef(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [_debugOpen, _setDebugOpen] = useState(false);
@@ -2120,6 +2126,10 @@ export function App() {
       if (!next.disableUpdateCheck) {
         window.setTimeout(() => void checkPiCliUpdateOnStartup(), 1200);
       }
+      window.setTimeout(
+        () => void checkMaestroHealthOnStartup(!next.disableUpdateCheck),
+        1800,
+      );
     });
 
     const offProjects = api.projects.onChanged((next) => {
@@ -3350,6 +3360,21 @@ export function App() {
   async function installDownloadedAppUpdate() {
     if (!downloadedUpdatePath) return;
     await api.app.installUpdate(downloadedUpdatePath);
+  }
+
+  async function checkMaestroHealthOnStartup(checkForUpdates: boolean) {
+    if (maestroHealthCheckedRef.current) return;
+    maestroHealthCheckedRef.current = true;
+    try {
+      const health = await api.extensions.checkMaestroHealth(checkForUpdates);
+      const hasMissing = health.packages.some((pkg) => !pkg.installed);
+      const flowHasUpdate = health.packages.some(
+        (pkg) => pkg.source === "npm:pi-maestro-flow" && pkg.hasUpdate,
+      );
+      if (hasMissing || flowHasUpdate) setMaestroHealthPrompt(health);
+    } catch {
+      // Pi/网络尚未就绪时静默跳过；扩展页仍可手动查看和安装，不影响首屏与 Agent 启动。
+    }
   }
 
   async function checkPiCliUpdateOnStartup() {
@@ -6953,7 +6978,10 @@ export function App() {
               <button
                 className="icon-button config-icon"
                 title={t("config.title")}
-                onClick={() => setConfigOpen(true)}
+                onClick={() => {
+                  setConfigInitialSection("config");
+                  setConfigOpen(true);
+                }}
               >
                 <Sliders size={17} />
               </button>
@@ -9333,11 +9361,27 @@ filePath={gitDrawerDiff.filePath}
         />
       </Suspense>
       )}
+      {maestroHealthPrompt && !environmentDialog && !settingsOpen && !configOpen && !feedbackOpen && !updateInfo && !updateError && !upToDateVersion && (
+        <MaestroHealthPrompt
+          health={maestroHealthPrompt}
+          onClose={() => setMaestroHealthPrompt(null)}
+          onOpenExtensions={() => {
+            setMaestroHealthPrompt(null);
+            setConfigInitialSection("extensions");
+            setConfigOpen(true);
+          }}
+        />
+      )}
       <Suspense fallback={null}>
       <ConfigModal
+        key={configInitialSection}
         open={configOpen}
+        initialSection={configInitialSection}
         projectPath={activeProject?.path}
-        onClose={() => setConfigOpen(false)}
+        onClose={() => {
+          setConfigOpen(false);
+          setConfigInitialSection("config");
+        }}
         onSaved={() => {
           // 配置保存后不再自动 reload,用户可通过 Restart 按钮手动重载
         }}

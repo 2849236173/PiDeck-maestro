@@ -54,11 +54,14 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 		"src/main/pi/messageContent.ts",
 		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
 	);
-	const sessionSummaryCache = loadTranspiledModule(
-		"src/main/sessions/sessionSummaryCache.ts",
-		new Map([["electron", { app: { getPath: () => homePath } }]]),
-	);
 	const wslPaths = loadTranspiledModule("src/main/wsl/WslPaths.ts");
+	class InMemorySessionSummaryCache {
+		async ensureLoaded() {}
+		get() { return undefined; }
+		set() {}
+		prune() {}
+		async reloadFromDisk() {}
+	}
 	const sandbox = {
 		AbortController,
 		AbortSignal,
@@ -77,7 +80,7 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 			}
 			if (id === "../../shared/codexSessionMeta") return codexMeta;
 			if (id === "../pi/messageContent") return messageContent;
-			if (id === "./sessionSummaryCache") return sessionSummaryCache;
+			if (id === "./sessionSummaryCache") return { SessionSummaryCache: InMemorySessionSummaryCache };
 			if (id === "../wsl/WslPaths") return wslPaths;
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };
 			return require(id);

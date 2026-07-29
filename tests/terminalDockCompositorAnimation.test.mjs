@@ -16,7 +16,7 @@ test("terminal dock combines a short grid transition with composited motion", ()
   assert.ok(chatPane, "chat pane styles must exist");
   assert.match(chatPane, /transition:\s*grid-template-rows 120ms/);
   assert.ok(terminalDock, "terminal dock styles must exist");
-  assert.match(terminalDock, /will-change:\s*transform;/);
+  assert.doesNotMatch(terminalDock, /will-change:\s*transform;/);
   assert.match(terminalDock, /transition:\s*transform/);
   assert.match(styles, /\.terminal-dock\[data-motion-state="hidden"\][\s\S]*?translate3d\(0, 100%, 0\)/);
 });

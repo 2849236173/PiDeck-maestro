@@ -3065,6 +3065,9 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.extensionsList, (_event, forceRefresh?: boolean) =>
 		extensionManager.list(Boolean(forceRefresh)),
 	);
+	ipcMain.handle(ipcChannels.extensionsMaestroHealth, (_event, checkForUpdates?: boolean) =>
+		extensionManager.checkMaestroHealth(checkForUpdates !== false),
+	);
 	ipcMain.handle(ipcChannels.extensionsUninstall, async (_event, source: string, scope?: "user" | "project" | "unknown") => {
 		const result = await extensionManager.uninstall(source, scope);
 		void appLogger.info("extension", "Extension uninstalled", { source, scope });
@@ -3568,8 +3571,13 @@ app.whenReady().then(async () => {
 	configManager = new ConfigManager();
 	promptManager = new PromptManager();
 	xuePromptManager = new XuePromptManager();
-	skillManager = new SkillManager();
 	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get());
+	skillManager = new SkillManager(undefined, async () => {
+		const result = await extensionManager.list(false);
+		return result.extensions
+			.filter((extension) => extension.path && /^(?:npm|file|github|git|https?):/i.test(extension.source))
+			.map((extension) => ({ source: extension.source, path: extension.path! }));
+	});
 	projectResourceManager = new ProjectResourceManager((projectId) => projectStore.get(projectId));
 	agentManager = new AgentManager(
 		(id) => projectStore.get(id),

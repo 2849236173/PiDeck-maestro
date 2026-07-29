@@ -332,14 +332,15 @@ export function SubAgentPanel({ agentId, api, onClose, onOpenDetail, agentIdle, 
     };
   }, [agentId, api]);
 
-  // 主进程已对无变化状态去重推送；运行中条目的耗时需要本地计时器驱动重渲染才能每秒跳动。
-  const hasRunning = state.running.length > 0;
+  // 主进程已对无变化状态去重推送；只有仍在推进的条目需要本地计时器。
+  // stalled 项已有派生 endTime，全部停滞时停止 interval，避免面板持续无意义刷新。
+  const hasLiveRunning = state.running.some((item) => !item.stalled);
   const [, setElapsedTick] = useState(0);
   useEffect(() => {
-    if (!hasRunning) return;
+    if (!hasLiveRunning) return;
     const timer = setInterval(() => setElapsedTick((tick) => tick + 1), 1000);
     return () => clearInterval(timer);
-  }, [hasRunning]);
+  }, [hasLiveRunning]);
 
   const renderSection = (title: string, emptyText: string, items: SubAgent[]) => (
     <section className="subagent-section">

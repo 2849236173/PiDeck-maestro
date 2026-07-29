@@ -79,6 +79,7 @@ export const ipcChannels = {
 	skillHubDetail: "skill-hub:detail",
 	skillHubInstall: "skill-hub:install",
 	extensionsList: "extensions:list",
+	extensionsMaestroHealth: "extensions:maestro-health",
 	extensionsUninstall: "extensions:uninstall",
 	extensionsInstall: "extensions:install",
 	extensionsToggle: "extensions:toggle",

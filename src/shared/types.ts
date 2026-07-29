@@ -600,10 +600,12 @@ export type TeammateModelConfigSaveRequest = {
 };
 
 export type PiSkillLocation = {
-	id: "pi-global" | "agents-global" | "project-pi" | "project-agents";
+	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;
 	path: string;
 	rootMarkdownEnabled: boolean;
+	/** Package-provided Skills are discoverable but must not be modified in place. */
+	readOnly?: boolean;
 };
 
 export type PiSkillSummary = {
@@ -615,6 +617,7 @@ export type PiSkillSummary = {
 	sourceId: PiSkillLocation["id"];
 	sourceLabel: string;
 	type: "directory" | "markdown";
+	readOnly?: boolean;
 	enabled: boolean;
 	valid: boolean;
 	warnings: string[];
@@ -889,6 +892,35 @@ export type PiPackageInfo = {
 	repoUrl?: string;
 	/** pi.dev 详情页的 name 查询参数；部分包名和扩展展示名不完全一致。 */
 	piPackageName?: string;
+};
+
+export const MAESTRO_EXTENSION_PACKAGES = [
+	{
+		name: "pi-maestro-flow",
+		source: "npm:pi-maestro-flow",
+		npmUrl: "https://www.npmjs.com/package/pi-maestro-flow",
+	},
+	{
+		name: "pi-maestro-teammate",
+		source: "npm:pi-maestro-teammate",
+		npmUrl: "https://www.npmjs.com/package/pi-maestro-teammate",
+	},
+] as const;
+
+export type MaestroExtensionPackageStatus = {
+	name: string;
+	source: string;
+	installed: boolean;
+	enabled?: boolean;
+	currentVersion?: string;
+	latestVersion?: string;
+	hasUpdate: boolean;
+	updateError?: string;
+};
+
+export type MaestroExtensionHealth = {
+	packages: MaestroExtensionPackageStatus[];
+	checkedUpdates: boolean;
 };
 
 export type PiExtensionListResult = {

@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
+import { MAESTRO_EXTENSION_PACKAGES } from "../../shared/types";
+import type { AppSettings, MaestroExtensionHealth, MaestroExtensionPackageStatus, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
 import { resolvePiAgentDir } from "../pi/PiAgentPaths";
 import type { PiLocator } from "../pi/PiLocator";
 import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
@@ -90,10 +91,14 @@ export class ExtensionManager {
 	private async loadList(includeVersionInfo: boolean): Promise<PiExtensionListResult> {
 		const raw = await this.runPi(["list"], 20_000);
 		const parsed = this.parseListOutput(raw);
-		// npm view 是扩展页变慢的主因；默认列表先跳过，只有手动刷新时再查更新。
+		// 当前版本来自 pi list 提供的真实包目录，是零网络读取；首次进入扩展页也应立即展示。
+		const withCurrentVersions = await Promise.all(
+			parsed.map((extension) => this.enrichInstalledVersion(extension)),
+		);
+		// npm view 是扩展页变慢的主因；只有手动刷新或专项健康检查才查询远端最新版本。
 		const piInstalled = includeVersionInfo
-			? await Promise.all(parsed.map((extension) => this.enrichExtensionVersion(extension)))
-			: parsed;
+			? await Promise.all(withCurrentVersions.map((extension) => this.enrichLatestVersion(extension)))
+			: withCurrentVersions;
 
 		// 扫描原生 pi 配置根目录下自动发现的扩展（默认 ~/.pi/agent/extensions，
 		// PI_CODING_AGENT_DIR 可将它放到任意盘符），补充 pi list 不包含的本地文件扩展。
@@ -203,6 +208,38 @@ export class ExtensionManager {
 		return result;
 	}
 
+	async checkMaestroHealth(checkForUpdates = true): Promise<MaestroExtensionHealth> {
+		const installed = await this.list(false);
+		const packages: MaestroExtensionPackageStatus[] = MAESTRO_EXTENSION_PACKAGES.map((pkg) => {
+			const extension = installed.extensions.find(
+				(candidate) => candidate.source === pkg.source || candidate.source.startsWith(`${pkg.source}@`),
+			);
+			return {
+				name: pkg.name,
+				source: pkg.source,
+				installed: Boolean(extension),
+				enabled: extension?.enabled,
+				currentVersion: extension?.currentVersion,
+				hasUpdate: false,
+			};
+		});
+
+		const flow = packages.find((pkg) => pkg.source === "npm:pi-maestro-flow");
+		if (checkForUpdates && flow?.installed) {
+			try {
+				flow.latestVersion = await this.npmViewVersion(flow.name);
+				flow.hasUpdate = Boolean(
+					flow.currentVersion &&
+					this.compareVersions(flow.latestVersion, flow.currentVersion) > 0,
+				);
+			} catch (error) {
+				// 启动检查不得阻塞或报错；保留诊断供手动页面/测试使用。
+				flow.updateError = error instanceof Error ? error.message : String(error);
+			}
+		}
+		return { packages, checkedUpdates: checkForUpdates };
+	}
+
 	async checkPiUpdate(): Promise<PiUpdateCheckResult> {
 		try {
 			const status = await this.locator.check(this.getSettings().customPiPath);
@@ -238,19 +275,26 @@ export class ExtensionManager {
 		return this.toUpdateResult("pi update --extensions", output, true);
 	}
 
-	private async enrichExtensionVersion(extension: PiExtensionSummary): Promise<PiExtensionSummary> {
+	private async enrichInstalledVersion(extension: PiExtensionSummary): Promise<PiExtensionSummary> {
+		if (!extension.path) return extension;
+		return {
+			...extension,
+			currentVersion: await this.readInstalledVersion(extension.path),
+		};
+	}
+
+	private async enrichLatestVersion(extension: PiExtensionSummary): Promise<PiExtensionSummary> {
 		if (!extension.source.toLowerCase().startsWith("npm:")) return extension;
 		const packageName = extension.source.replace(/^npm:/i, "");
 		try {
-			const [currentVersion, latestVersion] = await Promise.all([
-				this.readInstalledVersion(extension.path),
-				this.npmViewVersion(packageName),
-			]);
+			const latestVersion = await this.npmViewVersion(packageName);
 			return {
 				...extension,
-				currentVersion,
 				latestVersion,
-				hasUpdate: Boolean(currentVersion && latestVersion && this.compareVersions(latestVersion, currentVersion) > 0),
+				hasUpdate: Boolean(
+					extension.currentVersion &&
+					this.compareVersions(latestVersion, extension.currentVersion) > 0,
+				),
 			};
 		} catch (error) {
 			return { ...extension, updateError: error instanceof Error ? error.message : String(error) };
@@ -259,10 +303,15 @@ export class ExtensionManager {
 
 	private async readInstalledVersion(path?: string) {
 		if (!path) return undefined;
-		const hostPath = this.wslEnvironment
-			? toWindowsHostPath(path, this.wslEnvironment)
-			: path;
-		return this.readPackageVersion(hostPath);
+		try {
+			const hostPath = this.wslEnvironment
+				? toWindowsHostPath(path, this.wslEnvironment)
+				: path;
+			return this.readPackageVersion(hostPath);
+		} catch {
+			// pi list 中单个损坏/相对路径不能拖垮整个扩展列表。
+			return undefined;
+		}
 	}
 
 	/** package.json 缺失或无合法 version 时保持静默，本地扩展仍可正常使用。 */

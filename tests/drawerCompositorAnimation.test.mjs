@@ -39,7 +39,7 @@ test("drawer keeps its content mounted through the layout transition", () => {
     /const drawerContentPanel = drawer && !drawerCollapsed \? drawer : renderedDrawer;/,
   );
   assert.match(app, /drawer && !drawerCollapsed \? drawerWidth : 0/);
-  assert.match(app, /drawer && !drawerCollapsed \? 260 : 0/);
+  assert.match(app, /drawer && !drawerCollapsed \? 6 : 0/);
 });
 
 test("file rows use the integer control line-height token", () => {

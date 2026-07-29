@@ -533,6 +533,23 @@ export function createPreviewApi(): PiDesktopApi {
 				],
 				raw: "User packages:\n  npm:preview-extension\n    C:/Users/preview/.pi/agent/npm/node_modules/preview-extension\n",
 			}),
+			checkMaestroHealth: async (checkForUpdates = true) => ({
+				packages: [
+					{
+						name: "pi-maestro-flow",
+						source: "npm:pi-maestro-flow",
+						installed: false,
+						hasUpdate: false,
+					},
+					{
+						name: "pi-maestro-teammate",
+						source: "npm:pi-maestro-teammate",
+						installed: false,
+						hasUpdate: false,
+					},
+				],
+				checkedUpdates: checkForUpdates,
+			}),
 			uninstall: async () => undefined,
 			install: async (_source: string) => "",
 			toggle: async () => undefined,

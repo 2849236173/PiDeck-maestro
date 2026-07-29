@@ -3,13 +3,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const tabSource = readFileSync("src/renderer/src/config/ExtensionsTab.tsx", "utf8");
+const sharedTypesSource = readFileSync("src/shared/types.ts", "utf8");
 const i18nSource = readFileSync("src/renderer/src/i18n.ts", "utf8");
 const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
 
 test("recommended extensions include one Maestro bundle with both npm sources", () => {
 	assert.match(tabSource, /name: "Maestro"/);
-	assert.match(tabSource, /name: "pi-maestro-flow"[\s\S]*source: "npm:pi-maestro-flow"/);
-	assert.match(tabSource, /name: "pi-maestro-teammate"[\s\S]*source: "npm:pi-maestro-teammate"/);
+	assert.match(tabSource, /MAESTRO_EXTENSION_PACKAGES\.map/);
+	assert.match(sharedTypesSource, /name: "pi-maestro-flow"[\s\S]*source: "npm:pi-maestro-flow"/);
+	assert.match(sharedTypesSource, /name: "pi-maestro-teammate"[\s\S]*source: "npm:pi-maestro-teammate"/);
 	assert.match(tabSource, /className="extensions-bundle-card"/);
 	assert.match(tabSource, /MAESTRO_BUNDLE\.packages\.map/);
 });

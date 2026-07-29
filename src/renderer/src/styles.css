@@ -9074,7 +9074,7 @@ body.is-resizing .subagent-panel-resizer::before {
   text-align: left;
   font-size: var(--font-size-body);
   font-weight: 400;
-  line-height: 26px;
+  line-height: var(--line-height-control);
   white-space: nowrap;
 }
 .file-node-row:hover {
@@ -17976,6 +17976,107 @@ a.config-btn {
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   color: var(--color-warning);
   font-size: var(--font-size-caption);
+}
+
+/* Maestro startup health prompt */
+.maestro-health-prompt {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 90;
+  width: min(420px, calc(100vw - 32px));
+  overflow: hidden;
+  color: var(--color-text-primary);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+
+.maestro-health-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.maestro-health-header.warning > svg {
+  color: var(--color-warning);
+}
+
+.maestro-health-header.update > svg {
+  color: var(--color-accent);
+}
+
+.maestro-health-header strong {
+  font-size: var(--font-size-body);
+}
+
+.maestro-health-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.maestro-health-content > p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.maestro-health-packages {
+  border-block: 1px solid var(--color-border-subtle);
+}
+
+.maestro-health-package {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.maestro-health-package + .maestro-health-package {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.maestro-health-package > svg {
+  color: var(--color-text-tertiary);
+}
+
+.maestro-health-package > svg:last-child {
+  color: var(--color-accent);
+}
+
+.maestro-health-package > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.maestro-health-package strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maestro-health-package small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.maestro-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 /* 推荐扩展大列表 */

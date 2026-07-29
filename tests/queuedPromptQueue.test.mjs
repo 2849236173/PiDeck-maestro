@@ -130,8 +130,11 @@ test("queue drain is serialized and waits for an ordered raw tool-end event", ()
   );
   assert.match(runtimeStateSource, /incoming\.toolStateSequence < current\.toolStateSequence/);
   assert.match(agentManagerSource, /updateActiveToolCalls/);
-  assert.match(toolRuntimeStateSource, /calls\.delete\(event\.toolCallId\)/);
-  assert.match(toolRuntimeStateSource, /completedBatch: event\.type === "end" && current\.size > 0 && calls\.size === 0/);
+  assert.match(toolRuntimeStateSource, /if \(endedToolCallId\) calls\.delete\(endedToolCallId\)/);
+  assert.match(toolRuntimeStateSource, /completedBatch: event\.type === "end" && Boolean\(endedToolCallId\)/);
+  assert.match(agentManagerSource, /const terminalEvent = toolState\.endedToolCallId/);
+  assert.match(agentManagerSource, /agent_end 是当前模型轮次的硬边界/);
+  assert.match(agentManagerSource, /this\.finalizeRunningToolMessages\(agentId\)/);
   assert.match(appSource, /claimIdleHead\(queuedPromptsRef\.current, agentId\)/);
   assert.match(appSource, /claimNextSteerPrompt\(queuedPromptsRef\.current, agentId\)/);
   assert.match(appSource, /resolveClaimedPrompt/);

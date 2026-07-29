@@ -50,6 +50,9 @@ test("teammate lifecycle creates immediate placeholders and does not complete on
   assert.match(types, /'pending' \| 'running' \| 'finalizing' \| 'completed'/);
   assert.match(panel, /t\('subAgent\.finalizing'\)/);
   assert.match(panel, /disabled=\{!item\.sessionFile\}/);
+  assert.match(manager, /endTime: subAgent\.endTime \?\? subAgent\.lastUpdate \+ AgentManager\.SUB_AGENT_STALL_MS/);
+  assert.match(panel, /const hasLiveRunning = state\.running\.some\(\(item\) => !item\.stalled\)/);
+  assert.match(panel, /if \(!hasLiveRunning\) return/);
 });
 
 test("sub-agent details reuse rich assistant rendering and separate active count from history", () => {

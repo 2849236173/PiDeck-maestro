@@ -34,12 +34,15 @@ export function SkillsTab(props: {
 	// 二级 tab（商店内）：选择供应商
 	const [storeSource, setStoreSource] = useState<"promptchat" | "skillhub">("skillhub");
 	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-	const canCreate = props.newName.trim() && props.newDescription.trim();
-	// 按选中的位置目录过滤 skill 列表
-	const filteredSkills = data.skills.filter((s) => s.sourceId === props.newLocationId);
+	const writableLocations = data.locations.filter((location) => !location.readOnly);
 	const selectedLocation =
-		data.locations.find((location) => location.id === props.newLocationId) ??
-		data.locations[0];
+		writableLocations.find((location) => location.id === props.newLocationId) ??
+		writableLocations[0];
+	const canCreate = Boolean(
+		props.newName.trim() && props.newDescription.trim() && selectedLocation,
+	);
+	// 本地页展示所有已发现来源；新建位置只决定写入目录，不再充当列表过滤器。
+	const filteredSkills = data.skills;
 	return (
 		<div className="skills-tab">
 			{/* 一级 tab：本地 / 商店 */}
@@ -141,7 +144,7 @@ export function SkillsTab(props: {
 							</button>
 							{locationPickerOpen && (
 								<div className="skill-location-menu">
-									{data.locations.map((location) => (
+									{writableLocations.map((location) => (
 										<button
 											key={location.id}
 											type="button"
@@ -232,9 +235,12 @@ function SkillCard(props: {
 			<div className="session-card-display">
 				<button
 					type="button"
-					className="session-card-inner skill-card-main"
-					onClick={() => props.onEdit(skill)}
-					title={t("common.edit")}
+					className={`session-card-inner skill-card-main ${skill.readOnly ? "read-only" : ""}`}
+					onClick={() => {
+						if (!skill.readOnly) props.onEdit(skill);
+					}}
+					aria-disabled={skill.readOnly}
+					title={skill.readOnly ? t("config.skillReadOnly") : t("common.edit")}
 				>
 					<div className="session-card-title skill-title-row">
 						{renaming ? (
@@ -257,6 +263,7 @@ function SkillCard(props: {
 							<strong>{skill.name}</strong>
 						)}
 						<div className="skill-badges">
+							{skill.readOnly && <span className="skill-state">{t("config.skillReadOnlyBadge")}</span>}
 							<span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>
 								{skill.enabled ? t("common.enabled") : t("common.disabled")}
 							</span>
@@ -273,7 +280,8 @@ function SkillCard(props: {
 						</ul>
 					)}
 				</button>
-				<div className="prompts-list-item-actions">
+				{!skill.readOnly && (
+					<div className="prompts-list-item-actions">
 					<button
 						className="config-icon-btn"
 						onClick={() => props.onToggle(skill, !skill.enabled)}
@@ -303,7 +311,8 @@ function SkillCard(props: {
 					>
 						<Trash2 size={14} strokeWidth={1.8} />
 					</button>
-				</div>
+					</div>
+				)}
 			</div>
 		</article>
 	);

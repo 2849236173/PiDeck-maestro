@@ -111,11 +111,14 @@ function ConfigDiagnosticCard(props: {
 	);
 }
 
+export type ConfigSection = "config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
+
 type ConfigModalProps = {
 	open: boolean;
 	onClose: () => void;
 	onSaved: () => void;
 	projectPath?: string;
+	initialSection?: ConfigSection;
 };
 
 class ConfigModalErrorBoundary extends Component<
@@ -180,7 +183,7 @@ export function ConfigModal(props: ConfigModalProps) {
 
 function ConfigModalContent(props: ConfigModalProps) {
 	const { open, onClose, onSaved } = props;
-	const [section, setSection] = useState<"config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs">("config");
+	const [section, setSection] = useState<ConfigSection>(props.initialSection ?? "config");
 	const [tab, setTab] = useState<ConfigTab>("models");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -428,6 +431,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 		},
 		[tab],
 	);
+
+	useEffect(() => {
+		if (open && props.initialSection) setSection(props.initialSection);
+	}, [open, props.initialSection]);
 
 	useEffect(() => {
 		if (!open) return;

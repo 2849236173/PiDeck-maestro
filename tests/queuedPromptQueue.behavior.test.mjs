@@ -247,6 +247,44 @@ test("parallel tools complete only after the final toolCallId ends", () => {
   assert.equal(state.completedBatch, true);
 });
 
+test("tool end recovers missing or mismatched IDs without corrupting parallel calls", () => {
+  let state = updateActiveToolCalls(new Map([["real-id", "read"]]), {
+    type: "end",
+  });
+  assert.equal(state.endedToolCallId, "real-id");
+  assert.equal(state.isExecutingTool, false);
+  assert.equal(state.completedBatch, true);
+
+  state = updateActiveToolCalls(new Map([["real-id", "read"]]), {
+    type: "end",
+    toolCallId: "wrong-id",
+  });
+  assert.equal(state.endedToolCallId, "real-id");
+  assert.equal(state.isExecutingTool, false);
+
+  state = updateActiveToolCalls(
+    new Map([
+      ["read-id", "read"],
+      ["bash-id", "bash"],
+    ]),
+    { type: "end", toolCallId: "wrong-id", toolName: "bash" },
+  );
+  assert.equal(state.endedToolCallId, "bash-id");
+  assert.deepEqual([...state.calls.entries()], [["read-id", "read"]]);
+  assert.equal(state.completedBatch, false);
+
+  state = updateActiveToolCalls(
+    new Map([
+      ["read-a", "read"],
+      ["read-b", "read"],
+    ]),
+    { type: "end", toolName: "read" },
+  );
+  assert.equal(state.endedToolCallId, undefined);
+  assert.equal(state.calls.size, 2);
+  assert.equal(state.isExecutingTool, true);
+});
+
 test("immediate unknown snapshots stay visible and acknowledgement-only", () => {
   const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
   assert.match(

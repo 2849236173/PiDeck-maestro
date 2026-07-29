@@ -16,9 +16,10 @@ function loadModule(sourcePath) {
       esModuleInterop: true,
     },
   });
-  const sandbox = { exports: {}, module: { exports: {} }, require };
+  const module = { exports: {} };
+  const sandbox = { exports: module.exports, module, require };
   vm.runInNewContext(outputText, sandbox, { filename: sourcePath });
-  return sandbox.module.exports;
+  return module.exports;
 }
 
 test("mergeAgentRuntimeState skips update when nothing changed", () => {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Copy, Download, ExternalLink, ToggleLeft, ToggleRight, Trash2, Workflow } from "lucide-react";
+import { MAESTRO_EXTENSION_PACKAGES } from "../../../shared/types";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
 import { Button } from "../components/ui/Button";
 import { IconButton } from "../components/ui/IconButton";
@@ -22,29 +23,14 @@ function getExtensionsApi(): ExtensionsApi {
 	return api;
 }
 
-type RecommendedBundlePackage = {
-	name: string;
-	source: string;
-	npmUrl: string;
-	descriptionKey: string;
-};
-
-const MAESTRO_BUNDLE: { name: string; packages: RecommendedBundlePackage[] } = {
+const MAESTRO_BUNDLE = {
 	name: "Maestro",
-	packages: [
-		{
-			name: "pi-maestro-flow",
-			source: "npm:pi-maestro-flow",
-			npmUrl: "https://www.npmjs.com/package/pi-maestro-flow",
-			descriptionKey: "config.maestroBundle.flowDescription",
-		},
-		{
-			name: "pi-maestro-teammate",
-			source: "npm:pi-maestro-teammate",
-			npmUrl: "https://www.npmjs.com/package/pi-maestro-teammate",
-			descriptionKey: "config.maestroBundle.teammateDescription",
-		},
-	],
+	packages: MAESTRO_EXTENSION_PACKAGES.map((pkg) => ({
+		...pkg,
+		descriptionKey: pkg.name === "pi-maestro-flow"
+			? ("config.maestroBundle.flowDescription" as const)
+			: ("config.maestroBundle.teammateDescription" as const),
+	})),
 };
 
 /** 预设推荐扩展包 */

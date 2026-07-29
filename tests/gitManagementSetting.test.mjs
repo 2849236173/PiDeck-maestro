@@ -22,7 +22,7 @@ describe("optional Git management entry", () => {
   test("exposes a localized settings switch", () => {
     assert.match(settingsModal, /title=\{t\("settings\.gitManagement"\)\}/);
     assert.match(settingsModal, /description=\{t\("settings\.gitManagementDesc"\)\}/);
-    assert.match(settingsModal, /props\.onChange\(\{ enableGitManagement: checked \}\)/);
+    assert.match(settingsModal, /updateDraft\(\{ enableGitManagement: checked \}\)/);
     assert.equal(i18n.match(/"settings\.gitManagement":/g)?.length, 2);
     assert.equal(i18n.match(/"settings\.gitManagementDesc":/g)?.length, 2);
   });
@@ -30,10 +30,8 @@ describe("optional Git management entry", () => {
   test("places Git beside Files in the floating conversation tools", () => {
     assert.match(appParts, /filesAction\?: EntryAction;\s*gitAction\?: EntryAction;/);
     assert.match(appParts, /props\.filesAction[\s\S]*?props\.gitAction[\s\S]*?props\.editorsAction/);
-    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId && !isChatProject\(activeProject\) \?/);
-    assert.match(app, /GIT_LOGO_URL = new URL\("\.\/assets\/git-logo\.svg"/);
-    assert.match(app, /icon: <img className="git-entry-logo" src=\{GIT_LOGO_URL\}/);
-    assert.match(styles, /\.git-entry\s*\{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px/);
+    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId \?/);
+    assert.match(app, /icon: <GitBranch size=\{17\}/);
   });
 
   test("removes the old header button and guards the drawer", () => {

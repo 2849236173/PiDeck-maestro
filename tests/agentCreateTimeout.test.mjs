@@ -7,20 +7,21 @@ const source = readFileSync("src/renderer/src/App.tsx", "utf8");
 test("agent creation uses a bounded timeout instead of leaving pending agents forever", () => {
 	assert.match(source, /const AGENT_CREATE_TIMEOUT_MS = 60_000;/);
 	assert.match(source, /withTimeout<AgentTab>\(/);
-	assert.match(source, /api\.agents\.create\(\{ projectId, sessionPath, title \}\)/);
+	assert.match(source, /api\.agents\.create\(\{ projectId, sessionPath, title, noSession \}\)/);
 	assert.match(source, /AGENT_CREATE_TIMEOUT_MS/);
 	assert.match(source, /t\("app\.agentCreateTimeout"\)/);
 	assert.match(source, /pendingAgentsRef\.current = pendingAgentsRef\.current\.filter/);
 	assert.match(source, /showToast\(e instanceof Error \? e\.message : String\(e\), 5000\)/);
 });
 
-test("fresh agent creation exits an old session viewer before selecting the pending tab", () => {
+test("fresh agent creation selects the pending tab immediately", () => {
 	const createAgentSource = source.match(
-		/async function createAgent\([\s\S]*?\n  \/\*\* 打开会话查看器/,
+		/async function createAgent\([\s\S]*?\n  async function closeAgent/,
 	)?.[0] ?? "";
-	assert.match(createAgentSource, /if \(!sessionPath\) clearSessionViewerNow\(\);/);
+	assert.match(createAgentSource, /setActiveProjectId\(projectId\);/);
+	assert.match(createAgentSource, /setActiveAgentId\(pendingTab\.id\);/);
 	assert.ok(
-		createAgentSource.indexOf("clearSessionViewerNow()") <
-			createAgentSource.indexOf("setActiveAgentId(pendingTab.id)"),
+		createAgentSource.indexOf("setActiveAgentId(pendingTab.id)") <
+			createAgentSource.indexOf("api.agents.create"),
 	);
 });

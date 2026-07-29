@@ -420,6 +420,15 @@ function FileTree(props: {
 								disabled: props.mutating,
 								run: () => props.stageFile?.(r.path),
 							});
+							if (props.discardFile) {
+								const discardGroup = r.status === GitStatus.UNTRACKED ? "untracked" : "workingTree";
+								actions.push({
+									label: discardGroup === "untracked" ? t("git.discardUntracked") : t("git.discard"),
+									kind: "discard",
+									disabled: props.mutating,
+									run: () => props.discardFile?.(r.path, discardGroup),
+								});
+							}
 						}
 						return (
 							<ResourceRow

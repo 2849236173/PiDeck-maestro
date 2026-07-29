@@ -42,7 +42,32 @@ function katexWoff2OnlyPlugin(): Plugin {
 	};
 }
 
-export default defineConfig({
+function fastBuildOptionalDepsPlugin(enabled: boolean): Plugin {
+	const VIRTUAL_MONACO = "\0pideck-fast-monaco";
+	const VIRTUAL_MERMAID = "\0pideck-fast-mermaid";
+
+	return {
+		name: "pideck-fast-optional-deps",
+		enforce: "pre",
+		resolveId(id) {
+			if (!enabled) return;
+			const normalized = id.replace(/\\/g, "/");
+			if (id === "mermaid") return VIRTUAL_MERMAID;
+			if (/(?:^|\/)utils\/monacoSetup(?:\.ts)?$/.test(normalized)) return VIRTUAL_MONACO;
+		},
+		load(id) {
+			if (id === VIRTUAL_MONACO) return "export function setupMonaco() {}";
+			if (id === VIRTUAL_MERMAID) {
+				return `export default {
+					initialize() {},
+					async render() { throw new Error("Mermaid is omitted from the fast build"); }
+				};`;
+			}
+		},
+	};
+}
+
+export default defineConfig(({ mode }) => ({
   main: {
     plugins: [externalizeDepsPlugin()],
   },
@@ -62,12 +87,14 @@ export default defineConfig({
         "@shared": resolve("src/shared"),
       },
     },
-    plugins: [react(), katexWoff2OnlyPlugin()],
+    plugins: [fastBuildOptionalDepsPlugin(mode === "fast"), react(), katexWoff2OnlyPlugin()],
     build: {
       // 不计算 gzip 压缩后大小（节约构建时间）
       reportCompressedSize: false,
-      // CSS 压缩使用 esbuild（比 cssnano 快）
-      cssMinify: "esbuild",
+      // 快速验收仍完整打包所有入口，仅跳过大体积 Monaco/Mermaid 产物的压缩。
+      minify: mode === "fast" ? false : "esbuild",
+      // CSS 压缩使用 esbuild（比 cssnano 快）；fast 模式跳过压缩。
+      cssMinify: mode === "fast" ? false : "esbuild",
       rollupOptions: {
         // 缓存模块解析结果，增量构建时跳过未变更模块，加速二次打包
         cache: true,
@@ -99,4 +126,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
