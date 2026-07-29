@@ -4,11 +4,24 @@
 
 ### Maestro integration and runtime stability
 
-- Improved the recommended Maestro extension bundle and stopped treating the standalone teammate package as a separate health-check target.
-- Hardened Maestro health checks, local extension version detection, and cross-platform Skill discovery across Windows, WSL, Linux, and macOS.
-- Reduced IPC and state-refresh work on the Agent tool-event hot path to improve responsiveness in large sessions.
-- Derived Agent idle state from settled runtime state to avoid stale tool/activity indicators.
-- Added regression coverage for sub-agent sessions, extension management, session refresh, and Maestro health prompts.
+### Maestro extensions and Skills
+
+- The Extensions page presents `pi-maestro-flow` and `pi-maestro-teammate` as a recommended bundle. Health checks now use `pi-maestro-flow` as the authoritative installation because current Flow releases include the teammate runtime, avoiding stale standalone-package warnings.
+- Installed npm extension versions are available on the first Extensions-page load from local package metadata. Registry checks run only on refresh or health checks, reducing startup latency and unnecessary network traffic.
+- Added a non-modal Maestro health prompt for a missing primary extension or a Flow update, with a direct path to the Extensions page.
+- Skill discovery now includes `.pi/skills` supplied by installed extension packages on Windows, WSL, Linux, and macOS. Package-owned Skills are explicitly read-only.
+
+### Agent, tool, and teammate behavior
+
+- Reconciled tool end events whose `toolCallId` is missing or mismatched. Safe fallback matching and Agent-turn cleanup prevent completed tool cards from remaining in a running state.
+- Agent idle state now follows settled runtime state, avoiding stale activity indicators and unnecessary delayed polling.
+- Stalled teammate entries freeze their displayed elapsed time and resume normal timing when activity returns.
+
+### Performance and reliability
+
+- Removed high-frequency RPC logging, cross-process copying, and disk work unless RPC logging is explicitly enabled. Tool start/end events no longer trigger redundant full runtime-state queries.
+- Coalesced tool-progress refreshes into a 50 ms window to reduce IPC, JSON serialization, and renderer work in long sessions while retaining visible progress.
+- Added regression coverage for Maestro health, extension installation, cross-platform Skills, tool-state reconciliation, teammate sessions, and session refresh.
 
 ## v0.6.6-11 - 2026-07-28
 
