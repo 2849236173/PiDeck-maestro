@@ -210,10 +210,8 @@ export class ExtensionManager {
 
 	async checkMaestroHealth(checkForUpdates = true): Promise<MaestroExtensionHealth> {
 		const installed = await this.list(false);
-		// 新版 pi-maestro-flow 已内置 teammate 扩展；启动健康检查只以 flow 为准，
-		// 避免未单独安装 pi-maestro-teammate 时产生过时的缺失提示。
+		// teammate 能力已并入 pi-maestro-flow，启动健康检查只需检查统一扩展。
 		const packages: MaestroExtensionPackageStatus[] = MAESTRO_EXTENSION_PACKAGES
-			.filter((pkg) => pkg.source === "npm:pi-maestro-flow")
 			.map((pkg) => {
 				const extension = installed.extensions.find(
 					(candidate) => candidate.source === pkg.source || candidate.source.startsWith(`${pkg.source}@`),

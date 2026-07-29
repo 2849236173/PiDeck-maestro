@@ -27,9 +27,7 @@ const MAESTRO_BUNDLE = {
 	name: "Maestro",
 	packages: MAESTRO_EXTENSION_PACKAGES.map((pkg) => ({
 		...pkg,
-		descriptionKey: pkg.name === "pi-maestro-flow"
-			? ("config.maestroBundle.flowDescription" as const)
-			: ("config.maestroBundle.teammateDescription" as const),
+		descriptionKey: "config.maestroBundle.flowDescription" as const,
 	})),
 };
 

@@ -900,11 +900,6 @@ export const MAESTRO_EXTENSION_PACKAGES = [
 		source: "npm:pi-maestro-flow",
 		npmUrl: "https://www.npmjs.com/package/pi-maestro-flow",
 	},
-	{
-		name: "pi-maestro-teammate",
-		source: "npm:pi-maestro-teammate",
-		npmUrl: "https://www.npmjs.com/package/pi-maestro-teammate",
-	},
 ] as const;
 
 export type MaestroExtensionPackageStatus = {
