@@ -15,6 +15,7 @@ import { ExtensionsTab } from "./config/ExtensionsTab";
 import { EditorsTab } from "./config/EditorsTab";
 import { ImTab } from "./config/ImTab";
 import { HooksTab } from "./config/HooksTab";
+import { WebSearchTab } from "./config/WebSearchTab";
 import { LogsTab } from "./config/LogsTab";
 import { CloseIconButton } from "./components/ui/IconButton";
 import { t } from "./i18n";
@@ -114,7 +115,7 @@ function ConfigDiagnosticCard(props: {
 	);
 }
 
-export type ConfigSection = "config" | "mcp" | "modelFailover" | "hooks" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
+export type ConfigSection = "config" | "mcp" | "modelFailover" | "hooks" | "webSearch" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
 
 type ConfigModalProps = {
 	open: boolean;
@@ -457,6 +458,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		if (section === "mcp") return;
 		if (section === "modelFailover") return;
 		if (section === "hooks") return;
+		if (section === "webSearch") return;
 		if (section === "editors") return;
 		if (section === "logs") return;
 		void loadConfig(tab);
@@ -1448,6 +1450,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 								{t("config.nav.hooks")}
 							</button>
 							<button
+								className={section === "webSearch" ? "active" : ""}
+								onClick={() => setSection("webSearch")}
+							>
+								{t("config.nav.webSearch")}
+							</button>
+							<button
 								className={section === "extensions" ? "active" : ""}
 								onClick={() => setSection("extensions")}
 							>
@@ -1703,6 +1711,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "hooks" && !loading && (
 						<HooksTab workspacePath={props.projectPath} />
+					)}
+
+					{section === "webSearch" && !loading && (
+						<WebSearchTab />
 					)}
 
 					{section === "extensions" && (

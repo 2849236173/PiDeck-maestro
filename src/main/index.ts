@@ -75,6 +75,7 @@ import type {
 	ModelFailoverConfigSaveRequest,
 	HooksConfigSaveRequest,
 	SkillConfigSaveRequest,
+	WebSearchConfigSaveRequest,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -3418,6 +3419,8 @@ function registerIpc() {
 		(_event, workspacePath?: string) =>
 			configManager.getSkillConfig(workspacePath),
 	);
+	ipcMain.handle(ipcChannels.configGetWebSearch, () => configManager.getWebSearchConfig());
+	ipcMain.handle(ipcChannels.configGetSmartSearch, () => configManager.getSmartSearchConfig());
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3492,6 +3495,16 @@ function registerIpc() {
 			workspacePath: request?.workspacePath,
 			valid: result.valid,
 		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveWebSearch, async (_event, request: WebSearchConfigSaveRequest) => {
+		const result = await configManager.saveWebSearchConfig(request);
+		void appLogger.info("config", "Web search config saved", { valid: result.valid });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveSmartSearch, async (_event, request: WebSearchConfigSaveRequest) => {
+		const result = await configManager.saveSmartSearchConfig(request);
+		void appLogger.info("config", "Smart Search config saved", { valid: result.valid });
 		return result;
 	});
 	ipcMain.handle(ipcChannels.configSaveRaw, async (_event, fileName, rawJson) => {

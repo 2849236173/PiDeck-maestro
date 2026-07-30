@@ -783,6 +783,20 @@ export type SkillConfigSaveRequest = {
 	raw: string;
 };
 
+export type WebSearchConfigSnapshot = ConfigFileReadResult<Record<string, unknown>> & {
+	path: string;
+	exists: boolean;
+};
+
+export type SmartSearchConfigSnapshot = ConfigFileReadResult<Record<string, unknown>> & {
+	path: string;
+	exists: boolean;
+	pathSource: "environment" | "default" | "legacy_windows_home";
+};
+
+export type WebSearchConfigSaveRequest = {
+	raw: string;
+};
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;

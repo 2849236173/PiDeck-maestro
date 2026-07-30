@@ -32,6 +32,9 @@ import type {
 	HooksConfigSnapshot,
 	SkillConfigSaveRequest,
 	SkillConfigSnapshot,
+	WebSearchConfigSaveRequest,
+	WebSearchConfigSnapshot,
+	SmartSearchConfigSnapshot,
 	DraftMeta,
 	CreateAgentInput,
 	CreatePiSkillInput,
@@ -725,6 +728,10 @@ const api = {
 				ipcChannels.configGetSkillConfig,
 				workspacePath,
 			) as Promise<SkillConfigSnapshot>,
+		getWebSearch: () =>
+			ipcRenderer.invoke(ipcChannels.configGetWebSearch) as Promise<WebSearchConfigSnapshot>,
+		getSmartSearch: () =>
+			ipcRenderer.invoke(ipcChannels.configGetSmartSearch) as Promise<SmartSearchConfigSnapshot>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -783,6 +790,22 @@ const api = {
 		saveSkillConfig: (request: SkillConfigSaveRequest) =>
 			ipcRenderer.invoke(
 				ipcChannels.configSaveSkillConfig,
+				request,
+			) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveWebSearch: (request: WebSearchConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveWebSearch,
+				request,
+			) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveSmartSearch: (request: WebSearchConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveSmartSearch,
 				request,
 			) as Promise<{
 				valid: boolean;

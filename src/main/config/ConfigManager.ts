@@ -21,6 +21,9 @@ import type {
 	SkillConfigSaveRequest,
 	SkillConfigSnapshot,
 	SkillConfigSource,
+	WebSearchConfigSaveRequest,
+	WebSearchConfigSnapshot,
+	SmartSearchConfigSnapshot,
 	McpConfigFile,
 	McpConfigSaveRequest,
 	McpConfigSnapshot,
@@ -1099,6 +1102,91 @@ export class ConfigManager {
 			const parsed = this.validateSkillConfig(JSON.parse(request.raw));
 			await mkdir(dirname(filePath), { recursive: true });
 			await writeFile(filePath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	// ── Web Search / Curator 配置管理 ─────────────────────
+
+	private resolveWebSearchConfigPath(): string {
+		// web-access 以 PI_CODING_AGENT_DIR 为根；未设置时才回退到 ~/.pi。
+		// WSL 环境使用同一变量解析出的 agent 目录，保证桌面写入的位置与扩展运行时一致。
+		const baseDir = this.wslEnvironment
+			? this.wslEnvironment.windowsAgentDir
+			: process.env.PI_CODING_AGENT_DIR
+				|| (process.env.XDG_CONFIG_HOME ? join(process.env.XDG_CONFIG_HOME, "pi") : join(homedir(), ".pi"));
+		return join(baseDir, "web-search.json");
+	}
+
+	private resolveSmartSearchConfigPath(): { path: string; pathSource: SmartSearchConfigSnapshot["pathSource"] } {
+		if (this.wslEnvironment) {
+			return { path: join(this.wslEnvironment.windowsHome, ".config", "smart-search", "config.json"), pathSource: "default" };
+		}
+		if (process.env.SMART_SEARCH_CONFIG_DIR) {
+			return { path: join(process.env.SMART_SEARCH_CONFIG_DIR, "config.json"), pathSource: "environment" };
+		}
+		const legacyPath = join(homedir(), ".config", "smart-search", "config.json");
+		const defaultPath = process.platform === "win32" && process.env.LOCALAPPDATA
+			? join(process.env.LOCALAPPDATA, "smart-search", "config.json")
+			: legacyPath;
+		if (process.platform === "win32" && defaultPath !== legacyPath && !existsSync(defaultPath) && existsSync(legacyPath)) {
+			return { path: legacyPath, pathSource: "legacy_windows_home" };
+		}
+		return { path: defaultPath, pathSource: "default" };
+	}
+
+	async getSmartSearchConfig(): Promise<SmartSearchConfigSnapshot> {
+		const resolved = this.resolveSmartSearchConfigPath();
+		try {
+			const raw = await readFile(resolved.path, "utf8");
+			try {
+				const parsed = JSON.parse(raw) as unknown;
+				if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Smart Search config root must be an object");
+				return { path: resolved.path, pathSource: resolved.pathSource, exists: true, raw, parsed: parsed as Record<string, unknown> };
+			} catch (error) {
+				return { path: resolved.path, pathSource: resolved.pathSource, exists: true, raw, parsed: {}, diagnostic: this.createJsonDiagnostic("config.json", raw, error) };
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path: resolved.path, pathSource: resolved.pathSource, exists: false, raw: "{}\n", parsed: {} };
+			return { path: resolved.path, pathSource: resolved.pathSource, exists: false, raw: "", parsed: {}, diagnostic: this.createJsonDiagnostic("config.json", "", error) };
+		}
+	}
+
+	async saveSmartSearchConfig(request: WebSearchConfigSaveRequest): Promise<ConfigValidationResult> {
+		try {
+			const parsed = JSON.parse(request.raw) as unknown;
+			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Smart Search config root must be an object");
+			await this.writeJsonFileRaw(this.resolveSmartSearchConfigPath().path, parsed);
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	async getWebSearchConfig(): Promise<WebSearchConfigSnapshot> {
+		const filePath = this.resolveWebSearchConfigPath();
+		try {
+			const raw = await readFile(filePath, "utf8");
+			try {
+				const parsed = JSON.parse(raw) as unknown;
+				if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("web-search.json root must be an object");
+				return { path: filePath, exists: true, raw, parsed: parsed as Record<string, unknown> };
+			} catch (error) {
+				return { path: filePath, exists: true, raw, parsed: {}, diagnostic: this.createJsonDiagnostic("web-search.json", raw, error) };
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path: filePath, exists: false, raw: "{}\n", parsed: {} };
+			return { path: filePath, exists: false, raw: "", parsed: {}, diagnostic: this.createJsonDiagnostic("web-search.json", "", error) };
+		}
+	}
+
+	async saveWebSearchConfig(request: WebSearchConfigSaveRequest): Promise<ConfigValidationResult> {
+		try {
+			const parsed = JSON.parse(request.raw) as unknown;
+			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("web-search.json root must be an object");
+			await this.writeJsonFileRaw(this.resolveWebSearchConfigPath(), parsed);
 			return { valid: true };
 		} catch (error) {
 			return { valid: false, error: error instanceof Error ? error.message : String(error) };
