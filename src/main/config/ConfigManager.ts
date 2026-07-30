@@ -25,6 +25,7 @@ import type {
 	WebSearchConfigSnapshot,
 	SmartSearchConfigSnapshot,
 	McpConfigFile,
+	McpConfigScope,
 	McpConfigSaveRequest,
 	McpConfigSnapshot,
 	McpConfigSource,

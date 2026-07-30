@@ -657,6 +657,39 @@ export function createPreviewApi(): PiDesktopApi {
 			getAuth: async () => ({ raw: "{}", parsed: {} }),
 			getSettings: async () => ({ raw: "{}", parsed: {} }),
 			getTrust: async () => ({ raw: "{}", parsed: {} }),
+			getApiManager: async () => ({ raw: "{}", parsed: {} }),
+			getSkillConfig: async (workspacePath) => {
+				const defaultSkillConfig = {
+					version: "1.0.0",
+					skills: {},
+					groups: {},
+					limits: { maxFileBytes: 131072, maxTotalBytes: 524288 },
+				};
+				return {
+					global: {
+						scope: "global" as const,
+						path: "C:/Users/preview/.pi/agent/skill-config.json",
+						exists: false,
+						raw: "{}",
+						parsed: defaultSkillConfig,
+					},
+					...(workspacePath
+						? {
+							workspace: {
+								scope: "workspace" as const,
+								path: `${workspacePath}/.pi/skill-config.json`,
+								exists: false,
+								raw: "{}",
+								parsed: defaultSkillConfig,
+							},
+						}
+						: {}),
+					effective: defaultSkillConfig,
+					configHash: "preview",
+				};
+			},
+			getWebSearch: async () => ({ path: "C:/Users/preview/.pi/web-search.json", exists: false, raw: "{}", parsed: {} }),
+			getSmartSearch: async () => ({ path: "C:/Users/preview/AppData/Local/smart-search/config.json", pathSource: "default" as const, exists: false, raw: "{}", parsed: {} }),
 			getTeammateModels: async (workspacePath) => ({
 				global: {
 					scope: "global" as const,
@@ -785,6 +818,9 @@ export function createPreviewApi(): PiDesktopApi {
 				trusted: false,
 			}),
 			saveHooks: async () => ({ valid: true }),
+			saveSkillConfig: async () => ({ valid: true }),
+			saveWebSearch: async () => ({ valid: true }),
+			saveSmartSearch: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
 			export: async () =>
 				JSON.stringify({
