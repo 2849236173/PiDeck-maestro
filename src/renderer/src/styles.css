@@ -22241,3 +22241,83 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	min-height: 320px;
 	min-width: 0;
 }
+
+.model-failover-tab {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	min-height: 0;
+}
+
+.model-failover-toolbar p {
+	margin: var(--space-1) 0 0;
+	color: var(--color-text-muted);
+	font-size: var(--font-size-sm);
+	line-height: var(--line-height-sm);
+}
+
+.model-failover-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: var(--space-3);
+}
+
+.model-failover-card,
+.model-failover-editor-card {
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-panel);
+}
+
+.model-failover-card {
+	display: flex;
+	min-width: 0;
+	gap: var(--space-3);
+	padding: var(--space-3);
+}
+
+.model-failover-card > div {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.model-failover-card code,
+.model-failover-editor-header code,
+.model-failover-card span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--color-text-muted);
+	font-size: var(--font-size-xs);
+}
+
+.model-failover-card code,
+.model-failover-editor-header code {
+	font-family: var(--font-family-mono);
+}
+
+.model-failover-editor-card {
+	display: flex;
+	flex: 1;
+	min-height: 360px;
+	min-width: 0;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.model-failover-editor-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-3);
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.model-failover-monaco-wrap {
+	flex: 1;
+	min-height: 320px;
+	min-width: 0;
+}

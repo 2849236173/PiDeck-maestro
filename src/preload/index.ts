@@ -26,6 +26,8 @@ import type {
 	CompactionConfigSnapshot,
 	McpConfigSaveRequest,
 	McpConfigSnapshot,
+	ModelFailoverConfigSaveRequest,
+	ModelFailoverConfigSnapshot,
 	DraftMeta,
 	CreateAgentInput,
 	CreatePiSkillInput,
@@ -704,6 +706,11 @@ const api = {
 				ipcChannels.configGetMcp,
 				workspacePath,
 			) as Promise<McpConfigSnapshot>,
+		getModelFailover: (workspacePath?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.configGetModelFailover,
+				workspacePath,
+			) as Promise<ModelFailoverConfigSnapshot>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -738,6 +745,14 @@ const api = {
 		saveMcp: (request: McpConfigSaveRequest) =>
 			ipcRenderer.invoke(
 				ipcChannels.configSaveMcp,
+				request,
+			) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveModelFailover: (request: ModelFailoverConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveModelFailover,
 				request,
 			) as Promise<{
 				valid: boolean;

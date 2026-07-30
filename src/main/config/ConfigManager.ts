@@ -18,6 +18,10 @@ import type {
 	McpConfigSource,
 	McpManagedServer,
 	McpServerEntry,
+	ModelFailoverConfig,
+	ModelFailoverConfigSaveRequest,
+	ModelFailoverConfigSnapshot,
+	ModelFailoverConfigSource,
 	TeammateModelConfigSaveRequest,
 	TeammateModelConfigSnapshot,
 	TeammateModelConfigSource,
@@ -35,6 +39,7 @@ import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const TEAMMATE_MODELS_FILE = "teammate-models.json";
 const MCP_CONFIG_FILE = "mcp.json";
+const MODEL_FAILOVER_CONFIG_FILE = "model-failover.json";
 const GENERIC_MCP_CONFIG_PATH = join(homedir(), ".config", "mcp", "mcp.json");
 const DEFAULT_MCP_CONFIG: McpConfigFile = { mcpServers: {} };
 const MCP_IMPORT_KINDS = ["cursor", "claude-code", "claude-desktop", "codex", "windsurf", "vscode"];
@@ -711,6 +716,104 @@ export class ConfigManager {
 			const parsed = this.validateMcpConfigDocument(JSON.parse(request.raw));
 			await mkdir(dirname(filePath), { recursive: true });
 			await writeFile(filePath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	// ── 模型故障转移配置 ───────────────────────────────────
+
+	private resolveModelFailoverPath(scope: "global" | "workspace", workspacePath?: string) {
+		if (scope === "global") return join(this.configDir, MODEL_FAILOVER_CONFIG_FILE);
+		const resolvedWorkspace = this.resolveWorkspacePath(workspacePath);
+		if (!resolvedWorkspace) throw new Error("Workspace path is required for project model failover configuration");
+		return join(resolvedWorkspace, ".pi", MODEL_FAILOVER_CONFIG_FILE);
+	}
+
+	private normalizeModelFailoverConfig(raw: unknown): ModelFailoverConfig {
+		const config = raw && typeof raw === "object" && !Array.isArray(raw)
+			? raw as Record<string, unknown>
+			: {};
+		const fallbackModels: Record<string, string[]> = {};
+		const rawFallbacks = config.fallbackModels;
+		if (rawFallbacks && typeof rawFallbacks === "object" && !Array.isArray(rawFallbacks)) {
+			for (const [model, candidates] of Object.entries(rawFallbacks)) {
+				if (!model.includes("/") || !Array.isArray(candidates)) continue;
+				const chain = [...new Set(candidates
+					.filter((candidate): candidate is string => typeof candidate === "string" && candidate.includes("/"))
+					.map((candidate) => candidate.trim())
+					.filter((candidate) => candidate && candidate !== model))];
+				fallbackModels[model] = chain;
+			}
+		}
+		return {
+			enabled: typeof config.enabled === "boolean" ? config.enabled : false,
+			fallbackModels,
+		};
+	}
+
+	private async readModelFailoverSource(
+		scope: "global" | "workspace",
+		workspacePath?: string,
+	): Promise<ModelFailoverConfigSource> {
+		const filePath = this.resolveModelFailoverPath(scope, workspacePath);
+		try {
+			const raw = await readFile(filePath, "utf8");
+			try {
+				return { scope, path: filePath, exists: true, raw, parsed: this.normalizeModelFailoverConfig(JSON.parse(raw)) };
+			} catch (error) {
+				return {
+					scope,
+					path: filePath,
+					exists: true,
+					raw,
+					parsed: { enabled: false, fallbackModels: {} },
+					diagnostic: this.createJsonDiagnostic(MODEL_FAILOVER_CONFIG_FILE, raw, error),
+				};
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return { scope, path: filePath, exists: false, raw: JSON.stringify({ enabled: false, fallbackModels: {} }, null, 2), parsed: { enabled: false, fallbackModels: {} } };
+			}
+			return {
+				scope,
+				path: filePath,
+				exists: false,
+				raw: "",
+				parsed: { enabled: false, fallbackModels: {} },
+				diagnostic: this.createJsonDiagnostic(MODEL_FAILOVER_CONFIG_FILE, "", error),
+			};
+		}
+	}
+
+	async getModelFailoverConfig(workspacePath?: string): Promise<ModelFailoverConfigSnapshot> {
+		const [global, workspace] = await Promise.all([
+			this.readModelFailoverSource("global"),
+			workspacePath ? this.readModelFailoverSource("workspace", workspacePath) : Promise.resolve(undefined),
+		]);
+		return {
+			global,
+			...(workspace ? { workspace } : {}),
+			effective: {
+				enabled: workspace?.exists ? workspace.parsed.enabled : global.parsed.enabled,
+				fallbackModels: {
+					...global.parsed.fallbackModels,
+					...(workspace?.exists ? workspace.parsed.fallbackModels : {}),
+				},
+			},
+		};
+	}
+
+	async saveModelFailoverConfig(request: ModelFailoverConfigSaveRequest): Promise<ConfigValidationResult> {
+		try {
+			if (!request || (request.scope !== "global" && request.scope !== "workspace")) {
+				return { valid: false, error: "Invalid model failover configuration request" };
+			}
+			const filePath = this.resolveModelFailoverPath(request.scope, request.workspacePath);
+			const normalized = this.normalizeModelFailoverConfig(request.config);
+			await mkdir(dirname(filePath), { recursive: true });
+			await writeFile(filePath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
 			return { valid: true };
 		} catch (error) {
 			return { valid: false, error: error instanceof Error ? error.message : String(error) };

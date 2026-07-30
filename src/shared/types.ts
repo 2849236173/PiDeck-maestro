@@ -685,6 +685,29 @@ export type McpConfigSaveRequest = {
 	raw: string;
 };
 
+export type ModelFailoverConfig = {
+	enabled: boolean;
+	fallbackModels: Record<string, string[]>;
+};
+
+export type ModelFailoverConfigSource = ConfigFileReadResult<ModelFailoverConfig> & {
+	scope: "global" | "workspace";
+	path: string;
+	exists: boolean;
+};
+
+export type ModelFailoverConfigSnapshot = {
+	global: ModelFailoverConfigSource;
+	workspace?: ModelFailoverConfigSource;
+	effective: ModelFailoverConfig;
+};
+
+export type ModelFailoverConfigSaveRequest = {
+	scope: "global" | "workspace";
+	workspacePath?: string;
+	config: ModelFailoverConfig;
+};
+
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;

@@ -752,6 +752,26 @@ export function createPreviewApi(): PiDesktopApi {
 				effective: { mcpServers: { demo: { command: "npx", args: ["-y", "demo-mcp"] } } },
 			}),
 			saveMcp: async () => ({ valid: true }),
+			getModelFailover: async (workspacePath) => ({
+				global: {
+					scope: "global" as const,
+					path: "C:/Users/14012/.pi/agent/model-failover.json",
+					exists: true,
+					raw: JSON.stringify({ enabled: true, fallbackModels: { "openai/gpt-5": ["anthropic/claude-sonnet-4-6"] } }, null, 2),
+					parsed: { enabled: true, fallbackModels: { "openai/gpt-5": ["anthropic/claude-sonnet-4-6"] } },
+				},
+				...(workspacePath ? {
+					workspace: {
+						scope: "workspace" as const,
+						path: `${workspacePath}/.pi/model-failover.json`,
+						exists: false,
+						raw: JSON.stringify({ enabled: false, fallbackModels: {} }, null, 2),
+						parsed: { enabled: false, fallbackModels: {} },
+					},
+				} : {}),
+				effective: { enabled: true, fallbackModels: { "openai/gpt-5": ["anthropic/claude-sonnet-4-6"] } },
+			}),
+			saveModelFailover: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
 			export: async () =>
 				JSON.stringify({

@@ -5,6 +5,7 @@ import { AuthTab } from "./config/AuthTab";
 import { ModelsTab } from "./config/ModelsTab";
 import { MaestroTab } from "./config/MaestroTab";
 import { McpTab } from "./config/McpTab";
+import { ModelFailoverTab } from "./config/ModelFailoverTab";
 import { RawTab } from "./config/RawTab";
 import { TrustTab } from "./config/TrustTab";
 import { SettingsTab } from "./config/SettingsTab";
@@ -112,7 +113,7 @@ function ConfigDiagnosticCard(props: {
 	);
 }
 
-export type ConfigSection = "config" | "mcp" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
+export type ConfigSection = "config" | "mcp" | "modelFailover" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
 
 type ConfigModalProps = {
 	open: boolean;
@@ -453,6 +454,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			return;
 		}
 		if (section === "mcp") return;
+		if (section === "modelFailover") return;
 		if (section === "editors") return;
 		if (section === "logs") return;
 		void loadConfig(tab);
@@ -1432,6 +1434,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 								{t("config.nav.mcp")}
 							</button>
 							<button
+								className={section === "modelFailover" ? "active" : ""}
+								onClick={() => setSection("modelFailover")}
+							>
+								{t("config.nav.modelFailover")}
+							</button>
+							<button
 								className={section === "extensions" ? "active" : ""}
 								onClick={() => setSection("extensions")}
 							>
@@ -1678,6 +1686,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "mcp" && !loading && (
 						<McpTab workspacePath={props.projectPath} />
+					)}
+
+					{section === "modelFailover" && !loading && (
+						<ModelFailoverTab workspacePath={props.projectPath} />
 					)}
 
 					{section === "extensions" && (

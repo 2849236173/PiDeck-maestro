@@ -72,6 +72,7 @@ import type {
 	SavePlanDraftInput,
 	ApprovePlanDraftInput,
 	McpConfigSaveRequest,
+	ModelFailoverConfigSaveRequest,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -3400,6 +3401,11 @@ function registerIpc() {
 		(_event, workspacePath?: string) =>
 			configManager.getMcpConfig(workspacePath),
 	);
+	ipcMain.handle(
+		ipcChannels.configGetModelFailover,
+		(_event, workspacePath?: string) =>
+			configManager.getModelFailoverConfig(workspacePath),
+	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3442,6 +3448,15 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configSaveMcp, async (_event, request: McpConfigSaveRequest) => {
 		const result = await configManager.saveMcpConfig(request);
 		void appLogger.info("config", "MCP config saved", {
+			scope: request?.scope,
+			workspacePath: request?.workspacePath,
+			valid: result.valid,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveModelFailover, async (_event, request: ModelFailoverConfigSaveRequest) => {
+		const result = await configManager.saveModelFailoverConfig(request);
+		void appLogger.info("config", "Model failover config saved", {
 			scope: request?.scope,
 			workspacePath: request?.workspacePath,
 			valid: result.valid,
