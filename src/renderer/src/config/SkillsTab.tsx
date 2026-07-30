@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, FileEdit, Pencil, ShoppingBag, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
+import { Check, FileEdit, Pencil, Settings2, ShoppingBag, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
 import type {
 	CreatePiSkillInput,
 	PiSkillListResult,
@@ -8,6 +8,7 @@ import type {
 } from "../../../shared/types";
 import { t } from "../i18n";
 import { SkillStoreTab } from "./SkillStoreTab";
+import { SkillConfigTab } from "./SkillConfigTab";
 import { SkillHubStorePanel } from "./SkillHubStorePanel";
 
 export function SkillsTab(props: {
@@ -27,10 +28,11 @@ export function SkillsTab(props: {
 	onDelete: (skill: PiSkillSummary) => void;
 	onEdit: (skill: PiSkillSummary) => void;
 	onRename: (skill: PiSkillSummary, newName: string) => Promise<void>;
+	workspacePath?: string;
 }) {
 	const { data } = props;
-	// 一级 tab：本地 / 商店
-	const [skillTab, setSkillTab] = useState<"local" | "store">("local");
+	// 一级 tab：本地 / 配置 / 商店
+	const [skillTab, setSkillTab] = useState<"local" | "config" | "store">("local");
 	// 二级 tab（商店内）：选择供应商
 	const [storeSource, setStoreSource] = useState<"promptchat" | "skillhub">("skillhub");
 	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -45,13 +47,20 @@ export function SkillsTab(props: {
 	const filteredSkills = data.skills;
 	return (
 		<div className="skills-tab">
-			{/* 一级 tab：本地 / 商店 */}
+			{/* 一级 tab：本地 / 配置 / 商店 */}
 			<div className="prompts-tab-bar">
 				<button
 					className={`prompts-tab-btn ${skillTab === "local" ? "active" : ""}`}
 					onClick={() => { setSkillTab("local"); props.onRefresh(); }}
 				>
 					{t("config.nav.skills")}
+				</button>
+				<button
+					className={`prompts-tab-btn ${skillTab === "config" ? "active" : ""}`}
+					onClick={() => setSkillTab("config")}
+				>
+					<Settings2 size={14} strokeWidth={1.8} />
+					{t("skillConfig.tab")}
 				</button>
 				<button
 					className={`prompts-tab-btn ${skillTab === "store" ? "active" : ""}`}
@@ -90,6 +99,8 @@ export function SkillsTab(props: {
 						/>
 					)}
 				</div>
+			) : skillTab === "config" ? (
+				<SkillConfigTab workspacePath={props.workspacePath} />
 			) : (
 				<>
 					<div className="config-toolbar">

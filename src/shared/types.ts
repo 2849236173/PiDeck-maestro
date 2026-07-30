@@ -752,6 +752,32 @@ export type HooksConfigSaveRequest = {
 	trustRaw?: string;
 };
 
+export type SkillConfigFile = {
+	version: string;
+	skills: Record<string, { params: Record<string, string | boolean | number>; updated?: string; "disable-model-invocation"?: boolean }>;
+	groups: Record<string, { skills: string[] }>;
+	limits: { maxFileBytes: number; maxTotalBytes: number };
+};
+
+export type SkillConfigSource = ConfigFileReadResult<SkillConfigFile> & {
+	scope: "global" | "workspace";
+	path: string;
+	exists: boolean;
+};
+
+export type SkillConfigSnapshot = {
+	global: SkillConfigSource;
+	workspace?: SkillConfigSource;
+	effective: SkillConfigFile;
+	configHash: string;
+};
+
+export type SkillConfigSaveRequest = {
+	scope: "global" | "workspace";
+	workspacePath?: string;
+	raw: string;
+};
+
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;

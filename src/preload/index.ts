@@ -30,6 +30,8 @@ import type {
 	ModelFailoverConfigSnapshot,
 	HooksConfigSaveRequest,
 	HooksConfigSnapshot,
+	SkillConfigSaveRequest,
+	SkillConfigSnapshot,
 	DraftMeta,
 	CreateAgentInput,
 	CreatePiSkillInput,
@@ -718,6 +720,11 @@ const api = {
 				ipcChannels.configGetHooks,
 				workspacePath,
 			) as Promise<HooksConfigSnapshot>,
+		getSkillConfig: (workspacePath?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.configGetSkillConfig,
+				workspacePath,
+			) as Promise<SkillConfigSnapshot>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -768,6 +775,14 @@ const api = {
 		saveHooks: (request: HooksConfigSaveRequest) =>
 			ipcRenderer.invoke(
 				ipcChannels.configSaveHooks,
+				request,
+			) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveSkillConfig: (request: SkillConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveSkillConfig,
 				request,
 			) as Promise<{
 				valid: boolean;

@@ -17,6 +17,10 @@ import type {
 	HooksConfigFile,
 	HooksConfigSaveRequest,
 	HooksConfigSnapshot,
+	SkillConfigFile,
+	SkillConfigSaveRequest,
+	SkillConfigSnapshot,
+	SkillConfigSource,
 	McpConfigFile,
 	McpConfigSaveRequest,
 	McpConfigSnapshot,
@@ -45,6 +49,7 @@ const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const TEAMMATE_MODELS_FILE = "teammate-models.json";
 const MCP_CONFIG_FILE = "mcp.json";
 const MODEL_FAILOVER_CONFIG_FILE = "model-failover.json";
+const SKILL_CONFIG_FILE = "skill-config.json";
 const GENERIC_MCP_CONFIG_PATH = join(homedir(), ".config", "mcp", "mcp.json");
 const DEFAULT_MCP_CONFIG: McpConfigFile = { mcpServers: {} };
 const MCP_IMPORT_KINDS = ["cursor", "claude-code", "claude-desktop", "codex", "windsurf", "vscode"];
@@ -969,6 +974,131 @@ export class ConfigManager {
 				await mkdir(dirname(trustPath), { recursive: true });
 				await writeFile(trustPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
 			}
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	// ── Skill 配置管理 ─────────────────────────────────────
+
+	private defaultSkillConfig(): SkillConfigFile {
+		return {
+			version: "1.0.0",
+			skills: {},
+			groups: {},
+			limits: { maxFileBytes: 128 * 1024, maxTotalBytes: 512 * 1024 },
+		};
+	}
+
+	private resolveSkillConfigPath(scope: "global" | "workspace", workspacePath?: string) {
+		if (scope === "global") return join(this.configDir, SKILL_CONFIG_FILE);
+		const resolvedWorkspace = this.resolveWorkspacePath(workspacePath);
+		if (!resolvedWorkspace) throw new Error("Workspace path is required for project skill configuration");
+		return join(resolvedWorkspace, ".pi", SKILL_CONFIG_FILE);
+	}
+
+	private validateSkillConfig(raw: unknown): SkillConfigFile {
+		if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("skill-config root must be an object");
+		const value = raw as Record<string, unknown>;
+		const defaultConfig = this.defaultSkillConfig();
+		const skillsRaw = value.skills ?? {};
+		if (!skillsRaw || typeof skillsRaw !== "object" || Array.isArray(skillsRaw)) throw new Error("skills must be an object");
+		const skills: SkillConfigFile["skills"] = {};
+		for (const [skillName, skillRaw] of Object.entries(skillsRaw as Record<string, unknown>)) {
+			if (!skillRaw || typeof skillRaw !== "object" || Array.isArray(skillRaw)) throw new Error(`skills.${skillName} must be an object`);
+			const skill = skillRaw as Record<string, unknown>;
+			const paramsRaw = skill.params ?? {};
+			if (!paramsRaw || typeof paramsRaw !== "object" || Array.isArray(paramsRaw)) throw new Error(`skills.${skillName}.params must be an object`);
+			const params: Record<string, string | boolean | number> = {};
+			for (const [key, paramValue] of Object.entries(paramsRaw as Record<string, unknown>)) {
+				if (typeof paramValue !== "string" && typeof paramValue !== "boolean" && typeof paramValue !== "number") throw new Error(`skills.${skillName}.params.${key} must be primitive`);
+				params[key] = paramValue;
+			}
+			const disableModelInvocation = skill["disable-model-invocation"];
+			if (disableModelInvocation !== undefined && typeof disableModelInvocation !== "boolean") throw new Error(`skills.${skillName}.disable-model-invocation must be boolean`);
+			skills[skillName] = {
+				params,
+				...(typeof skill.updated === "string" ? { updated: skill.updated } : {}),
+				...(typeof disableModelInvocation === "boolean" ? { "disable-model-invocation": disableModelInvocation } : {}),
+			};
+		}
+		const groupsRaw = value.groups ?? {};
+		if (!groupsRaw || typeof groupsRaw !== "object" || Array.isArray(groupsRaw)) throw new Error("groups must be an object");
+		const groups: SkillConfigFile["groups"] = {};
+		for (const [groupName, groupRaw] of Object.entries(groupsRaw as Record<string, unknown>)) {
+			if (!groupRaw || typeof groupRaw !== "object" || Array.isArray(groupRaw) || !Array.isArray((groupRaw as { skills?: unknown }).skills)) throw new Error(`groups.${groupName}.skills must be an array`);
+			groups[groupName] = { skills: [...new Set(((groupRaw as { skills: unknown[] }).skills).filter((skill): skill is string => typeof skill === "string" && Boolean(skill.trim())).map((skill) => skill.trim()))] };
+		}
+		const limitsRaw = value.limits && typeof value.limits === "object" && !Array.isArray(value.limits) ? value.limits as Record<string, unknown> : {};
+		const maxFileBytes = limitsRaw.maxFileBytes === undefined
+			? defaultConfig.limits.maxFileBytes
+			: Number(limitsRaw.maxFileBytes);
+		const maxTotalBytes = limitsRaw.maxTotalBytes === undefined
+			? defaultConfig.limits.maxTotalBytes
+			: Number(limitsRaw.maxTotalBytes);
+		if (!Number.isInteger(maxFileBytes) || maxFileBytes <= 0) throw new Error("limits.maxFileBytes must be a positive integer");
+		if (!Number.isInteger(maxTotalBytes) || maxTotalBytes <= 0) throw new Error("limits.maxTotalBytes must be a positive integer");
+		if (maxTotalBytes < maxFileBytes) throw new Error("limits.maxTotalBytes must be >= limits.maxFileBytes");
+		return { version: typeof value.version === "string" ? value.version : defaultConfig.version, skills, groups, limits: { maxFileBytes, maxTotalBytes } };
+	}
+
+	private async readSkillConfigSource(scope: "global" | "workspace", workspacePath?: string): Promise<SkillConfigSource> {
+		const filePath = this.resolveSkillConfigPath(scope, workspacePath);
+		try {
+			const raw = await readFile(filePath, "utf8");
+			try {
+				return { scope, path: filePath, exists: true, raw, parsed: this.validateSkillConfig(JSON.parse(raw)) };
+			} catch (error) {
+				return { scope, path: filePath, exists: true, raw, parsed: this.defaultSkillConfig(), diagnostic: this.createJsonDiagnostic(SKILL_CONFIG_FILE, raw, error) };
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return { scope, path: filePath, exists: false, raw: JSON.stringify(this.defaultSkillConfig(), null, 2), parsed: this.defaultSkillConfig() };
+			return { scope, path: filePath, exists: false, raw: "", parsed: this.defaultSkillConfig(), diagnostic: this.createJsonDiagnostic(SKILL_CONFIG_FILE, "", error) };
+		}
+	}
+
+	private mergeSkillConfigs(global: SkillConfigFile, workspace?: SkillConfigFile): SkillConfigFile {
+		const skills: SkillConfigFile["skills"] = { ...global.skills };
+		for (const [skillName, defaults] of Object.entries(workspace?.skills ?? {})) {
+			const existing = skills[skillName];
+			skills[skillName] = existing
+				? {
+					params: { ...existing.params, ...defaults.params },
+					updated: defaults.updated ?? existing.updated,
+					...("disable-model-invocation" in existing ? { "disable-model-invocation": existing["disable-model-invocation"] } : {}),
+					...("disable-model-invocation" in defaults ? { "disable-model-invocation": defaults["disable-model-invocation"] } : {}),
+				}
+				: defaults;
+		}
+		return {
+			version: workspace?.version ?? global.version,
+			skills,
+			groups: { ...global.groups, ...(workspace?.groups ?? {}) },
+			limits: { ...global.limits, ...(workspace?.limits ?? {}) },
+		};
+	}
+
+	async getSkillConfig(workspacePath?: string): Promise<SkillConfigSnapshot> {
+		const [global, workspace] = await Promise.all([
+			this.readSkillConfigSource("global"),
+			workspacePath ? this.readSkillConfigSource("workspace", workspacePath) : Promise.resolve(undefined),
+		]);
+		const effective = this.mergeSkillConfigs(global.parsed, workspace?.exists ? workspace.parsed : undefined);
+		return {
+			global,
+			...(workspace ? { workspace } : {}),
+			effective,
+			configHash: createHash("sha256").update(JSON.stringify(effective)).digest("hex"),
+		};
+	}
+
+	async saveSkillConfig(request: SkillConfigSaveRequest): Promise<ConfigValidationResult> {
+		try {
+			const filePath = this.resolveSkillConfigPath(request.scope, request.workspacePath);
+			const parsed = this.validateSkillConfig(JSON.parse(request.raw));
+			await mkdir(dirname(filePath), { recursive: true });
+			await writeFile(filePath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
 			return { valid: true };
 		} catch (error) {
 			return { valid: false, error: error instanceof Error ? error.message : String(error) };

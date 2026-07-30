@@ -74,6 +74,7 @@ import type {
 	McpConfigSaveRequest,
 	ModelFailoverConfigSaveRequest,
 	HooksConfigSaveRequest,
+	SkillConfigSaveRequest,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -3412,6 +3413,11 @@ function registerIpc() {
 		(_event, workspacePath?: string) =>
 			configManager.getHooksConfig(workspacePath),
 	);
+	ipcMain.handle(
+		ipcChannels.configGetSkillConfig,
+		(_event, workspacePath?: string) =>
+			configManager.getSkillConfig(workspacePath),
+	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3475,6 +3481,15 @@ function registerIpc() {
 			workspacePath: request?.workspacePath,
 			config: request?.configRaw !== undefined,
 			trust: request?.trustRaw !== undefined,
+			valid: result.valid,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveSkillConfig, async (_event, request: SkillConfigSaveRequest) => {
+		const result = await configManager.saveSkillConfig(request);
+		void appLogger.info("config", "Skill config saved", {
+			scope: request?.scope,
+			workspacePath: request?.workspacePath,
 			valid: result.valid,
 		});
 		return result;

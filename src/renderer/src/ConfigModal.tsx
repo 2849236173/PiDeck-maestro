@@ -1662,6 +1662,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onDelete={setDeleteSkillConfirm}
 							onEdit={handleEditGlobalSkill}
 							onRename={handleRenameGlobalSkill}
+							workspacePath={props.projectPath}
 						/>
 						)
 					)}
