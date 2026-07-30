@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.6--10-green)
+![Version](https://img.shields.io/badge/version-0.6.6--13-green)
 
 > This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
 >
@@ -26,9 +26,16 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-11** (2026-07-28)
+> **Latest compatibility release: v0.6.6-13** (2026-07-30)
 
-### v0.6.6-11 Maestro compatibility release
+### v0.6.6-13 Maestro compatibility release
+
+- Added configuration entry points for MCP, model failover, Hooks, Skills, Web Search, and API Manager, and synchronized the latest PiDeck RPC configuration bridge.
+- Added native desktop Plan confirmation, richer Maestro session state in the sub-agent panel, and compatibility handling for Ask aliases.
+- Added manual Fast reasoning for GPT 5.5 / 5.6 variants. Fast appears only after the effective model mapping and provider capability have loaded, so the UI reflects the actual request mode.
+- Improved compaction settlement and thinking controls for more reliable Maestro-compatible sessions.
+
+### v0.6.6-12 Maestro compatibility release
 
 - Corrected the Maestro configuration target to global `~/.pi/agent/teammate-models.json` and project `.pi/teammate-models.json`.
 - Added a default model and seven teammate task mappings, with searchable Pi model suggestions and editable `provider/model` values.

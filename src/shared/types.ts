@@ -307,6 +307,8 @@ export type AgentRuntimeState = {
 	provider?: string;
 	modelId?: string;
 	thinkingLevel?: string;
+	/** 当前 Pi 子进程启动前已加载 GPT Fast 的 models.json 映射。 */
+	fastModeReady?: boolean;
 	isStreaming?: boolean;
 	isCompacting?: boolean;
 	/** 是否正在执行工具调用（read/write/bash 等） */

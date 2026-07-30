@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.6--10-green)
+![Version](https://img.shields.io/badge/version-0.6.6--13-green)
 
 > 这是面向 `pi-maestro-flow` 的 PiDeck 兼容发行版。它基于原作者 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)，专门修复桌面 RPC 与 Maestro 工作流之间的兼容问题。
 >
@@ -26,9 +26,16 @@
 
 ## 📋 更新日志
 
-> **兼容版最新版本 v0.6.6-11**（2026-07-28）
+> **兼容版最新版本 v0.6.6-13**（2026-07-30）
 
-### v0.6.6-11 Maestro 兼容版
+### v0.6.6-13 Maestro 兼容版
+
+- 设置页新增 MCP、模型 failover、Hooks、Skills、Web Search 与 API Manager 配置入口，并同步最新版 PiDeck RPC 配置桥接。
+- Plan 确认使用桌面原生弹窗；子代理面板补齐 Maestro session 状态，Ask 兼容别名可被正确处理。
+- GPT 5.5 / 5.6 系列支持手动 Fast 推理模式。Fast 仅在有效模型映射与 provider capability 已加载时显示，避免 UI 与实际请求状态不一致。
+- 改进会话压缩收敛和 thinking 控制路径，提升 Maestro 兼容功能的稳定性。
+
+### v0.6.6-12 Maestro 兼容版
 
 - 纠正 Maestro 配置页目标：现在读写全局 `~/.pi/agent/teammate-models.json` 与项目 `.pi/teammate-models.json`。
 - 提供默认模型和七类 teammate 任务映射，模型候选来自 Pi 配置，支持搜索和自定义 `provider/model`。

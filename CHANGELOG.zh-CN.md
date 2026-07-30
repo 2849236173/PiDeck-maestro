@@ -1,5 +1,17 @@
 # 更新日志
 
+## v0.6.6-13 - 2026-07-30
+
+### Maestro 配置与工作流兼容
+
+1. 新增 MCP、模型 failover、Hooks、Skills、Web Search 与 API Manager 的可视化配置入口，并同步最新版 PiDeck RPC 配置桥接。
+2. Plan 确认接入桌面原生弹窗；子代理面板补齐 Maestro session 状态；Ask 兼容别名现在可被正确处理。
+
+### 模型与稳定性
+
+1. GPT 5.5 / 5.6 系列新增手动 Fast 推理模式，覆盖 Terra、Sol、Luna 等变体。仅当运行中的 Agent、有效模型映射与 provider capability 均确认可用时显示 Fast。
+2. 改进会话压缩收敛与 thinking 控制路径，提升 Maestro 兼容会话的稳定性。
+
 ## v0.6.6-12 - 2026-07-29
 
 ### Maestro 扩展与 Skill

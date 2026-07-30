@@ -2,9 +2,13 @@
 
 完整更新日志仍维护在仓库根目录：
 
-当前兼容发行线为 `v0.6.6-11`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+当前兼容发行线为 `v0.6.6-13`，基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
 
-## v0.6.6-11
+## v0.6.6-13
+
+新增 MCP、模型 failover、Hooks、Skills、Web Search 与 API Manager 的可视化配置入口，并同步最新版 PiDeck RPC 配置桥接；Plan 确认接入原生桌面弹窗，子代理面板补齐 Maestro session 状态，Ask 兼容别名可被正确处理。GPT 5.5 / 5.6 系列新增手动 Fast 推理模式，且仅在运行 Agent、有效模型映射与 provider capability 均确认可用时显示。同步改进会话压缩收敛与 thinking 控制路径。
+
+## v0.6.6-12
 
 纠正 Maestro 配置目标，改为全局 `~/.pi/agent/teammate-models.json` 和项目 `.pi/teammate-models.json`；提供默认模型与七类 teammate 任务映射，模型候选来自 Pi 配置并支持自定义 `provider/model`；保留未知字段并保护损坏 JSON。
 

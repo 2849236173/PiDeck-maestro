@@ -1290,6 +1290,12 @@ export function ModelPicker(props: {
 	);
 }
 
+export const FAST_THINKING_LEVEL = {
+	value: "fast",
+	labelKey: "thinking.levelLabel.fast",
+	descriptionKey: "thinking.level.fast",
+} satisfies { value: string; labelKey: TranslationKey; descriptionKey: TranslationKey };
+
 export const THINKING_LEVELS = [
 	{ value: "off", labelKey: "thinking.levelLabel.off", descriptionKey: "thinking.level.off" },
 	// minimal 是 pi/Codex reasoning 的最轻量档位,放在 Off 与 Low 之间便于按强度递增选择。
@@ -1362,9 +1368,15 @@ export function ComposerModePicker(props: {
 
 export function ThinkingPicker(props: {
 	current?: string;
+	fastAvailable?: boolean;
 	onClose: () => void;
 	onPick: (level: string) => void;
 }) {
+	const fastAvailable = props.fastAvailable === true;
+	const levels = fastAvailable
+		? [FAST_THINKING_LEVEL, ...THINKING_LEVELS.filter((level) => level.value !== "minimal")]
+		: THINKING_LEVELS;
+	const current = fastAvailable && props.current === "minimal" ? "fast" : props.current;
 	return (
 		<div className="picker-backdrop" onClick={props.onClose}>
 			<div
@@ -1387,8 +1399,8 @@ export function ThinkingPicker(props: {
 					</IconButton>
 				</div>
 				<div className="picker-palette-list">
-					{THINKING_LEVELS.map((level) => {
-						const selected = level.value === props.current;
+					{levels.map((level) => {
+						const selected = level.value === current;
 						return (
 							<button
 								key={level.value}

@@ -21,6 +21,7 @@ import { CloseIconButton } from "./components/ui/IconButton";
 import { t } from "./i18n";
 import { LazyMonacoEditor } from "./components/ui/LazyMonacoEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
+import { supportsFastMode } from "./utils/modelFastMode";
 import type {
 	AuthFile,
 	ConfigTab,
@@ -877,11 +878,22 @@ function ConfigModalContent(props: ConfigModalProps) {
 			providers: Object.fromEntries(
 				Object.entries(modelsData.providers).map(([name, provider]) => {
 					const existingCompat = provider.compat as Record<string, unknown> | undefined;
-					const hasReasoningModel = provider.models.some((model) => model.reasoning === true);
+					const models = provider.models.map((model) => {
+						if (!supportsFastMode(model.id) || model.thinkingLevelMap?.minimal !== undefined) return model;
+						// Pi's RPC understands `minimal`, while the compatible upstream expects `fast`.
+						// Persisting this mapping makes the manual Fast entry work after restarts too.
+						return {
+							...model,
+							reasoning: true,
+							thinkingLevelMap: { ...model.thinkingLevelMap, minimal: "fast" },
+						};
+					});
+					const hasReasoningModel = models.some((model) => model.reasoning === true);
 					return [
 						name,
 						{
 							...provider,
+							models,
 							compat: {
 								supportsDeveloperRole: false,
 								supportsReasoningEffort: hasReasoningModel,

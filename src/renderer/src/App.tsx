@@ -68,7 +68,7 @@ import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
 import { useFeishuBridge } from "./hooks/useFeishuBridge";
 import { CloseIconButton } from "./components/ui/IconButton";
-import { THINKING_LEVELS } from "./components/app/AppParts";
+import { FAST_THINKING_LEVEL, THINKING_LEVELS } from "./components/app/AppParts";
 import {
   buildComposerPromptSubmission,
   expandPromptTemplates,
@@ -84,6 +84,7 @@ import {
 } from "./agentListDisplay";
 import { resolveLocale, setI18nLocale, t } from "./i18n";
 import { mergeAgentRuntimeState } from "./utils/agentRuntimeState";
+import { supportsFastMode } from "./utils/modelFastMode";
 import { sameSessionSummaryList } from "./utils/sessionSummaryList";
 import {
   acknowledgeUnknownPrompt,
@@ -557,6 +558,7 @@ export function App() {
   >([]);
   const [composerModePickerOpen, setComposerModePickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
+  const [fastModeConfigured, setFastModeConfigured] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
   const sendBehaviorMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 如果用户在 Agent 忙碌时开始撰写，保持分段发送控件，避免 Agent 恰好结束时按钮在手边消失。
@@ -1654,6 +1656,11 @@ export function App() {
     ? runtimeStateByAgent[activeAgentId]
     : undefined;
   const activeRuntimeState = agentRuntimeState;
+  useEffect(() => {
+    // A Fast readiness result belongs to one process/model pair; never carry it
+    // across a tab or model switch while the next asynchronous preflight runs.
+    setFastModeConfigured(false);
+  }, [activeAgentId, activeRuntimeState?.modelId]);
   const activeProjectHasBusyAgent = Boolean(
     activeProjectId && displayAgents.some((agent) =>
       agent.projectId === activeProjectId && (
@@ -4547,6 +4554,7 @@ export function App() {
         model.id,
       );
       applyAgentRuntimeState(activeAgentId, state);
+      setFastModeConfigured(await resolveFastModeAvailability(state));
       setModelPickerOpen(false);
       return;
     }
@@ -4575,17 +4583,50 @@ export function App() {
     applyAgentRuntimeState(activeAgentId, state);
   }
 
+  async function resolveFastModeAvailability(state = activeRuntimeState): Promise<boolean> {
+    if (!state?.fastModeReady || !supportsFastMode(state.modelId) || !state.provider || !state.modelId) return false;
+    try {
+      const config = await api.config.getModels();
+      const provider = config.parsed.providers[state.provider] as Record<string, unknown> | undefined;
+      const models = Array.isArray(provider?.models) ? provider.models as Array<Record<string, unknown>> : [];
+      const model = models.find((item) => item.id === state.modelId);
+      const thinkingLevelMap = model?.thinkingLevelMap;
+      const minimal = thinkingLevelMap && typeof thinkingLevelMap === "object"
+        ? (thinkingLevelMap as Record<string, unknown>).minimal
+        : undefined;
+      const compat = provider?.compat && typeof provider.compat === "object"
+        ? provider.compat as Record<string, unknown>
+        : undefined;
+      return minimal === "fast" && compat?.supportsReasoningEffort !== false;
+    } catch {
+      return false;
+    }
+  }
+
+  async function openThinkingPicker() {
+    setFastModeConfigured(await resolveFastModeAvailability());
+    setThinkingPickerOpen(true);
+  }
+
   async function selectThinking(level: string) {
+    if (level === "fast" && !fastModeConfigured) {
+      setThinkingPickerOpen(false);
+      showToast(t("app.thinkingUnsupported", { level: t(FAST_THINKING_LEVEL.labelKey), fallback: "minimal" }));
+      return;
+    }
+    // Fast is a PiDeck alias: pi accepts the canonical minimal level and the
+    // GPT 5.5/5.6 model mapping serializes it as upstream reasoning_effort=fast.
+    const rpcLevel = level === "fast" ? "minimal" : level;
     // 有 agent → RPC 立即生效
     if (activeAgentId && !isPendingAgentId(activeAgentId)) {
       try {
-        const state = await api.agents.setThinking(activeAgentId, level);
+        const state = await api.agents.setThinking(activeAgentId, rpcLevel);
         applyAgentRuntimeState(activeAgentId, state);
         setThinkingPickerOpen(false);
-        if (state.thinkingLevel && state.thinkingLevel !== level) {
+        if (state.thinkingLevel && state.thinkingLevel !== rpcLevel) {
           showToast(
             t("app.thinkingUnsupported", {
-              level,
+              level: level === "fast" ? t(FAST_THINKING_LEVEL.labelKey) : level,
               fallback: state.thinkingLevel,
             }),
           );
@@ -8219,12 +8260,15 @@ export function App() {
                     type="button"
                     className="composer-bar-btn thinking"
                     disabled={isAgentBusy || isAgentStarting}
-                    onClick={() => setThinkingPickerOpen(true)}
+                    onClick={() => void openThinkingPicker()}
                     title={t("app.thinkingPickerTitle")}
                   >
                     {(() => {
                       const currentThinkingLevel = activeRuntimeState.thinkingLevel ?? "off";
-                      const level = THINKING_LEVELS.find((l) => l.value === currentThinkingLevel);
+                      const fastActive = fastModeConfigured && currentThinkingLevel === "minimal";
+                      const level = fastActive
+                        ? FAST_THINKING_LEVEL
+                        : THINKING_LEVELS.find((item) => item.value === currentThinkingLevel);
                       return level ? t(level.labelKey) : currentThinkingLevel;
                     })()}
                   </button>
@@ -9224,6 +9268,7 @@ filePath={gitDrawerDiff.filePath}
       {thinkingPickerOpen && (
         <ThinkingPicker
           current={activeRuntimeState?.thinkingLevel}
+          fastAvailable={fastModeConfigured}
           onClose={() => setThinkingPickerOpen(false)}
           onPick={selectThinking}
         />
