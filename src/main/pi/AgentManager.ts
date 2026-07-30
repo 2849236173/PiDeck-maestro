@@ -4098,10 +4098,18 @@ export class AgentManager {
 		const questionPayload = firstQuestion ? { ...payload, ...firstQuestion } : payload;
 		const rawMethod = String(typed.method ?? payload.method ?? "");
 		const customType = String(payload.customType ?? payload.uiType ?? payload.component ?? "").toLowerCase();
-		const isAskQuestionRequest = ["ask_question", "ask_userquestion", "askuserquestion", "question"].includes(rawMethod.toLowerCase())
+		const isAskQuestionRequest = [
+			"ask_question",
+			"ask_userquestion",
+			"ask-user-question",
+			"ask_user_question",
+			"askuserquestion",
+			"question",
+		].includes(rawMethod.toLowerCase())
 			|| (rawMethod.toLowerCase() === "custom" && Boolean(questionPayload.question ?? questionPayload.prompt ?? questionPayload.questions))
 			|| customType.includes("ask_question")
-			|| customType.includes("ask-userquestion")
+			|| customType.includes("ask-user-question")
+			|| customType.includes("ask_user_question")
 			|| customType.includes("askuserquestion");
 		const hintedMethod = String(
 			questionPayload.uiMethod ?? questionPayload.questionType ?? questionPayload.inputType ?? questionPayload.requestType ?? questionPayload.kind ?? questionPayload.type ?? "",
