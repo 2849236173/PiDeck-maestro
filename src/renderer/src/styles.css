@@ -22104,3 +22104,140 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	align-items: center;
 	gap: var(--space-1);
 }
+
+/* MCP configuration tab */
+.mcp-tab {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	min-height: 0;
+}
+
+.mcp-toolbar p {
+	margin: var(--space-1) 0 0;
+	color: var(--color-text-muted);
+	font-size: var(--font-size-sm);
+	line-height: var(--line-height-sm);
+}
+
+.mcp-summary-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: var(--space-3);
+}
+
+.mcp-source-card,
+.mcp-editor-card,
+.mcp-server-list {
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-md);
+	background: var(--color-bg-panel);
+}
+
+.mcp-source-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	min-width: 0;
+	padding: var(--space-3);
+}
+
+.mcp-source-card[data-empty="true"] {
+	background: var(--color-bg-muted);
+}
+
+.mcp-source-card-title,
+.mcp-section-heading {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	color: var(--color-text);
+}
+
+.mcp-source-card span,
+.mcp-source-card small,
+.mcp-server-row small {
+	color: var(--color-text-muted);
+	font-size: var(--font-size-xs);
+	line-height: var(--line-height-xs);
+}
+
+.mcp-source-card code,
+.mcp-editor-header code {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-xs);
+	color: var(--color-text-muted);
+}
+
+.mcp-server-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-3);
+}
+
+.mcp-server-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
+	border-top: 1px solid var(--color-border-subtle);
+}
+
+.mcp-server-row > div {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.mcp-server-row strong,
+.mcp-server-row small,
+.mcp-server-row code {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcp-server-row > span {
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-sm);
+	padding: 2px var(--space-2);
+	color: var(--color-text-muted);
+	font-family: var(--font-family-business);
+	font-size: var(--font-size-xs);
+}
+
+.mcp-editor-card {
+	display: flex;
+	flex: 1;
+	min-height: 360px;
+	min-width: 0;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.mcp-editor-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-3);
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.mcp-scope-switch {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.mcp-monaco-wrap {
+	flex: 1;
+	min-height: 320px;
+	min-width: 0;
+}

@@ -71,6 +71,7 @@ import type {
 	SendPromptInput,
 	SavePlanDraftInput,
 	ApprovePlanDraftInput,
+	McpConfigSaveRequest,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -3394,6 +3395,11 @@ function registerIpc() {
 		(_event, workspacePath?: string) =>
 			configManager.getCompactionConfig(workspacePath),
 	);
+	ipcMain.handle(
+		ipcChannels.configGetMcp,
+		(_event, workspacePath?: string) =>
+			configManager.getMcpConfig(workspacePath),
+	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3427,6 +3433,15 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configSaveCompaction, async (_event, request) => {
 		const result = await configManager.saveCompactionConfig(request);
 		void appLogger.info("config", "Compaction config saved", {
+			scope: request?.scope,
+			workspacePath: request?.workspacePath,
+			valid: result.valid,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveMcp, async (_event, request: McpConfigSaveRequest) => {
+		const result = await configManager.saveMcpConfig(request);
+		void appLogger.info("config", "MCP config saved", {
 			scope: request?.scope,
 			workspacePath: request?.workspacePath,
 			valid: result.valid,

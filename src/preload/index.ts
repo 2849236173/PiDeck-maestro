@@ -24,6 +24,8 @@ import type {
 	ConfigFileDiagnostic,
 	CompactionConfigSaveRequest,
 	CompactionConfigSnapshot,
+	McpConfigSaveRequest,
+	McpConfigSnapshot,
 	DraftMeta,
 	CreateAgentInput,
 	CreatePiSkillInput,
@@ -697,6 +699,11 @@ const api = {
 				ipcChannels.configGetCompaction,
 				workspacePath,
 			) as Promise<CompactionConfigSnapshot>,
+		getMcp: (workspacePath?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.configGetMcp,
+				workspacePath,
+			) as Promise<McpConfigSnapshot>,
 		saveModels: (data: unknown) =>
 			ipcRenderer.invoke(ipcChannels.configSaveModels, data) as Promise<{
 				valid: boolean;
@@ -723,6 +730,14 @@ const api = {
 		saveCompaction: (request: CompactionConfigSaveRequest) =>
 			ipcRenderer.invoke(
 				ipcChannels.configSaveCompaction,
+				request,
+			) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
+		saveMcp: (request: McpConfigSaveRequest) =>
+			ipcRenderer.invoke(
+				ipcChannels.configSaveMcp,
 				request,
 			) as Promise<{
 				valid: boolean;

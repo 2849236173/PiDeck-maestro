@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { normalize, join, dirname, isAbsolute } from "node:path";
+import { normalize, join, dirname, isAbsolute, resolve } from "node:path";
 import { dirname as posixDirname, normalize as posixNormalize } from "node:path/posix";
 import { homedir } from "node:os";
 import { net } from "electron";
@@ -11,6 +12,12 @@ import type {
 	CompactionConfigSaveRequest,
 	CompactionConfigSnapshot,
 	CompactionConfigSource,
+	McpConfigFile,
+	McpConfigSaveRequest,
+	McpConfigSnapshot,
+	McpConfigSource,
+	McpManagedServer,
+	McpServerEntry,
 	TeammateModelConfigSaveRequest,
 	TeammateModelConfigSnapshot,
 	TeammateModelConfigSource,
@@ -27,6 +34,22 @@ import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const TEAMMATE_MODELS_FILE = "teammate-models.json";
+const MCP_CONFIG_FILE = "mcp.json";
+const GENERIC_MCP_CONFIG_PATH = join(homedir(), ".config", "mcp", "mcp.json");
+const DEFAULT_MCP_CONFIG: McpConfigFile = { mcpServers: {} };
+const MCP_IMPORT_KINDS = ["cursor", "claude-code", "claude-desktop", "codex", "windsurf", "vscode"];
+const MCP_IMPORT_PATHS: Record<string, string[]> = {
+	cursor: [join(homedir(), ".cursor", "mcp.json")],
+	"claude-code": [
+		join(homedir(), ".claude", "mcp.json"),
+		join(homedir(), ".claude.json"),
+		join(homedir(), ".claude", "claude_desktop_config.json"),
+	],
+	"claude-desktop": [join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")],
+	codex: [join(homedir(), ".codex", "config.json")],
+	windsurf: [join(homedir(), ".windsurf", "mcp.json")],
+	vscode: [".vscode/mcp.json"],
+};
 const DEFAULT_COMPACTION_CONFIG: Required<Pick<CompactionConfigPatch, "enabled" | "reserveTokens" | "keepRecentTokens">> & { soft: { enabled: boolean } } = {
 	enabled: true,
 	reserveTokens: 16_384,
@@ -430,6 +453,264 @@ export class ConfigManager {
 				},
 			};
 			await this.writeJsonFileRaw(source.path, settings);
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	// ── MCP 配置管理 ───────────────────────────────────────
+
+	private resolveWorkspacePath(workspacePath?: string) {
+		if (!workspacePath?.trim()) return undefined;
+		const resolvedWorkspace = this.wslEnvironment
+			? toWindowsHostPath(workspacePath, this.wslEnvironment)
+			: workspacePath;
+		if (!isAbsolute(resolvedWorkspace)) {
+			throw new Error("Workspace path must be absolute");
+		}
+		return resolvedWorkspace;
+	}
+
+	private resolveMcpProjectPath(workspacePath?: string) {
+		const resolvedWorkspace = this.resolveWorkspacePath(workspacePath);
+		return resolvedWorkspace ? join(resolvedWorkspace, ".mcp.json") : undefined;
+	}
+
+	private resolvePiMcpProjectPath(workspacePath?: string) {
+		const resolvedWorkspace = this.resolveWorkspacePath(workspacePath);
+		return resolvedWorkspace ? join(resolvedWorkspace, ".pi", MCP_CONFIG_FILE) : undefined;
+	}
+
+	private normalizeMcpConfig(raw: unknown): McpConfigFile {
+		if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_MCP_CONFIG };
+		const value = raw as Record<string, unknown>;
+		const servers = value.mcpServers ?? value["mcp-servers"] ?? {};
+		return {
+			...value,
+			mcpServers: servers && typeof servers === "object" && !Array.isArray(servers)
+				? servers as Record<string, McpServerEntry>
+				: {},
+			imports: Array.isArray(value.imports)
+				? value.imports.filter((item): item is string => typeof item === "string")
+				: undefined,
+			settings: value.settings && typeof value.settings === "object" && !Array.isArray(value.settings)
+				? value.settings as Record<string, unknown>
+				: undefined,
+		};
+	}
+
+	private validateMcpConfigDocument(raw: unknown): Record<string, unknown> {
+		if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+			throw new Error("配置必须是 JSON 对象");
+		}
+		const config = raw as Record<string, unknown>;
+		const servers = config.mcpServers ?? config["mcp-servers"];
+		if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
+			throw new Error("配置必须包含对象形式的 mcpServers");
+		}
+		return config;
+	}
+
+	private async readMcpSource(
+		source: Omit<McpConfigSource, "raw" | "parsed" | "diagnostic" | "exists" | "serverCount">,
+	): Promise<McpConfigSource> {
+		try {
+			const raw = await readFile(source.path, "utf8");
+			try {
+				const parsed = this.normalizeMcpConfig(JSON.parse(raw));
+				return { ...source, exists: true, raw, parsed, serverCount: Object.keys(parsed.mcpServers).length };
+			} catch (error) {
+				return {
+					...source,
+					exists: true,
+					raw,
+					parsed: { ...DEFAULT_MCP_CONFIG },
+					serverCount: 0,
+					diagnostic: this.createJsonDiagnostic(MCP_CONFIG_FILE, raw, error),
+				};
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+				return {
+					...source,
+					exists: false,
+					raw: JSON.stringify(DEFAULT_MCP_CONFIG, null, 2),
+					parsed: { ...DEFAULT_MCP_CONFIG },
+					serverCount: 0,
+					diagnostic: this.createJsonDiagnostic(MCP_CONFIG_FILE, "", error),
+				};
+			}
+			return {
+				...source,
+				exists: false,
+				raw: JSON.stringify(DEFAULT_MCP_CONFIG, null, 2),
+				parsed: { ...DEFAULT_MCP_CONFIG },
+				serverCount: 0,
+			};
+		}
+	}
+
+	private mergeMcpServerMaps(
+		base: Record<string, McpServerEntry>,
+		next: Record<string, McpServerEntry>,
+	): Record<string, McpServerEntry> {
+		const merged = { ...base };
+		for (const [name, definition] of Object.entries(next)) {
+			merged[name] = { ...(merged[name] ?? {}), ...definition };
+		}
+		return merged;
+	}
+
+	private resolveMcpImportPath(importKind: string, workspacePath?: string): string | null {
+		for (const candidate of MCP_IMPORT_PATHS[importKind] ?? []) {
+			const fullPath = candidate.startsWith(".")
+				? resolve(this.resolveWorkspacePath(workspacePath) ?? process.cwd(), candidate)
+				: candidate;
+			try {
+				if (existsSync(fullPath)) return fullPath;
+			} catch {
+				// Ignore inaccessible import candidates.
+			}
+		}
+		return null;
+	}
+
+	private async readImportedMcpServers(importKind: string, workspacePath?: string): Promise<{ path: string; servers: Record<string, McpServerEntry> } | null> {
+		const importPath = this.resolveMcpImportPath(importKind, workspacePath);
+		if (!importPath) return null;
+		try {
+			const imported = this.normalizeMcpConfig(JSON.parse(await readFile(importPath, "utf8")));
+			return { path: importPath, servers: imported.mcpServers };
+		} catch {
+			return null;
+		}
+	}
+
+	private async expandMcpSourceImports(
+		source: McpConfigSource,
+		workspacePath?: string,
+	): Promise<{ config: McpConfigFile; imports: Array<{ kind: string; path: string; servers: Record<string, McpServerEntry> }> }> {
+		const imports: Array<{ kind: string; path: string; servers: Record<string, McpServerEntry> }> = [];
+		let importedServers: Record<string, McpServerEntry> = {};
+		for (const importKind of source.parsed.imports ?? []) {
+			if (!MCP_IMPORT_KINDS.includes(importKind)) continue;
+			const imported = await this.readImportedMcpServers(importKind, workspacePath);
+			if (!imported) continue;
+			imports.push({ kind: importKind, ...imported });
+			importedServers = this.mergeMcpServerMaps(importedServers, imported.servers);
+		}
+		return {
+			imports,
+			config: {
+				...source.parsed,
+				mcpServers: this.mergeMcpServerMaps(importedServers, source.parsed.mcpServers),
+			},
+		};
+	}
+
+	private mergeMcpConfigs(configs: McpConfigFile[]): McpConfigFile {
+		return configs.reduce<McpConfigFile>((merged, next) => ({
+			...merged,
+			...next,
+			mcpServers: this.mergeMcpServerMaps(merged.mcpServers, next.mcpServers),
+			imports: next.imports ?? merged.imports,
+			settings: next.settings ? { ...merged.settings, ...next.settings } : merged.settings,
+		}), { ...DEFAULT_MCP_CONFIG });
+	}
+
+	async getMcpConfig(workspacePath?: string): Promise<McpConfigSnapshot> {
+		const projectPath = this.resolveMcpProjectPath(workspacePath);
+		const piProjectPath = this.resolvePiMcpProjectPath(workspacePath);
+		const sourceSpecs: Array<Omit<McpConfigSource, "raw" | "parsed" | "diagnostic" | "exists" | "serverCount">> = [
+			{
+				id: "shared-global",
+				label: "Standard global MCP",
+				scope: "global",
+				kind: "shared",
+				path: GENERIC_MCP_CONFIG_PATH,
+				readOnly: true,
+			},
+			{
+				id: "pi-global",
+				label: "Pi global MCP",
+				scope: "global",
+				kind: "pi",
+				path: join(this.configDir, MCP_CONFIG_FILE),
+				readOnly: false,
+			},
+			...(projectPath ? [{
+				id: "shared-project" as const,
+				label: "Project MCP",
+				scope: "workspace" as const,
+				kind: "shared" as const,
+				path: projectPath,
+				readOnly: false,
+			}] : []),
+			...(piProjectPath && piProjectPath !== projectPath ? [{
+				id: "pi-project" as const,
+				label: "Project Pi MCP",
+				scope: "workspace" as const,
+				kind: "pi" as const,
+				path: piProjectPath,
+				readOnly: false,
+			}] : []),
+		];
+		const sources = await Promise.all(sourceSpecs.map((source) => this.readMcpSource(source)));
+		const validSources = sources.filter((source) => !source.diagnostic);
+		const expandedSources = await Promise.all(validSources.map(async (source) => ({
+			source,
+			...(await this.expandMcpSourceImports(source, workspacePath)),
+		})));
+		const effective = this.mergeMcpConfigs(expandedSources.map((source) => source.config));
+		const provenance = new Map<string, { scope: McpConfigScope | "import"; path: string; readOnly: boolean; importKind?: string }>();
+		for (const expanded of expandedSources) {
+			for (const imported of expanded.imports) {
+				for (const name of Object.keys(imported.servers)) {
+					if (!provenance.has(name)) {
+						provenance.set(name, { scope: "import", path: imported.path, readOnly: true, importKind: imported.kind });
+					}
+				}
+			}
+			for (const name of Object.keys(expanded.source.parsed.mcpServers)) {
+				provenance.set(name, {
+					scope: expanded.source.scope === "workspace" ? "workspace" : "global",
+					path: expanded.source.path,
+					readOnly: expanded.source.readOnly,
+				});
+			}
+		}
+		const servers = Object.entries(effective.mcpServers)
+			.map(([name, entry]): McpManagedServer => {
+				const source = provenance.get(name);
+				return {
+					name,
+					entry,
+					scope: source?.scope ?? "global",
+					path: source?.path ?? join(this.configDir, MCP_CONFIG_FILE),
+					readOnly: source?.readOnly ?? false,
+					...(source?.importKind ? { importKind: source.importKind } : {}),
+				};
+			})
+			.sort((left, right) => left.name.localeCompare(right.name));
+		return {
+			globalPath: join(this.configDir, MCP_CONFIG_FILE),
+			...(projectPath ? { projectPath } : {}),
+			sources,
+			servers,
+			effective,
+		};
+	}
+
+	async saveMcpConfig(request: McpConfigSaveRequest): Promise<ConfigValidationResult> {
+		try {
+			const filePath = request.scope === "workspace"
+				? this.resolveMcpProjectPath(request.workspacePath)
+				: join(this.configDir, MCP_CONFIG_FILE);
+			if (!filePath) throw new Error("Workspace path is required for project MCP configuration");
+			const parsed = this.validateMcpConfigDocument(JSON.parse(request.raw));
+			await mkdir(dirname(filePath), { recursive: true });
+			await writeFile(filePath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
 			return { valid: true };
 		} catch (error) {
 			return { valid: false, error: error instanceof Error ? error.message : String(error) };

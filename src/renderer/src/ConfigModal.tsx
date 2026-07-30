@@ -4,6 +4,7 @@ import type { PiDesktopApi } from "../../preload";
 import { AuthTab } from "./config/AuthTab";
 import { ModelsTab } from "./config/ModelsTab";
 import { MaestroTab } from "./config/MaestroTab";
+import { McpTab } from "./config/McpTab";
 import { RawTab } from "./config/RawTab";
 import { TrustTab } from "./config/TrustTab";
 import { SettingsTab } from "./config/SettingsTab";
@@ -111,7 +112,7 @@ function ConfigDiagnosticCard(props: {
 	);
 }
 
-export type ConfigSection = "config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
+export type ConfigSection = "config" | "mcp" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
 
 type ConfigModalProps = {
 	open: boolean;
@@ -451,6 +452,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			void refreshExtensions(false);
 			return;
 		}
+		if (section === "mcp") return;
 		if (section === "editors") return;
 		if (section === "logs") return;
 		void loadConfig(tab);
@@ -1424,6 +1426,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 						<div className="config-sidebar-group">
 							<span>{t("config.group.agent")}</span>
 							<button
+								className={section === "mcp" ? "active" : ""}
+								onClick={() => setSection("mcp")}
+							>
+								{t("config.nav.mcp")}
+							</button>
+							<button
 								className={section === "extensions" ? "active" : ""}
 								onClick={() => setSection("extensions")}
 							>
@@ -1666,6 +1674,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onChangeEditContent={setEditPromptContent}
 							onSaveEdit={handleSaveEditPrompt}
 						/>
+					)}
+
+					{section === "mcp" && !loading && (
+						<McpTab workspacePath={props.projectPath} />
 					)}
 
 					{section === "extensions" && (

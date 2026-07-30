@@ -629,6 +629,62 @@ export type CompactionConfigSaveRequest = {
 	config: CompactionConfigPatch;
 };
 
+export type McpConfigScope = "global" | "workspace";
+
+export type McpServerEntry = {
+	command?: string;
+	args?: string[];
+	env?: Record<string, string>;
+	url?: string;
+	transport?: "stdio" | "sse" | "http" | "streamable-http" | string;
+	enabled?: boolean;
+	directTools?: boolean | string[];
+	lifecycle?: "startup" | "lazy" | string;
+	auth?: "oauth" | string;
+	[key: string]: unknown;
+};
+
+export type McpConfigFile = {
+	mcpServers: Record<string, McpServerEntry>;
+	imports?: string[];
+	settings?: Record<string, unknown>;
+	[key: string]: unknown;
+};
+
+export type McpConfigSource = ConfigFileReadResult<McpConfigFile> & {
+	id: "shared-global" | "pi-global" | "shared-project" | "pi-project";
+	label: string;
+	scope: "global" | "workspace";
+	kind: "shared" | "pi";
+	path: string;
+	exists: boolean;
+	readOnly: boolean;
+	serverCount: number;
+};
+
+export type McpManagedServer = {
+	name: string;
+	entry: McpServerEntry;
+	scope: McpConfigScope | "import";
+	path: string;
+	readOnly: boolean;
+	importKind?: string;
+};
+
+export type McpConfigSnapshot = {
+	globalPath: string;
+	projectPath?: string;
+	sources: McpConfigSource[];
+	servers: McpManagedServer[];
+	effective: McpConfigFile;
+};
+
+export type McpConfigSaveRequest = {
+	scope: McpConfigScope;
+	workspacePath?: string;
+	raw: string;
+};
+
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;

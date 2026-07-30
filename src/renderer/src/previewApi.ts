@@ -723,6 +723,35 @@ export function createPreviewApi(): PiDesktopApi {
 			saveSettings: async () => ({ valid: true }),
 			saveTeammateModels: async () => ({ valid: true }),
 			saveCompaction: async () => ({ valid: true }),
+			getMcp: async (workspacePath) => ({
+				globalPath: "C:/Users/14012/.pi/agent/mcp.json",
+				...(workspacePath ? { projectPath: `${workspacePath}/.mcp.json` } : {}),
+				sources: [
+					{
+						id: "pi-global" as const,
+						label: "Pi global MCP",
+						scope: "global" as const,
+						kind: "pi" as const,
+						path: "C:/Users/14012/.pi/agent/mcp.json",
+						exists: true,
+						readOnly: false,
+						raw: JSON.stringify({ mcpServers: { demo: { command: "npx", args: ["-y", "demo-mcp"] } } }, null, 2),
+						parsed: { mcpServers: { demo: { command: "npx", args: ["-y", "demo-mcp"] } } },
+						serverCount: 1,
+					},
+				],
+				servers: [
+					{
+						name: "demo",
+						entry: { command: "npx", args: ["-y", "demo-mcp"] },
+						scope: "global" as const,
+						path: "C:/Users/14012/.pi/agent/mcp.json",
+						readOnly: false,
+					},
+				],
+				effective: { mcpServers: { demo: { command: "npx", args: ["-y", "demo-mcp"] } } },
+			}),
+			saveMcp: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
 			export: async () =>
 				JSON.stringify({
