@@ -188,6 +188,13 @@ export class MaestroGuiChannel {
 			case "goal.changed":
 				this.scheduleRefetch("goal");
 				break;
+			case "state.changed":
+				void this.refreshAllState();
+				break;
+			case "plan.mode":
+				this.scheduleRefetch("plan");
+				void this.refreshAllState();
+				break;
 			case "run.transition": {
 				const info = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
 				this.snapshot.lastRun = {
@@ -245,11 +252,16 @@ export class MaestroGuiChannel {
 		if (Array.isArray(state.todos)) this.snapshot.todos = state.todos;
 		this.snapshot.goal = state.goal ?? undefined;
 		this.snapshot.workflow = state.workflow ?? undefined;
+		this.snapshot.plan = state.plan ?? undefined;
+		this.snapshot.teammates = state.teammates ?? undefined;
+		this.snapshot.swarm = state.swarm ?? undefined;
+		this.snapshot.approvalMode = typeof state.approvalMode === "string" ? state.approvalMode : null;
+		this.snapshot.sessionId = typeof state.sessionId === "string" ? state.sessionId : null;
 		this.emitSnapshot();
 	}
 
 	/** 同一子系统的事件可能连发（如批量 todo 更新），按子系统防抖后拉取 */
-	private scheduleRefetch(subsystem: "todos" | "goal" | "workflow") {
+	private scheduleRefetch(subsystem: "todos" | "goal" | "workflow" | "plan" | "teammates" | "swarm") {
 		const existing = this.refetchTimers.get(subsystem);
 		if (existing) clearTimeout(existing);
 		this.refetchTimers.set(subsystem, setTimeout(() => {
@@ -258,7 +270,7 @@ export class MaestroGuiChannel {
 		}, REFETCH_DEBOUNCE_MS));
 	}
 
-	private async refetchSubsystem(subsystem: "todos" | "goal" | "workflow") {
+	private async refetchSubsystem(subsystem: "todos" | "goal" | "workflow" | "plan" | "teammates" | "swarm") {
 		const result = await this.fetchJson(`/state/${subsystem}`);
 		if (result === undefined) return;
 		if (subsystem === "todos") {

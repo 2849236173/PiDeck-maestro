@@ -8493,6 +8493,30 @@ body.is-resizing .subagent-panel-resizer::before {
   word-break: break-word;
 }
 
+.maestro-panel-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+}
+
+.maestro-panel-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+}
+
+.maestro-panel-metric strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-family-business);
+  font-size: var(--font-size-sm);
+}
+
 .maestro-panel-stale {
   display: flex;
   flex-direction: column;

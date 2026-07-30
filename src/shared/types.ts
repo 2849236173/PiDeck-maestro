@@ -144,9 +144,14 @@ export type SubAgent = {
  */
 export type MaestroGuiState = {
 	connected: boolean;
+	sessionId?: string | null;
+	approvalMode?: string | null;
 	todos?: unknown[];
 	goal?: unknown;
 	workflow?: unknown;
+	plan?: unknown;
+	teammates?: unknown;
+	swarm?: unknown;
 	lastRun?: { runId?: string; from?: string; to?: string; command?: string; at: number };
 };
 

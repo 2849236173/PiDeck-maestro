@@ -90,8 +90,96 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertP
       })
     : [];
 
+  const plan = state.plan && typeof state.plan === 'object' ? state.plan as Record<string, unknown> : undefined;
+  const planMode = plan && typeof plan.mode === 'string' ? plan.mode : undefined;
+  const planStatus = plan && typeof plan.status === 'string' ? plan.status : undefined;
+  const planPath = plan && typeof plan.path === 'string' ? plan.path : undefined;
+  const planRevision = plan && typeof plan.revision === 'number' ? plan.revision : undefined;
+
+  const knowledge = workflow && workflow.knowledge && typeof workflow.knowledge === 'object'
+    ? workflow.knowledge as Record<string, unknown>
+    : undefined;
+  const knowledgeItems = knowledge
+    ? [
+        ['consumed', t('maestroPanel.knowledgeConsumed')],
+        ['cited', t('maestroPanel.knowledgeCited')],
+        ['validated', t('maestroPanel.knowledgeValidated')],
+        ['contradicted', t('maestroPanel.knowledgeContradicted')],
+        ['pendingCandidates', t('maestroPanel.knowledgePending')],
+        ['reviewRequired', t('maestroPanel.knowledgeReview')],
+      ].flatMap(([key, label]) => typeof knowledge[key] === 'number' ? [{ key, label, value: knowledge[key] as number }] : [])
+    : [];
+
+  const teammateCount = Array.isArray(state.teammates)
+    ? state.teammates.length
+    : state.teammates && typeof state.teammates === 'object'
+      ? Object.keys(state.teammates as Record<string, unknown>).length
+      : 0;
+  const swarm = state.swarm && typeof state.swarm === 'object' ? state.swarm as Record<string, unknown> : undefined;
+  const swarmStatus = swarm && typeof swarm.status === 'string' ? swarm.status : undefined;
+  const swarmIteration = swarm && typeof swarm.iteration === 'number' ? swarm.iteration : undefined;
+
   return (
     <>
+      {state.sessionId || state.approvalMode ? (
+        <section className="subagent-section maestro-panel-section">
+          <SectionToggle title={t('maestroPanel.session')} collapsed={Boolean(collapsed.session)} onToggle={() => onToggle('session')} />
+          {collapsed.session ? null : (
+            <div className="maestro-panel-block">
+              {state.sessionId ? <div className="maestro-panel-meta">{t('maestroPanel.sessionId')}: {state.sessionId}</div> : null}
+              {state.approvalMode ? (
+                <div className="maestro-panel-line">
+                  <span className="maestro-panel-chip active">{state.approvalMode}</span>
+                  <span className="maestro-panel-meta">{t('maestroPanel.approvalMode')}</span>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
+      ) : null}
+      {planMode || planStatus || planPath ? (
+        <section className="subagent-section maestro-panel-section">
+          <SectionToggle title={t('maestroPanel.plan')} collapsed={Boolean(collapsed.plan)} onToggle={() => onToggle('plan')} />
+          {collapsed.plan ? null : (
+            <div className="maestro-panel-block">
+              <div className="maestro-panel-line">
+                {planMode ? <span className="maestro-panel-chip active">{planMode}</span> : null}
+                {planStatus ? <span className="maestro-panel-meta">{planStatus}</span> : null}
+                {planRevision !== undefined ? <span className="maestro-panel-meta">rev {planRevision}</span> : null}
+              </div>
+              {planPath ? <div className="maestro-panel-text">{planPath}</div> : null}
+            </div>
+          )}
+        </section>
+      ) : null}
+      {knowledgeItems.length > 0 ? (
+        <section className="subagent-section maestro-panel-section">
+          <SectionToggle title={t('maestroPanel.knowledge')} count={String(knowledgeItems.length)} collapsed={Boolean(collapsed.knowledge)} onToggle={() => onToggle('knowledge')} />
+          {collapsed.knowledge ? null : (
+            <div className="maestro-panel-block maestro-panel-metrics">
+              {knowledgeItems.map((item) => (
+                <span key={item.key} className="maestro-panel-metric"><strong>{item.value}</strong>{item.label}</span>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+      {teammateCount > 0 || swarmStatus || swarmIteration !== undefined ? (
+        <section className="subagent-section maestro-panel-section">
+          <SectionToggle title={t('maestroPanel.collaboration')} collapsed={Boolean(collapsed.collaboration)} onToggle={() => onToggle('collaboration')} />
+          {collapsed.collaboration ? null : (
+            <div className="maestro-panel-block">
+              {teammateCount > 0 ? <div className="maestro-panel-meta">{t('maestroPanel.teammates')}: {teammateCount}</div> : null}
+              {swarmStatus || swarmIteration !== undefined ? (
+                <div className="maestro-panel-line">
+                  {swarmStatus ? <span className="maestro-panel-chip active">{swarmStatus}</span> : null}
+                  {swarmIteration !== undefined ? <span className="maestro-panel-meta">{t('maestroPanel.swarmIteration', { count: swarmIteration })}</span> : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
+      ) : null}
       {goalText ? (
         <section className="subagent-section maestro-panel-section">
           <SectionToggle title={t('maestroPanel.goal')} collapsed={Boolean(collapsed.goal)} onToggle={() => onToggle('goal')} />
