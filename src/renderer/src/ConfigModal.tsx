@@ -1023,6 +1023,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			void refreshRunningAgents();
 		} else if (rawFileName === "auth.json") await loadConfig("auth");
 		else if (rawFileName === "trust.json") await loadConfig("trust");
+		else if (rawFileName === "api-manager.json") await handleRawFileChange("api-manager.json");
 		else await loadConfig("settings");
 	};
 
@@ -1038,7 +1039,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 						? await api.config.getAuth()
 						: fileName === "trust.json"
 							? await api.config.getTrust()
-							: await api.config.getSettings();
+							: fileName === "api-manager.json"
+								? await api.config.getApiManager()
+								: await api.config.getSettings();
 			setRawContent(res.raw);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));

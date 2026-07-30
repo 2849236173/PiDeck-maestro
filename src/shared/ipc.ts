@@ -210,6 +210,7 @@ export const ipcChannels = {
 	configGetAuth: "config:get-auth",
 	configGetSettings: "config:get-settings",
 	configGetTrust: "config:get-trust",
+	configGetApiManager: "config:get-api-manager",
 	configGetTeammateModels: "config:get-teammate-models",
 	configGetCompaction: "config:get-compaction",
 	configGetMcp: "config:get-mcp",
