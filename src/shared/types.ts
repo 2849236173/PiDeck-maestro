@@ -708,6 +708,50 @@ export type ModelFailoverConfigSaveRequest = {
 	config: ModelFailoverConfig;
 };
 
+export type HookEventName =
+	| "SessionStart"
+	| "SubagentStart"
+	| "PreToolUse"
+	| "PermissionRequest"
+	| "PostToolUse"
+	| "PreCompact"
+	| "PostCompact"
+	| "UserPromptSubmit"
+	| "SubagentStop"
+	| "Stop";
+
+export type HooksConfigFile = {
+	$schema?: string;
+	hooks: Partial<Record<HookEventName, Array<{ matcher?: string; hooks: Array<Record<string, unknown>> }>>>;
+};
+
+export type HookTrustFile = {
+	version: 1;
+	trusted: Record<string, string>;
+	toggles: Record<string, Record<string, boolean>>;
+};
+
+export type HooksConfigSnapshot = {
+	configPath: string;
+	configExists: boolean;
+	configRaw: string;
+	configParsed: HooksConfigFile;
+	configDiagnostic?: ConfigFileDiagnostic;
+	trustPath: string;
+	trustExists: boolean;
+	trustRaw: string;
+	trustParsed: HookTrustFile;
+	trustDiagnostic?: ConfigFileDiagnostic;
+	installedCount: number;
+	trusted: boolean;
+};
+
+export type HooksConfigSaveRequest = {
+	workspacePath: string;
+	configRaw?: string;
+	trustRaw?: string;
+};
+
 export type PiSkillLocation = {
 	id: "pi-global" | "agents-global" | "project-pi" | "project-agents" | "extension-packages";
 	label: string;

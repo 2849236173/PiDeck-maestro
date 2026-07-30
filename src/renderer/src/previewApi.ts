@@ -772,6 +772,19 @@ export function createPreviewApi(): PiDesktopApi {
 				effective: { enabled: true, fallbackModels: { "openai/gpt-5": ["anthropic/claude-sonnet-4-6"] } },
 			}),
 			saveModelFailover: async () => ({ valid: true }),
+			getHooks: async (workspacePath) => ({
+				configPath: `${workspacePath ?? "preview"}/.pi/hooks.json`,
+				configExists: true,
+				configRaw: JSON.stringify({ hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "maestro hooks run guard", timeout: 600 }] }] } }, null, 2),
+				configParsed: { hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "maestro hooks run guard", timeout: 600 }] }] } },
+				trustPath: "C:/Users/14012/.pi/agent/hook-trust.json",
+				trustExists: true,
+				trustRaw: JSON.stringify({ version: 1, trusted: {}, toggles: {} }, null, 2),
+				trustParsed: { version: 1 as const, trusted: {}, toggles: {} },
+				installedCount: 1,
+				trusted: false,
+			}),
+			saveHooks: async () => ({ valid: true }),
 			saveRaw: async () => ({ valid: true }),
 			export: async () =>
 				JSON.stringify({

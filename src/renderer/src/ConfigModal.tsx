@@ -14,6 +14,7 @@ import { SkillsTab } from "./config/SkillsTab";
 import { ExtensionsTab } from "./config/ExtensionsTab";
 import { EditorsTab } from "./config/EditorsTab";
 import { ImTab } from "./config/ImTab";
+import { HooksTab } from "./config/HooksTab";
 import { LogsTab } from "./config/LogsTab";
 import { CloseIconButton } from "./components/ui/IconButton";
 import { t } from "./i18n";
@@ -113,7 +114,7 @@ function ConfigDiagnosticCard(props: {
 	);
 }
 
-export type ConfigSection = "config" | "mcp" | "modelFailover" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
+export type ConfigSection = "config" | "mcp" | "modelFailover" | "hooks" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs";
 
 type ConfigModalProps = {
 	open: boolean;
@@ -455,6 +456,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 		if (section === "mcp") return;
 		if (section === "modelFailover") return;
+		if (section === "hooks") return;
 		if (section === "editors") return;
 		if (section === "logs") return;
 		void loadConfig(tab);
@@ -1440,6 +1442,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 								{t("config.nav.modelFailover")}
 							</button>
 							<button
+								className={section === "hooks" ? "active" : ""}
+								onClick={() => setSection("hooks")}
+							>
+								{t("config.nav.hooks")}
+							</button>
+							<button
 								className={section === "extensions" ? "active" : ""}
 								onClick={() => setSection("extensions")}
 							>
@@ -1690,6 +1698,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "modelFailover" && !loading && (
 						<ModelFailoverTab workspacePath={props.projectPath} />
+					)}
+
+					{section === "hooks" && !loading && (
+						<HooksTab workspacePath={props.projectPath} />
 					)}
 
 					{section === "extensions" && (

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { normalize, join, dirname, isAbsolute, resolve } from "node:path";
 import { dirname as posixDirname, normalize as posixNormalize } from "node:path/posix";
@@ -12,6 +13,10 @@ import type {
 	CompactionConfigSaveRequest,
 	CompactionConfigSnapshot,
 	CompactionConfigSource,
+	HookTrustFile,
+	HooksConfigFile,
+	HooksConfigSaveRequest,
+	HooksConfigSnapshot,
 	McpConfigFile,
 	McpConfigSaveRequest,
 	McpConfigSnapshot,
@@ -43,6 +48,18 @@ const MODEL_FAILOVER_CONFIG_FILE = "model-failover.json";
 const GENERIC_MCP_CONFIG_PATH = join(homedir(), ".config", "mcp", "mcp.json");
 const DEFAULT_MCP_CONFIG: McpConfigFile = { mcpServers: {} };
 const MCP_IMPORT_KINDS = ["cursor", "claude-code", "claude-desktop", "codex", "windsurf", "vscode"];
+const CODEX_HOOK_EVENTS = [
+	"SessionStart",
+	"SubagentStart",
+	"PreToolUse",
+	"PermissionRequest",
+	"PostToolUse",
+	"PreCompact",
+	"PostCompact",
+	"UserPromptSubmit",
+	"SubagentStop",
+	"Stop",
+] as const;
 const MCP_IMPORT_PATHS: Record<string, string[]> = {
 	cursor: [join(homedir(), ".cursor", "mcp.json")],
 	"claude-code": [
@@ -814,6 +831,144 @@ export class ConfigManager {
 			const normalized = this.normalizeModelFailoverConfig(request.config);
 			await mkdir(dirname(filePath), { recursive: true });
 			await writeFile(filePath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	// ── Hooks 配置管理 ─────────────────────────────────────
+
+	private resolveHooksConfigPath(workspacePath?: string) {
+		const resolvedWorkspace = this.resolveWorkspacePath(workspacePath);
+		if (!resolvedWorkspace) throw new Error("Workspace path is required for Hooks configuration");
+		return join(resolvedWorkspace, ".pi", "hooks.json");
+	}
+
+	private resolveHooksTrustPath() {
+		return join(this.configDir, "hook-trust.json");
+	}
+
+	private validateHooksConfig(raw: unknown): HooksConfigFile {
+		if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("hooks.json root must be an object");
+		const value = raw as Record<string, unknown>;
+		if (value.$schema !== undefined && typeof value.$schema !== "string") throw new Error("$schema must be a string");
+		if (!value.hooks || typeof value.hooks !== "object" || Array.isArray(value.hooks)) throw new Error("hooks must be an object");
+		const hooks: HooksConfigFile["hooks"] = {};
+		const eventSet = new Set<string>(CODEX_HOOK_EVENTS);
+		for (const [eventName, groupsRaw] of Object.entries(value.hooks as Record<string, unknown>)) {
+			if (!eventSet.has(eventName)) throw new Error(`hooks.${eventName} is not a supported event`);
+			if (!Array.isArray(groupsRaw)) throw new Error(`hooks.${eventName} must be an array`);
+			hooks[eventName as keyof HooksConfigFile["hooks"]] = groupsRaw.map((groupRaw, groupIndex) => {
+				if (!groupRaw || typeof groupRaw !== "object" || Array.isArray(groupRaw)) throw new Error(`hooks.${eventName}[${groupIndex}] must be an object`);
+				const group = groupRaw as Record<string, unknown>;
+				if (group.matcher !== undefined && typeof group.matcher !== "string") throw new Error(`hooks.${eventName}[${groupIndex}].matcher must be a string`);
+				if (typeof group.matcher === "string" && group.matcher !== "*") new RegExp(group.matcher);
+				if (group.hooks !== undefined && !Array.isArray(group.hooks)) throw new Error(`hooks.${eventName}[${groupIndex}].hooks must be an array`);
+				const handlers = (group.hooks ?? []) as unknown[];
+				return {
+					...(typeof group.matcher === "string" ? { matcher: group.matcher } : {}),
+					hooks: handlers.map((handlerRaw, handlerIndex) => {
+						if (!handlerRaw || typeof handlerRaw !== "object" || Array.isArray(handlerRaw)) throw new Error(`hooks.${eventName}[${groupIndex}].hooks[${handlerIndex}] must be an object`);
+						const handler = handlerRaw as Record<string, unknown>;
+						if (handler.type !== "command" && handler.type !== "prompt" && handler.type !== "agent") throw new Error(`hooks.${eventName}[${groupIndex}].hooks[${handlerIndex}].type is invalid`);
+						if (handler.type === "command" && (typeof handler.command !== "string" || !handler.command.trim())) throw new Error(`hooks.${eventName}[${groupIndex}].hooks[${handlerIndex}].command is required`);
+						return handler;
+					}),
+				};
+			});
+		}
+		return { ...(typeof value.$schema === "string" ? { $schema: value.$schema } : {}), hooks };
+	}
+
+	private validateHookTrust(raw: unknown): HookTrustFile {
+		if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("hook-trust.json root must be an object");
+		const value = raw as Record<string, unknown>;
+		if (value.version !== 1) throw new Error("hook-trust.json version must be 1");
+		if (!value.trusted || typeof value.trusted !== "object" || Array.isArray(value.trusted)) throw new Error("trusted must be an object");
+		const trusted: Record<string, string> = {};
+		for (const [key, hash] of Object.entries(value.trusted as Record<string, unknown>)) {
+			if (typeof hash !== "string") throw new Error(`trusted.${key} must be a string`);
+			trusted[key] = hash;
+		}
+		const toggles: Record<string, Record<string, boolean>> = {};
+		if (value.toggles !== undefined) {
+			if (!value.toggles || typeof value.toggles !== "object" || Array.isArray(value.toggles)) throw new Error("toggles must be an object");
+			for (const [configPath, configToggles] of Object.entries(value.toggles as Record<string, unknown>)) {
+				if (!configToggles || typeof configToggles !== "object" || Array.isArray(configToggles)) throw new Error(`toggles.${configPath} must be an object`);
+				toggles[configPath] = {};
+				for (const [hookId, enabled] of Object.entries(configToggles as Record<string, unknown>)) {
+					if (typeof enabled !== "boolean") throw new Error(`toggles.${configPath}.${hookId} must be boolean`);
+					toggles[configPath][hookId] = enabled;
+				}
+			}
+		}
+		return { version: 1, trusted, toggles };
+	}
+
+	private hookTrustKey(filePath: string) {
+		const normalizedPath = normalize(filePath);
+		return process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
+	}
+
+	async getHooksConfig(workspacePath?: string): Promise<HooksConfigSnapshot> {
+		const configPath = this.resolveHooksConfigPath(workspacePath);
+		const trustPath = this.resolveHooksTrustPath();
+		let configRaw = JSON.stringify({ hooks: {} }, null, 2);
+		let configExists = false;
+		let configParsed: HooksConfigFile = { hooks: {} };
+		let configDiagnostic: ConfigFileDiagnostic | undefined;
+		try {
+			configRaw = await readFile(configPath, "utf8");
+			configExists = true;
+			configParsed = this.validateHooksConfig(JSON.parse(configRaw));
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") configDiagnostic = this.createJsonDiagnostic("hooks.json", configRaw, error);
+		}
+
+		let trustRaw = JSON.stringify({ version: 1, trusted: {}, toggles: {} }, null, 2);
+		let trustExists = false;
+		let trustParsed: HookTrustFile = { version: 1, trusted: {}, toggles: {} };
+		let trustDiagnostic: ConfigFileDiagnostic | undefined;
+		try {
+			trustRaw = await readFile(trustPath, "utf8");
+			trustExists = true;
+			trustParsed = this.validateHookTrust(JSON.parse(trustRaw));
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") trustDiagnostic = this.createJsonDiagnostic("hook-trust.json", trustRaw, error);
+		}
+		const configHash = configExists && !configDiagnostic ? createHash("sha256").update(configRaw).digest("hex") : undefined;
+		const trustKey = this.hookTrustKey(configPath);
+		return {
+			configPath,
+			configExists,
+			configRaw,
+			configParsed,
+			...(configDiagnostic ? { configDiagnostic } : {}),
+			trustPath,
+			trustExists,
+			trustRaw,
+			trustParsed,
+			...(trustDiagnostic ? { trustDiagnostic } : {}),
+			installedCount: Object.values(configParsed.hooks).reduce((sum, groups) => sum + (groups ?? []).reduce((inner, group) => inner + group.hooks.length, 0), 0),
+			trusted: Boolean(configHash && trustParsed.trusted[trustKey] === configHash),
+		};
+	}
+
+	async saveHooksConfig(request: HooksConfigSaveRequest): Promise<ConfigValidationResult> {
+		try {
+			if (request.configRaw !== undefined) {
+				const configPath = this.resolveHooksConfigPath(request.workspacePath);
+				const parsed = this.validateHooksConfig(JSON.parse(request.configRaw));
+				await mkdir(dirname(configPath), { recursive: true });
+				await writeFile(configPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+			}
+			if (request.trustRaw !== undefined) {
+				const trustPath = this.resolveHooksTrustPath();
+				const parsed = this.validateHookTrust(JSON.parse(request.trustRaw));
+				await mkdir(dirname(trustPath), { recursive: true });
+				await writeFile(trustPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+			}
 			return { valid: true };
 		} catch (error) {
 			return { valid: false, error: error instanceof Error ? error.message : String(error) };

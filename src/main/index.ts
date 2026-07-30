@@ -73,6 +73,7 @@ import type {
 	ApprovePlanDraftInput,
 	McpConfigSaveRequest,
 	ModelFailoverConfigSaveRequest,
+	HooksConfigSaveRequest,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -3406,6 +3407,11 @@ function registerIpc() {
 		(_event, workspacePath?: string) =>
 			configManager.getModelFailoverConfig(workspacePath),
 	);
+	ipcMain.handle(
+		ipcChannels.configGetHooks,
+		(_event, workspacePath?: string) =>
+			configManager.getHooksConfig(workspacePath),
+	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
 		ipcChannels.agentsTrustResponse,
@@ -3459,6 +3465,16 @@ function registerIpc() {
 		void appLogger.info("config", "Model failover config saved", {
 			scope: request?.scope,
 			workspacePath: request?.workspacePath,
+			valid: result.valid,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveHooks, async (_event, request: HooksConfigSaveRequest) => {
+		const result = await configManager.saveHooksConfig(request);
+		void appLogger.info("config", "Hooks config saved", {
+			workspacePath: request?.workspacePath,
+			config: request?.configRaw !== undefined,
+			trust: request?.trustRaw !== undefined,
 			valid: result.valid,
 		});
 		return result;
