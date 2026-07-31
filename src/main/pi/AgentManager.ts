@@ -114,6 +114,34 @@ function extractPlainTextPreview(content: unknown): string | undefined {
 	return undefined;
 }
 
+/**
+ * Pi 自带重试未覆盖或已关闭时的 Deck 级模型重试兜底。
+ * 重试次数只统计额外尝试，不包含首次请求。
+ */
+const DECK_MODEL_RETRY_POLICY = Object.freeze({
+	maxRetries: 5,
+	initialDelayMs: 1_000,
+	maxDelayMs: 16_000,
+});
+
+function deckModelRetryDelayMs(retryAttempt: number): number {
+	const normalizedAttempt = Math.max(1, Math.floor(retryAttempt));
+	return Math.min(
+		DECK_MODEL_RETRY_POLICY.initialDelayMs * 2 ** (normalizedAttempt - 1),
+		DECK_MODEL_RETRY_POLICY.maxDelayMs,
+	);
+}
+
+/** 只重试可确认的模型、网络与上游短暂故障，避免掩盖配置或用户取消问题。 */
+function isRetryableModelRequestError(errorMessage: string): boolean {
+	const message = errorMessage.trim();
+	if (!message) return false;
+	if (/\b(?:aborted|cancelled|canceled|invalid api key|invalid credentials?|unauthori[sz]ed|authentication failed|forbidden|invalid model|unknown model|context[_\s-]*length|input exceeds the context|usage[_\s-]*limit|insufficient (?:balance|credits?)|billing quota|validation (?:failed|error))\b/i.test(message)) {
+		return false;
+	}
+	return /\b(?:econnreset|econnrefused|econnaborted|ehostunreach|enotfound|eai_again|etimedout|epipe|socket hang up|fetch failed|network(?: error| request)?|connection (?:error|failed|failure|reset|refused|lost|timed out|timeout|closed)|stream[_\s-]*read[_\s-]*error|request timed out|timed out waiting|headers timed out|websocket (?:closed|error)|sse response headers timed out|upstream[_\s-]*error|upstream request failed|provider returned error|server[_\s-]*error|internal[_\s-]*error|service[_\s-]*unavailable|overloaded|rate[_\s-]*limit(?:ed|_error)?|too many requests|\b(?:429|500|502|503|504|524)\b)\b/i.test(message);
+}
+
 export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
 	private readonly messages = new Map<string, ChatMessage[]>();
@@ -186,8 +214,8 @@ export class AgentManager {
 	private readonly userInitiatedStop = new Set<string>();
 	/** 已尝试过自动重连的 agent（防止无限循环），重连成功后清除 */
 	private readonly autoRestartAttempted = new Set<string>();
-	/** Deck 级流读取错误重试次数；仅允许一次，避免重复执行用户请求。 */
-	private readonly deckStreamRetryAttempts = new Map<string, number>();
+	/** Deck 级模型请求重试次数；只对本轮未执行工具的可恢复错误重发。 */
+	private readonly deckModelRetryAttempts = new Map<string, number>();
 	/** 当前 agent 最近一次 prompt 的原始投递信息，用于安全地截断并重发。 */
 	private readonly lastPromptByAgent = new Map<string, {
 		messageId: string;
@@ -196,8 +224,8 @@ export class AgentManager {
 	}>();
 	/** 当前 agent 这一轮是否已经执行过工具；有副作用时禁止 Deck 自动重发。 */
 	private readonly runHadToolCalls = new Set<string>();
-	/** 等待 Deck 重试结果的 agent，用于把重试状态消息更新为成功。 */
-	private readonly pendingDeckStreamRetries = new Set<string>();
+	/** 等待 Deck 模型重试结果的 agent，用于把重试状态消息更新为成功。 */
+	private readonly pendingDeckModelRetries = new Set<string>();
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, options }>。
@@ -1213,10 +1241,10 @@ export class AgentManager {
 			agentMessage,
 			...(input.images?.length ? { images: input.images } : {}),
 		});
-		// 新一轮用户请求重新获得一次 Deck 级 stream_read_error 重试机会；
+		// 新一轮用户请求重新获得完整的 Deck 级模型重试预算；
 		// 自动重试本身仍保留计数，避免异常再次触发无限循环。
-		if (!this.pendingDeckStreamRetries.has(input.agentId)) {
-			this.deckStreamRetryAttempts.delete(input.agentId);
+		if (!this.pendingDeckModelRetries.has(input.agentId)) {
+			this.deckModelRetryAttempts.delete(input.agentId);
 		}
 
 		// streamingBehavior 只在 agent 忙碌时需要；UI 可以显式传 steer/followUp 以复用 pi 队列语义。
@@ -3797,9 +3825,12 @@ export class AgentManager {
 		}
 
 		if (typed.type === "agent_start" && runtime) {
-			if (this.pendingDeckStreamRetries.has(agentId)) {
-				this.pendingDeckStreamRetries.delete(agentId);
-				this.upsertRetryStatusMessage(agentId, { attempt: 1, maxAttempts: 1 }, "success");
+			if (this.pendingDeckModelRetries.has(agentId)) {
+				this.pendingDeckModelRetries.delete(agentId);
+				this.upsertRetryStatusMessage(agentId, {
+					attempt: this.deckModelRetryAttempts.get(agentId) ?? 1,
+					maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+				}, "success");
 			}
 			this.runHadToolCalls.delete(agentId);
 			runtime.tab.status = "running";
@@ -3909,24 +3940,32 @@ export class AgentManager {
 				(typeof contentError?.message === "string"
 					? contentError.message
 					: undefined);
+			const retryAttempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
 			const canDeckRetry =
-				errorMsg && /stream[_ ]read[_ ]error/i.test(String(errorMsg)) &&
+				errorMsg && isRetryableModelRequestError(String(errorMsg)) &&
 				!typed.willRetry &&
 				!this.runHadToolCalls.has(agentId) &&
-				(this.deckStreamRetryAttempts.get(agentId) ?? 0) < 1;
+				retryAttempt < DECK_MODEL_RETRY_POLICY.maxRetries;
 			if (canDeckRetry) {
-				this.deckStreamRetryAttempts.set(agentId, 1);
-				this.pendingDeckStreamRetries.add(agentId);
+				const nextRetryAttempt = retryAttempt + 1;
+				const delayMs = deckModelRetryDelayMs(nextRetryAttempt);
+				this.deckModelRetryAttempts.set(agentId, nextRetryAttempt);
+				this.pendingDeckModelRetries.add(agentId);
 				this.upsertRetryStatusMessage(
 					agentId,
-					{ attempt: 1, maxAttempts: 1, errorMessage: String(errorMsg), delayMs: 800 },
+					{
+						attempt: nextRetryAttempt,
+						maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+						errorMessage: String(errorMsg),
+						delayMs,
+					},
 					"running",
 				);
 				if (runtime) {
 					runtime.tab.status = "running";
 					this.emitState();
 				}
-				void this.retryLastPromptAfterStreamError(agentId);
+				void this.retryLastPromptAfterModelError(agentId, delayMs);
 			} else if (typed.willRetry === true) {
 				// agent_end.willRetry 表示 pi 已判定本次错误会进入自动重试；
 				// 此时不写入最终错误，避免用户误以为会话已经失败。
@@ -4760,15 +4799,15 @@ export class AgentManager {
 	}
 
 	/**
-	 * stream_read_error 的 Deck 级兜底重试。
+	 * 可恢复模型错误的 Deck 级兜底重试。
 	 * 复用同文件截断重发，确保失败 run 产生的 assistant/tool 后代不会留在上下文中；
 	 * 调用前已确认本轮没有 tool_execution_start，因此不会重复执行已产生副作用的请求。
 	 */
-	private async retryLastPromptAfterStreamError(agentId: string): Promise<void> {
+	private async retryLastPromptAfterModelError(agentId: string, delayMs: number): Promise<void> {
 		const original = this.lastPromptByAgent.get(agentId);
 		if (!original) {
-			this.pendingDeckStreamRetries.delete(agentId);
-			this.addDetailedErrorMessage(agentId, "stream_read_error（找不到原始请求，无法自动重试）");
+			this.pendingDeckModelRetries.delete(agentId);
+			this.addDetailedErrorMessage(agentId, "模型请求失败（找不到原始请求，无法自动重试）");
 			const runtime = this.agents.get(agentId);
 			if (runtime) runtime.tab.status = "error";
 			this.emitState();
@@ -4776,8 +4815,8 @@ export class AgentManager {
 		}
 
 		try {
-			// agent_end 后 pi 可能还在发 agent_settled；短暂等待让 JSONL 和 runtime state 稳定。
-			await new Promise((resolve) => setTimeout(resolve, 800));
+			// agent_end 后 pi 可能还在发 agent_settled；等待退避时间后 JSONL 和 runtime state 也会稳定。
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
 			const prepared = await this.prepareResendFromMessage(agentId, original.messageId);
 			// prepareResend 已确认 pi 可编辑并完成 switch_session；恢复 idle，
 			// 让 sendPrompt 走普通 prompt，而不是把自动重试误当成 steer。
@@ -4797,14 +4836,15 @@ export class AgentManager {
 			// agent_start 会把 pending 状态更新为 success；这里保持 running，
 			// 避免重试 RPC 尚未开始时 UI 提前显示完成。
 		} catch (error) {
-			this.pendingDeckStreamRetries.delete(agentId);
+			this.pendingDeckModelRetries.delete(agentId);
 			const errorMessage = error instanceof Error ? error.message : String(error);
+			const attempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
 			this.upsertRetryStatusMessage(
 				agentId,
-				{ attempt: 1, maxAttempts: 1, errorMessage },
+				{ attempt, maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries, errorMessage },
 				"error",
 			);
-			this.addDetailedErrorMessage(agentId, `stream_read_error（自动重试失败）\n${errorMessage}`);
+			this.addDetailedErrorMessage(agentId, `模型请求自动重试失败\n${errorMessage}`);
 			const runtime = this.agents.get(agentId);
 			if (runtime) runtime.tab.status = "error";
 			this.emitState();

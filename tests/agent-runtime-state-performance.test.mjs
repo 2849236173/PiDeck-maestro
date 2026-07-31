@@ -71,6 +71,26 @@ test("tool edges stay local and progress IPC remains coalesced", () => {
   assert.doesNotMatch(agentEnd, /markIdleIfPiReportsNoWork|setTimeout/);
 });
 
+test("Deck retries transient model failures five times with progressive delays", () => {
+  assert.match(agentManagerSource, /const DECK_MODEL_RETRY_POLICY = Object\.freeze\(\{[\s\S]*?maxRetries: 5,[\s\S]*?initialDelayMs: 1_000,[\s\S]*?maxDelayMs: 16_000,/);
+  assert.match(agentManagerSource, /initialDelayMs \* 2 \*\* \(normalizedAttempt - 1\)/);
+  assert.match(agentManagerSource, /upstream\[_\\s-\]\*error\|upstream request failed/);
+
+  const agentEnd = sourceBetween(
+    'if (typed.type === "agent_end")',
+    'if (typed.type === "agent_settled")',
+  );
+  assert.match(agentEnd, /isRetryableModelRequestError/);
+  assert.match(agentEnd, /retryAttempt < DECK_MODEL_RETRY_POLICY\.maxRetries/);
+  assert.match(agentEnd, /deckModelRetryDelayMs\(nextRetryAttempt\)/);
+  assert.match(agentEnd, /retryLastPromptAfterModelError\(agentId, delayMs\)/);
+  assert.match(agentEnd, /!this\.runHadToolCalls\.has\(agentId\)/);
+
+  // 新用户请求会清空旧预算；自动重发保留它，直到本次成功或最终失败。
+  assert.match(agentManagerSource, /if \(!this\.pendingDeckModelRetries\.has\(input\.agentId\)\) \{[\s\S]*?this\.deckModelRetryAttempts\.delete\(input\.agentId\);/);
+  assert.match(agentManagerSource, /if \(this\.pendingDeckModelRetries\.has\(agentId\)\) \{[\s\S]*?this\.upsertRetryStatusMessage\(agentId, \{[\s\S]*?attempt: this\.deckModelRetryAttempts\.get\(agentId\) \?\? 1,/);
+});
+
 test("mergeAgentRuntimeState skips update when nothing changed", () => {
   const { mergeAgentRuntimeState } = loadModule(
     "src/renderer/src/utils/agentRuntimeState.ts",
