@@ -810,11 +810,6 @@ export class AgentManager {
 		const t1 = Date.now();
 		const trustOverride = await this.ensureProjectTrust(project);
 		const t2 = Date.now();
-		// Fast mode is a models.json mapping, so it must be present before the
-		// Pi process starts and loads its model runtime. Existing processes are
-		// intentionally not marked ready because they cannot safely reload config.
-		await this.configManager.ensureFastModelMappings();
-
 		void this.appLogger?.info("agent", "Agent pi process start", { agentId: id });
 		// 为 maestro UCL sidecar 预分配回环端口；会话未装 maestro 时该环境变量无副作用。
 		const guiPort = await allocateLoopbackPort();
@@ -825,7 +820,7 @@ export class AgentManager {
 				...(payload && typeof payload === "object" ? payload : {}),
 			});
 		});
-		const runtime: AgentRuntime = { tab, process, fastModeReady: true, ...(guiPort ? { guiPort } : {}) };
+		const runtime: AgentRuntime = { tab, process, ...(guiPort ? { guiPort } : {}) };
 		this.agents.set(id, runtime);
 		this.messages.set(id, []);
 		this.emitState();
@@ -1832,7 +1827,6 @@ export class AgentManager {
 			provider: model?.provider,
 			modelId: model?.id,
 			thinkingLevel: state?.thinkingLevel,
-			fastModeReady: runtime.fastModeReady,
 			isStreaming: state?.isStreaming,
 			isCompacting:
 				state?.isCompacting ||
@@ -5703,8 +5697,6 @@ export class AgentManager {
 type AgentRuntime = {
 	tab: AgentTab;
 	process: PiProcess;
-	/** Fast 映射已在本 Pi 子进程读取 models.json 前写入。 */
-	fastModeReady?: boolean;
 	/** 分配给 maestro UCL sidecar 的回环端口（通过 PI_GUI_PORT 注入）；未启用时为空 */
 	guiPort?: number;
 };

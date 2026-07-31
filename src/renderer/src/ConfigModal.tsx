@@ -21,7 +21,6 @@ import { CloseIconButton } from "./components/ui/IconButton";
 import { t } from "./i18n";
 import { LazyMonacoEditor } from "./components/ui/LazyMonacoEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
-import { supportsFastMode } from "./utils/modelFastMode";
 import type {
 	AuthFile,
 	ConfigTab,
@@ -871,41 +870,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleSaveModels = async () => {
-		// 保存前规范化 compat 字段。若 provider 下存在 reasoning 模型，则默认开启
-		// reasoning_effort 支持；用户仍可在兼容性区域显式关闭。
-		const normalizedData = {
-			...modelsData,
-			providers: Object.fromEntries(
-				Object.entries(modelsData.providers).map(([name, provider]) => {
-					const existingCompat = provider.compat as Record<string, unknown> | undefined;
-					const models = provider.models.map((model) => {
-						if (!supportsFastMode(model.id) || model.thinkingLevelMap?.minimal !== undefined) return model;
-						// Pi's RPC understands `minimal`, while the compatible upstream expects `fast`.
-						// Persisting this mapping makes the manual Fast entry work after restarts too.
-						return {
-							...model,
-							reasoning: true,
-							thinkingLevelMap: { ...model.thinkingLevelMap, minimal: "fast" },
-						};
-					});
-					const hasReasoningModel = models.some((model) => model.reasoning === true);
-					return [
-						name,
-						{
-							...provider,
-							models,
-							compat: {
-								supportsDeveloperRole: false,
-								supportsReasoningEffort: hasReasoningModel,
-								...existingCompat,
-							},
-						},
-					];
-				}),
-			),
-		};
 		await saveAndReload(
-			() => api.config.saveModels(normalizedData),
+			() => api.config.saveModels(modelsData),
 			t("config.modelsSaved"),
 		);
 		await loadConfig("models");

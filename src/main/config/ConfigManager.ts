@@ -1201,39 +1201,6 @@ export class ConfigManager {
 
 	// ── 读取 ──────────────────────────────────────────────
 
-	/**
-	 * 在启动 Pi 子进程之前，为已知支持 Fast 的 GPT 5.5/5.6 模型补齐
-	 * `minimal -> fast` 映射。pi 只接受 canonical thinking level，因此
-	 * 映射必须在进程读取 models.json 之前存在；显式用户值（包括 null）不覆盖。
-	 */
-	async ensureFastModelMappings(): Promise<void> {
-		const source = await this.getModelsConfig();
-		if (source.diagnostic) return;
-		let changed = false;
-		const providers = Object.fromEntries(Object.entries(source.parsed.providers).map(([providerId, provider]) => {
-			const models = provider.models.map((model) => {
-				if (!this.supportsFastModelId(model.id)) return model;
-				const currentMap = model.thinkingLevelMap;
-				if (currentMap && typeof currentMap === "object" && Object.hasOwn(currentMap, "minimal")) return model;
-				changed = true;
-				return {
-					...model,
-					reasoning: true,
-					thinkingLevelMap: { ...(currentMap && typeof currentMap === "object" ? currentMap : {}), minimal: "fast" },
-				};
-			});
-			const compat = provider.compat && typeof provider.compat === "object" ? provider.compat as Record<string, unknown> : {};
-			const needsEffort = models.some((model) => this.supportsFastModelId(model.id)) && compat.supportsReasoningEffort === undefined;
-			if (needsEffort) changed = true;
-			return [providerId, { ...provider, models, compat: needsEffort ? { ...compat, supportsReasoningEffort: true } : provider.compat }];
-		}));
-		if (changed) await this.writeJsonFile("models.json", { ...source.parsed, providers });
-	}
-
-	private supportsFastModelId(modelId: string | undefined): boolean {
-		return Boolean(modelId && /(?:^|[-_/:])gpt[-_]?5\.(?:5|6)(?:$|[-_/:.])/i.test(modelId.trim()));
-	}
-
 	async getModelsConfig(): Promise<ConfigFileReadResult<PiModelsFile>> {
 		return this.readJsonFile<PiModelsFile>("models.json", { providers: {} });
 	}
