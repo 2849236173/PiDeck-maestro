@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.6-13 - 2026-07-30
+## v0.6.6-13 - 2026-07-31
 
 ### Maestro configuration and workflow compatibility
 
@@ -11,6 +11,7 @@
 
 - Added manual Fast reasoning for GPT 5.5 / 5.6 variants, including Terra, Sol, and Luna. Fast is shown only when the running Agent, effective model mapping, and provider capability all confirm it can be used.
 - Improved compaction settlement and thinking controls for more reliable Maestro-compatible sessions.
+- Increased historical-session `get_state` startup tolerance and clarified timeout diagnostics so large session packages no longer look like broken pi installations.
 
 ## v0.6.6-12 - 2026-07-29
 

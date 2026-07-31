@@ -845,10 +845,11 @@ export class AgentManager {
 			cwd: diag?.cwd,
 		});
 
-		// 启动后先获取状态，get_messages 必须等状态就绪后再发送，
-		// 确保 pi 进程已完全加载会话文件，避免竞态导致返回空结果。
-		void this.appLogger?.info("agent", "Agent get_state request start", { agentId: id });
-		const statePromise = client.request({ type: "get_state" });
+		// 启动后先获取状态，get_messages 必须等状态就绪后再发送。
+		// 打开含图片/大上下文的历史会话时，pi 需要先解析会话包；默认 30s 容易误报 get_state timeout。
+		const initialStateTimeoutMs = input.sessionPath ? 180_000 : 60_000;
+		void this.appLogger?.info("agent", "Agent get_state request start", { agentId: id, timeoutMs: initialStateTimeoutMs });
+		const statePromise = client.request({ type: "get_state" }, initialStateTimeoutMs);
 		const historyLoadDecision = this.getHistoryAutoLoadDecision(input.sessionPath);
 
 		// ... 事件监听器（省略，与原来一致）
@@ -1061,6 +1062,7 @@ export class AgentManager {
 		} catch (error) {
 			tab.status = "error";
 			const rawMessage = error instanceof Error ? error.message : String(error);
+			const isInitialGetStateTimeout = rawMessage.includes("RPC command timed out: get_state");
 			void this.appLogger?.error("agent", "Agent create failed", {
 				agentId: id,
 				projectId: project.id,
@@ -1072,6 +1074,11 @@ export class AgentManager {
 			let enriched = rawMessage;
 			if (diag) {
 				const lines: string[] = [];
+				if (isInitialGetStateTimeout) {
+					const timeoutSeconds = input.sessionPath ? 180 : 60;
+					lines.push(`会话状态读取超时: Pi 在 ${timeoutSeconds} 秒内未返回 get_state`);
+					if (input.sessionPath) lines.push(`会话路径: ${input.sessionPath}`);
+				}
 				// 退出码
 				if (diag.exitCode !== null) {
 					lines.push(`退出码: ${diag.exitCode}${diag.exitSignal ? ` (signal: ${diag.exitSignal})` : ""}`);
@@ -1094,7 +1101,10 @@ export class AgentManager {
 				// 诊断与指引
 				lines.push("");
 				lines.push("━━━ 排查步骤 ━━━");
-				if (!diag.versionCheck) {
+				if (isInitialGetStateTimeout) {
+					lines.push("1. 该错误通常表示历史会话较大或 Pi 初始化会话包耗时过长，不代表 pi 未安装");
+					lines.push("2. 可先关闭该 Agent 后重新打开；如果仍复现，请保留该会话包用于排查 pi get_state 初始化");
+				} else if (!diag.versionCheck) {
 					lines.push("1. 在终端执行 pi --version，确认 pi 是否已安装且路径正确");
 					lines.push("2. 如未安装，执行 npm install -g @earendil-works/pi-coding-agent");
 					lines.push("3. 安装后再次在终端执行 pi --version 验证");

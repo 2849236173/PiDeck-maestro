@@ -20,8 +20,12 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(mainSource, /Agent ensure trusted directory completed/);
 	assert.match(mainSource, /Agent pi process start/);
 	assert.match(mainSource, /Agent get_state request start/);
+	assert.match(mainSource, /input\.sessionPath \? 180_000 : 60_000/);
+	assert.match(mainSource, /client\.request\(\{ type: "get_state" \}, initialStateTimeoutMs\)/);
 	assert.match(mainSource, /Agent get_state request completed/);
 	assert.match(mainSource, /Agent create failed/);
+	assert.match(mainSource, /会话状态读取超时/);
+	assert.match(mainSource, /isInitialGetStateTimeout/);
 	assert.match(appSource, /api\.app\.rendererLog\("info", "renderer", "Agent create requested"/);
 	assert.match(appSource, /api\.app\.rendererLog\("info", "renderer", "Agent create completed"/);
 	assert.match(appSource, /api\.app\.rendererLog\("warn", "renderer", "Agent create failed"/);

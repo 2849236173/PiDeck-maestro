@@ -26,7 +26,7 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-13** (2026-07-30)
+> **Latest compatibility release: v0.6.6-13** (2026-07-31)
 
 ### v0.6.6-13 Maestro compatibility release
 

@@ -6,7 +6,7 @@
 
 ## v0.6.6-13
 
-新增 MCP、模型 failover、Hooks、Skills、Web Search 与 API Manager 的可视化配置入口，并同步最新版 PiDeck RPC 配置桥接；Plan 确认接入原生桌面弹窗，子代理面板补齐 Maestro session 状态，Ask 兼容别名可被正确处理。GPT 5.5 / 5.6 系列新增手动 Fast 推理模式，且仅在运行 Agent、有效模型映射与 provider capability 均确认可用时显示。同步改进会话压缩收敛与 thinking 控制路径。
+新增 MCP、模型 failover、Hooks、Skills、Web Search 与 API Manager 的可视化配置入口，并同步最新版 PiDeck RPC 配置桥接；Plan 确认接入原生桌面弹窗，子代理面板补齐 Maestro session 状态，Ask 兼容别名可被正确处理。GPT 5.5 / 5.6 系列新增手动 Fast 推理模式，且仅在运行 Agent、有效模型映射与 provider capability 均确认可用时显示。同步改进会话压缩收敛、thinking 控制路径与历史会话 `get_state` 启动 timeout 诊断。
 
 ## v0.6.6-12
 
