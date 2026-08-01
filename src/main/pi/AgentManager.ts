@@ -29,6 +29,10 @@ import { formatBashToolMessage } from "./bashResult";
 import { extractMessageText } from "./messageContent";
 import { mergeHistoryWithPreservedMessages } from "./historyMessages";
 import {
+	formatModelRetryStatusText,
+	type ModelRetryPhase,
+} from "./modelRetryStatus";
+import {
 	assertResendRootEntry,
 	collectDescendantEntryIds,
 	findLastUserMessageLine,
@@ -544,10 +548,13 @@ export class AgentManager {
 		});
 		// abort 时 ask_question 的 answer 已被覆写为 null，不再需要跟踪
 		this.abortedDuringAsk.delete(agentId);
+		const currentMessages = this.messages.get(agentId) ?? [];
+		const retryMessageId = this.retryStatusMessageIds.get(agentId);
 		const nextMessages = mergeHistoryWithPreservedMessages(
 			messages,
-			this.messages.get(agentId) ?? [],
+			currentMessages,
 			options?.preserveMessagesAfter,
+			retryMessageId ? new Set([retryMessageId]) : undefined,
 		);
 		this.messages.set(agentId, nextMessages);
 		this.refreshAutoTitle(agentId);
@@ -1245,6 +1252,8 @@ export class AgentManager {
 		// 自动重试本身仍保留计数，避免异常再次触发无限循环。
 		if (!this.pendingDeckModelRetries.has(input.agentId)) {
 			this.deckModelRetryAttempts.delete(input.agentId);
+			// 新用户请求开启新的重试生命周期；旧卡片保留在历史中，后续失败创建新卡片。
+			this.retryStatusMessageIds.delete(input.agentId);
 		}
 
 		// streamingBehavior 只在 agent 忙碌时需要；UI 可以显式传 steer/followUp 以复用 pi 队列语义。
@@ -3826,11 +3835,11 @@ export class AgentManager {
 
 		if (typed.type === "agent_start" && runtime) {
 			if (this.pendingDeckModelRetries.has(agentId)) {
-				this.pendingDeckModelRetries.delete(agentId);
 				this.upsertRetryStatusMessage(agentId, {
 					attempt: this.deckModelRetryAttempts.get(agentId) ?? 1,
 					maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
-				}, "success");
+					phase: "attempting",
+				}, "running");
 			}
 			this.runHadToolCalls.delete(agentId);
 			runtime.tab.status = "running";
@@ -3941,12 +3950,24 @@ export class AgentManager {
 					? contentError.message
 					: undefined);
 			const retryAttempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
+			const endedWithUnknownError =
+				typed.stopReason === "error" || errorMessages.length > 0;
+			const deckRetryInProgress =
+				retryAttempt > 0 && this.pendingDeckModelRetries.has(agentId);
 			const canDeckRetry =
 				errorMsg && isRetryableModelRequestError(String(errorMsg)) &&
 				!typed.willRetry &&
 				!this.runHadToolCalls.has(agentId) &&
 				retryAttempt < DECK_MODEL_RETRY_POLICY.maxRetries;
-			if (canDeckRetry) {
+			if (deckRetryInProgress && !errorMsg && !endedWithUnknownError) {
+				this.pendingDeckModelRetries.delete(agentId);
+				this.upsertRetryStatusMessage(agentId, {
+					attempt: retryAttempt,
+					maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+					phase: "success",
+				}, "success");
+				this.deckModelRetryAttempts.delete(agentId);
+			} else if (canDeckRetry) {
 				const nextRetryAttempt = retryAttempt + 1;
 				const delayMs = deckModelRetryDelayMs(nextRetryAttempt);
 				this.deckModelRetryAttempts.set(agentId, nextRetryAttempt);
@@ -3958,6 +3979,7 @@ export class AgentManager {
 						maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
 						errorMessage: String(errorMsg),
 						delayMs,
+						phase: "waiting",
 					},
 					"running",
 				);
@@ -3984,7 +4006,17 @@ export class AgentManager {
 				// 重试中保持 running，不能误置为 idle/error，否则宠物聚合状态会提前转 done/failed
 				if (runtime) runtime.tab.status = "running";
 			} else if (errorMsg) {
-				this.addDetailedErrorMessage(agentId, String(errorMsg));
+				if (retryAttempt > 0) {
+					this.pendingDeckModelRetries.delete(agentId);
+					this.upsertRetryStatusMessage(agentId, {
+						attempt: retryAttempt,
+						maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+						errorMessage: String(errorMsg),
+						phase: "error",
+					}, "error");
+				}
+				this.addDetailedErrorMessage(agentId, String(errorMsg), retryAttempt);
+				this.deckModelRetryAttempts.delete(agentId);
 				// 有错误且不会重试 → Agent 进入 error 态，宠物聚合为 failed（行5），
 				// 否则会被误置为 idle 触发"所有任务完成"通知
 				if (runtime) runtime.tab.status = "error";
@@ -3992,7 +4024,17 @@ export class AgentManager {
 				typed.stopReason === "error" ||
 				errorMessages.length > 0
 			) {
-				this.addDetailedErrorMessage(agentId, "Agent 返回未知错误，请重试");
+				if (retryAttempt > 0) {
+					this.pendingDeckModelRetries.delete(agentId);
+					this.upsertRetryStatusMessage(agentId, {
+						attempt: retryAttempt,
+						maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+						errorMessage: "Agent 返回未知错误，请重试",
+						phase: "error",
+					}, "error");
+				}
+				this.addDetailedErrorMessage(agentId, "Agent 返回未知错误，请重试", retryAttempt);
+				this.deckModelRetryAttempts.delete(agentId);
 				if (runtime) runtime.tab.status = "error";
 			}
 			if (runtime) this.emitState();
@@ -4013,8 +4055,10 @@ export class AgentManager {
 		if (typed.type === "agent_settled") {
 			if (runtime && runtime.tab.status !== "error" && runtime.tab.status !== "closed") {
 				// agent_settled 是 Pi 的最终稳定点：没有自动重试、自动压缩、压缩 retry
-				// 或 queued follow-up 会继续执行，此时才允许恢复 idle 并通知用户完成。
-				runtime.tab.status = "idle";
+				// 或 queued follow-up 会继续执行。Deck 自己安排的退避重试不属于 Pi runtime，
+				// 因此 pending 时仍保持 running，不能在下一次请求发出前短暂显示为空闲。
+				const deckRetryPending = this.pendingDeckModelRetries.has(agentId);
+				runtime.tab.status = deckRetryPending ? "running" : "idle";
 				this.streamingThinking.delete(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
 				this.toolMessageIds.delete(agentId);
@@ -4027,7 +4071,7 @@ export class AgentManager {
 
 				const messages = this.messages.get(agentId) ?? [];
 				const lastMessage = messages[messages.length - 1];
-				if (lastMessage?.role === "assistant") {
+				if (!deckRetryPending && lastMessage?.role === "assistant") {
 					this.notifySessionEnd(runtime.tab.title);
 				}
 			}
@@ -4807,7 +4851,16 @@ export class AgentManager {
 		const original = this.lastPromptByAgent.get(agentId);
 		if (!original) {
 			this.pendingDeckModelRetries.delete(agentId);
-			this.addDetailedErrorMessage(agentId, "模型请求失败（找不到原始请求，无法自动重试）");
+			const attempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
+			const errorMessage = "模型请求失败（找不到原始请求，无法自动重试）";
+			this.upsertRetryStatusMessage(agentId, {
+				attempt,
+				maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+				errorMessage,
+				phase: "error",
+			}, "error");
+			this.addDetailedErrorMessage(agentId, errorMessage, attempt);
+			this.deckModelRetryAttempts.delete(agentId);
 			const runtime = this.agents.get(agentId);
 			if (runtime) runtime.tab.status = "error";
 			this.emitState();
@@ -4817,6 +4870,12 @@ export class AgentManager {
 		try {
 			// agent_end 后 pi 可能还在发 agent_settled；等待退避时间后 JSONL 和 runtime state 也会稳定。
 			await new Promise((resolve) => setTimeout(resolve, delayMs));
+			const attempt = this.deckModelRetryAttempts.get(agentId) ?? 1;
+			this.upsertRetryStatusMessage(agentId, {
+				attempt,
+				maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+				phase: "attempting",
+			}, "running");
 			const prepared = await this.prepareResendFromMessage(agentId, original.messageId);
 			// prepareResend 已确认 pi 可编辑并完成 switch_session；恢复 idle，
 			// 让 sendPrompt 走普通 prompt，而不是把自动重试误当成 steer。
@@ -4841,24 +4900,21 @@ export class AgentManager {
 			const attempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
 			this.upsertRetryStatusMessage(
 				agentId,
-				{ attempt, maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries, errorMessage },
+				{ attempt, maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries, errorMessage, phase: "error" },
 				"error",
 			);
-			this.addDetailedErrorMessage(agentId, `模型请求自动重试失败\n${errorMessage}`);
+			this.addDetailedErrorMessage(agentId, `模型请求自动重试失败\n${errorMessage}`, attempt);
+			this.deckModelRetryAttempts.delete(agentId);
 			const runtime = this.agents.get(agentId);
 			if (runtime) runtime.tab.status = "error";
 			this.emitState();
 		}
 	}
 
-	private addDetailedErrorMessage(agentId: string, errorMessage: string) {
-		const retryMessageId = this.retryStatusMessageIds.get(agentId);
-		const retryMessage = retryMessageId
-			? this.messages.get(agentId)?.find((message) => message.id === retryMessageId)
-			: undefined;
-		const attempt = Number(retryMessage?.meta?.attempt ?? 0);
-		const maxAttempts = Number(retryMessage?.meta?.maxAttempts ?? 0);
-		const retryLine = maxAttempts > 0 ? `\n\n已自动重试：${attempt}/${maxAttempts} 次` : "";
+	private addDetailedErrorMessage(agentId: string, errorMessage: string, retryAttempt = 0) {
+		const retryLine = retryAttempt > 0
+			? `\n\n已自动重试：${retryAttempt}/${DECK_MODEL_RETRY_POLICY.maxRetries} 次`
+			: "";
 		// 最终失败时把重试次数和原始错误放在同一条错误消息里，便于用户复制给模型/服务商排查。
 		this.addMessage(agentId, "error", `请求失败。${retryLine}\n\n原因：${errorMessage}`);
 	}
@@ -4899,18 +4955,27 @@ export class AgentManager {
 		const reason = String(
 			event.errorMessage ?? event.finalError ?? message.meta?.errorMessage ?? "未知错误",
 		);
-		const delayText = delayMs > 0 ? `，${Math.ceil(delayMs / 1000)} 秒后重试` : "";
-		const countText = maxAttempts > 0 ? `${attempt}/${maxAttempts}` : String(attempt || 1);
+		const phase = String(
+			event.phase ?? (status === "running" ? (delayMs > 0 ? "waiting" : "attempting") : status),
+		) as ModelRetryPhase;
 
-		if (status === "running") {
-			message.text = `正在自动重试 ${countText}${delayText}\n原因：${reason}`;
-		} else if (status === "success") {
-			message.text = `自动重试成功，共重试 ${attempt} 次`;
-		} else {
-			message.text = `自动重试失败，已重试 ${countText} 次\n原因：${reason}`;
-		}
+		message.text = formatModelRetryStatusText({
+			phase,
+			attempt,
+			maxAttempts,
+			delayMs,
+			reason,
+		});
 		message.timestamp = Date.now();
-		message.meta = { status, attempt, maxAttempts, delayMs, errorMessage: reason };
+		message.meta = {
+			type: "modelRetry",
+			status,
+			phase,
+			attempt,
+			maxAttempts,
+			delayMs,
+			errorMessage: reason,
+		};
 
 		this.messages.set(agentId, list);
 		this.scheduleMessageEmit(agentId, true);

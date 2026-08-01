@@ -8,14 +8,18 @@ export function mergeHistoryWithPreservedMessages(
 	historyMessages: ChatMessage[],
 	currentMessages: ChatMessage[],
 	preserveMessagesAfter?: number,
+	preserveMessageIds?: ReadonlySet<string>,
 ): ChatMessage[] {
-	if (!preserveMessagesAfter) return historyMessages;
+	if (preserveMessagesAfter == null && !preserveMessageIds?.size) return historyMessages;
 	const historyIds = new Set(historyMessages.map((message) => message.id));
 	const preservedMessages = currentMessages.filter(
 		(message) =>
-			message.timestamp >= preserveMessagesAfter &&
 			!historyIds.has(message.id) &&
-			message.meta?.historyLoading !== true,
+			message.meta?.historyLoading !== true &&
+			(
+				(preserveMessagesAfter != null && message.timestamp >= preserveMessagesAfter) ||
+				preserveMessageIds?.has(message.id) === true
+			),
 	);
 	return preservedMessages.length > 0
 		? [...historyMessages, ...preservedMessages]

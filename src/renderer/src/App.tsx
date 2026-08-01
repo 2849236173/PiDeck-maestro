@@ -117,6 +117,7 @@ import {
   CompactionCard,
   ConversationOutline,
   DiagnosticMessageCard,
+  ModelRetryStatusCard,
   DrawerContent,
   EmptyState,
   EnvironmentDialog,
@@ -7527,6 +7528,11 @@ export function App() {
                 }
                 if (message.role === "system") {
                   const meta = message.meta as any;
+                  if (meta?.type === "modelRetry") {
+                    return (
+                      <ModelRetryStatusCard key={message.id} message={message} />
+                    );
+                  }
                   if (meta?.type === "askQuestion") {
                     return (
                       <AskQuestionCard key={message.id} message={message} onRespond={(response) => {

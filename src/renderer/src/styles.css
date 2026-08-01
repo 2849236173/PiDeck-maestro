@@ -4444,6 +4444,91 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   color: var(--color-text-secondary);
 }
 
+/* ---------- 模型自动重试：持久状态卡 ---------- */
+.model-retry-card {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 34%, var(--color-border-subtle));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-warning) 7%, var(--color-bg-muted));
+}
+
+.model-retry-card.status-success {
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-success) 7%, var(--color-bg-muted));
+}
+
+.model-retry-card.status-error {
+  border-color: color-mix(in srgb, var(--color-danger) 36%, var(--color-border-subtle));
+  background: var(--color-danger-soft);
+}
+
+.model-retry-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 6px 8px;
+  color: var(--color-warning);
+  font-size: var(--font-size-caption);
+}
+
+.model-retry-card.status-success .model-retry-card-header {
+  color: var(--color-success);
+}
+
+.model-retry-card.status-error .model-retry-card-header {
+  color: var(--color-danger);
+}
+
+.model-retry-card-header strong {
+  font-weight: 600;
+}
+
+.model-retry-count {
+  margin-left: auto;
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.model-retry-progress {
+  height: 2px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.model-retry-progress span {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  transition: width 160ms ease;
+}
+
+.model-retry-card-body {
+  margin: 0;
+  padding: var(--space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  line-height: 1.6;
+}
+
+.model-retry-spinner {
+  animation: model-retry-spin 900ms linear infinite;
+}
+
+@keyframes model-retry-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-retry-spinner {
+    animation: none;
+  }
+}
+
 /* ---------- 工具卡片：ToolCard ---------- */
 .tool-card {
   width: 100%;

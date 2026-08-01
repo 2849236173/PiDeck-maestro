@@ -110,10 +110,79 @@ test("Deck retries transient model failures five times with progressive delays",
   assert.match(agentManagerSource, /if \(!this\.pendingDeckModelRetries\.has\(input\.agentId\)\) \{[\s\S]*?this\.deckModelRetryAttempts\.delete\(input\.agentId\);/);
   assert.match(agentManagerSource, /if \(this\.pendingDeckModelRetries\.has\(agentId\)\) \{[\s\S]*?this\.upsertRetryStatusMessage\(agentId, \{[\s\S]*?attempt: this\.deckModelRetryAttempts\.get\(agentId\) \?\? 1,/);
 
+  const agentStart = sourceBetween(
+    'if (typed.type === "agent_start"',
+    'if (typed.type === "message_start"',
+  );
+  assert.doesNotMatch(agentStart, /pendingDeckModelRetries\.delete/);
+  assert.match(agentStart, /phase: "attempting"[\s\S]*?"running"/);
+  assert.match(agentEnd, /deckRetryInProgress && !errorMsg && !endedWithUnknownError/);
+  assert.match(agentEnd, /phase: "success"[\s\S]*?"success"/);
+  assert.match(agentEnd, /phase: "error"[\s\S]*?"error"/);
+
+  const agentSettled = sourceBetween(
+    'if (typed.type === "agent_settled")',
+    'typed.type === "message_update"',
+  );
+  assert.match(agentSettled, /deckRetryPending = this\.pendingDeckModelRetries\.has\(agentId\)/);
+  assert.match(agentSettled, /deckRetryPending \? "running" : "idle"/);
+
   const isRetryable = loadRetryClassifier();
   assert.equal(isRetryable("terminated"), true);
   assert.equal(isRetryable("Upstream stream terminated"), true);
   assert.equal(isRetryable("Request cancelled and terminated by user"), false);
+});
+
+test("retry status survives session reload without restoring unrelated runtime messages", () => {
+  const { mergeHistoryWithPreservedMessages } = loadModule(
+    "src/main/pi/historyMessages.ts",
+  );
+  const history = [
+    { id: "user-1", role: "user", text: "hello", timestamp: 1 },
+  ];
+  const current = [
+    ...history,
+    { id: "stale-assistant", role: "assistant", text: "failed", timestamp: 2 },
+    {
+      id: "retry-status",
+      role: "system",
+      text: "waiting",
+      timestamp: 3,
+      meta: { type: "modelRetry" },
+    },
+  ];
+
+  const merged = mergeHistoryWithPreservedMessages(
+    history,
+    current,
+    undefined,
+    new Set(["retry-status"]),
+  );
+  assert.deepEqual(Array.from(merged, (message) => message.id), ["user-1", "retry-status"]);
+});
+
+test("retry status text exposes waiting, attempting, success, and terminal failure", () => {
+  const { formatModelRetryStatusText } = loadModule(
+    "src/main/pi/modelRetryStatus.ts",
+  );
+  const base = { attempt: 2, maxAttempts: 5, delayMs: 2_000, reason: "fetch failed" };
+
+  assert.equal(
+    formatModelRetryStatusText({ ...base, phase: "waiting" }),
+    "请求失败，2 秒后重试（2/5）\n原因：fetch failed",
+  );
+  assert.equal(
+    formatModelRetryStatusText({ ...base, phase: "attempting" }),
+    "正在进行第 2/5 次重试\n原因：fetch failed",
+  );
+  assert.equal(
+    formatModelRetryStatusText({ ...base, phase: "success" }),
+    "第 2/5 次重试成功",
+  );
+  assert.equal(
+    formatModelRetryStatusText({ ...base, attempt: 5, phase: "error" }),
+    "已重试 5/5 次，仍然失败\n原因：fetch failed",
+  );
 });
 
 test("mergeAgentRuntimeState skips update when nothing changed", () => {

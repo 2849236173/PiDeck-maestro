@@ -96,6 +96,7 @@ function loadAgentManager() {
 			if (id === "./bashResult") return { formatBashToolMessage: () => ({}) };
 			if (id === "./messageContent") return { extractMessageText: (value) => String(value ?? "") };
 			if (id === "./historyMessages") return { mergeHistoryWithPreservedMessages: (value) => value };
+			if (id === "./modelRetryStatus") return { formatModelRetryStatusText: () => "retry" };
 			if (id === "./sessionEntryIds") return sessionEntryIds;
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };

@@ -2670,6 +2670,50 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 	);
 });
 
+/** 模型自动重试使用独立状态卡，持续展示次数、阶段和最终结果。 */
+export const ModelRetryStatusCard = memo(function ModelRetryStatusCard(props: {
+	message: ChatMessage;
+}) {
+	const status = String(props.message.meta?.status ?? "running");
+	const phase = String(props.message.meta?.phase ?? "waiting");
+	const attempt = Number(props.message.meta?.attempt ?? 0);
+	const maxAttempts = Number(props.message.meta?.maxAttempts ?? 0);
+	const progress = maxAttempts > 0
+		? Math.min(100, Math.max(0, (attempt / maxAttempts) * 100))
+		: 0;
+	const isRunning = status === "running";
+	const isSuccess = status === "success";
+	const Icon = isRunning ? LoaderCircle : isSuccess ? CheckCircle2 : CircleX;
+	const title = isRunning
+		? (phase === "waiting" ? "等待自动重试" : "正在自动重试")
+		: isSuccess
+			? "自动重试成功"
+			: "自动重试失败";
+
+	return (
+		<article
+			className={`model-retry-card status-${status}`}
+			data-message-id={props.message.id}
+			role="status"
+			aria-live="polite"
+		>
+			<div className="model-retry-card-header">
+				<Icon className={isRunning ? "model-retry-spinner" : undefined} size={15} aria-hidden="true" />
+				<strong>{title}</strong>
+				{maxAttempts > 0 ? (
+					<span className="model-retry-count">{attempt}/{maxAttempts}</span>
+				) : null}
+			</div>
+			{maxAttempts > 0 ? (
+				<div className="model-retry-progress" aria-hidden="true">
+					<span style={{ width: `${progress}%` }} />
+				</div>
+			) : null}
+			<pre className="model-retry-card-body">{stripAnsi(props.message.text)}</pre>
+		</article>
+	);
+});
+
 /**
  * 内联提问卡片：渲染 Extension UI 请求（select/confirm/input/editor）作为 system 消息。
  * 用于实时会话中模型通过 ask_question 扩展向用户发起交互。
