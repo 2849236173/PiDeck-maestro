@@ -9,7 +9,7 @@ import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
 
-function loadPiLocatorModule(platform = process.platform) {
+function loadPiLocatorModule(platform = process.platform, envOverrides = {}) {
 	const source = readFileSync("src/main/pi/PiLocator.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
 		compilerOptions: {
@@ -23,7 +23,7 @@ function loadPiLocatorModule(platform = process.platform) {
 		exports: {},
 		process: {
 			...process,
-			env: { ...process.env },
+			env: { ...process.env, ...envOverrides },
 			platform,
 		},
 		require: (id) => {
@@ -96,4 +96,24 @@ test("places an explicit WSL cwd before the pi command", () => {
 		["-d", "Ubuntu-24.04", "-u", "root", "--cd", "/root/ba cli", "pi", "--mode", "rpc"],
 	);
 	assert.equal(invocation.wsl.distro, "Ubuntu-24.04");
+});
+
+test("adds a portable Git Bash bin directory discovered from PATH", () => {
+	const root = join(tmpdir(), `pi-desktop-git-${process.pid}-${Date.now()}`);
+	const gitCmdDir = join(root, "Git", "cmd");
+	const gitBinDir = join(root, "Git", "bin");
+	mkdirSync(gitCmdDir, { recursive: true });
+	mkdirSync(gitBinDir, { recursive: true });
+	writeFileSync(join(gitBinDir, "bash.exe"), "", "utf8");
+
+	try {
+		const { PiLocator } = loadPiLocatorModule("win32", {
+			PATH: `${gitCmdDir};C:\\Windows\\System32`,
+		});
+		const env = new PiLocator().createProcessEnv();
+
+		assert.match(env.PATH, new RegExp(gitBinDir.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 });

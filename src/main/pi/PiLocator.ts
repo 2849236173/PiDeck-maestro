@@ -76,10 +76,42 @@ export class PiLocator {
       ...this.listChildDirs(join(home, ".nvm", "versions", "node")).map(dir => join(dir, "bin")),
       join(home, ".asdf", "shims"),
       join(home, ".volta", "bin"),
+      ...this.getGitBashDirs(),
     ];
 
     // These directories only locate an existing pi installation; pi itself is not bundled yet.
     return [...new Set(dirs.filter(Boolean))];
+  }
+
+  /**
+   * Git for Windows is often installed outside Program Files (for example in
+   * a portable/runtime directory). Pi's Windows shell resolver only sees
+   * bash.exe when its Git bin directory is present on PATH; otherwise it can
+   * fall back to C:\Windows\System32\bash.exe (WSL).
+   */
+  private getGitBashDirs() {
+    if (process.platform !== "win32") return [];
+
+    const candidates = new Set<string>();
+    const addFromPath = (entry: string) => {
+      const normalized = entry.replace(/[\\/]+$/, "");
+      if (/(?:[\\/])Git(?:[\\/])cmd$/i.test(normalized)) {
+        candidates.add(join(dirname(normalized), "bin"));
+      } else if (/(?:[\\/])Git(?:[\\/])bin$/i.test(normalized)) {
+        candidates.add(normalized);
+      }
+    };
+
+    for (const entry of this.pathDirs()) addFromPath(entry);
+
+    const installRoots = [
+      process.env.GIT_INSTALL_ROOT,
+      process.env.ProgramFiles,
+      process.env["ProgramFiles(x86)"],
+    ].filter((value): value is string => Boolean(value));
+    for (const root of installRoots) candidates.add(join(root, "Git", "bin"));
+
+    return [...candidates].filter((dir) => existsSync(join(dir, "bash.exe")));
   }
 
   createProcessEnv(settings?: PiProxySettings, pathPrefix?: string, wsl?: PiCommandInvocation["wsl"]) {
