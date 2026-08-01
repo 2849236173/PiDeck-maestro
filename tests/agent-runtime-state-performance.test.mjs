@@ -32,6 +32,26 @@ function loadModule(sourcePath) {
   return module.exports;
 }
 
+function loadRetryClassifier() {
+  const start = agentManagerSource.indexOf("function isRetryableModelRequestError");
+  const endMarker = "\n}\n\nexport class AgentManager";
+  const end = agentManagerSource.indexOf(endMarker, start);
+  assert.notEqual(start, -1, "missing retry classifier");
+  assert.notEqual(end, -1, "missing retry classifier end marker");
+
+  const source = `${agentManagerSource.slice(start, end + 2)}\nexport { isRetryableModelRequestError };`;
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  });
+  const module = { exports: {} };
+  const sandbox = { exports: module.exports, module };
+  vm.runInNewContext(outputText, sandbox, { filename: "retry-classifier.ts" });
+  return module.exports.isRetryableModelRequestError;
+}
+
 test("main process avoids duplicate high-frequency event and log IPC", () => {
   assert.doesNotMatch(ipcSource, /agentsEvent|agents:event/);
   assert.doesNotMatch(agentManagerSource, /ipcChannels\.agentsEvent/);
@@ -89,6 +109,11 @@ test("Deck retries transient model failures five times with progressive delays",
   // 新用户请求会清空旧预算；自动重发保留它，直到本次成功或最终失败。
   assert.match(agentManagerSource, /if \(!this\.pendingDeckModelRetries\.has\(input\.agentId\)\) \{[\s\S]*?this\.deckModelRetryAttempts\.delete\(input\.agentId\);/);
   assert.match(agentManagerSource, /if \(this\.pendingDeckModelRetries\.has\(agentId\)\) \{[\s\S]*?this\.upsertRetryStatusMessage\(agentId, \{[\s\S]*?attempt: this\.deckModelRetryAttempts\.get\(agentId\) \?\? 1,/);
+
+  const isRetryable = loadRetryClassifier();
+  assert.equal(isRetryable("terminated"), true);
+  assert.equal(isRetryable("Upstream stream terminated"), true);
+  assert.equal(isRetryable("Request cancelled and terminated by user"), false);
 });
 
 test("mergeAgentRuntimeState skips update when nothing changed", () => {

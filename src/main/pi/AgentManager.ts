@@ -139,7 +139,7 @@ function isRetryableModelRequestError(errorMessage: string): boolean {
 	if (/\b(?:aborted|cancelled|canceled|invalid api key|invalid credentials?|unauthori[sz]ed|authentication failed|forbidden|invalid model|unknown model|context[_\s-]*length|input exceeds the context|usage[_\s-]*limit|insufficient (?:balance|credits?)|billing quota|validation (?:failed|error))\b/i.test(message)) {
 		return false;
 	}
-	return /\b(?:econnreset|econnrefused|econnaborted|ehostunreach|enotfound|eai_again|etimedout|epipe|socket hang up|fetch failed|network(?: error| request)?|connection (?:error|failed|failure|reset|refused|lost|timed out|timeout|closed)|stream[_\s-]*read[_\s-]*error|request timed out|timed out waiting|headers timed out|websocket (?:closed|error)|sse response headers timed out|upstream[_\s-]*error|upstream request failed|provider returned error|server[_\s-]*error|internal[_\s-]*error|service[_\s-]*unavailable|overloaded|rate[_\s-]*limit(?:ed|_error)?|too many requests|\b(?:429|500|502|503|504|524)\b)\b/i.test(message);
+	return /\b(?:terminated|econnreset|econnrefused|econnaborted|ehostunreach|enotfound|eai_again|etimedout|epipe|socket hang up|fetch failed|network(?: error| request)?|connection (?:error|failed|failure|reset|refused|lost|timed out|timeout|closed)|stream[_\s-]*read[_\s-]*error|request timed out|timed out waiting|headers timed out|websocket (?:closed|error)|sse response headers timed out|upstream[_\s-]*error|upstream request failed|provider returned error|server[_\s-]*error|internal[_\s-]*error|service[_\s-]*unavailable|overloaded|rate[_\s-]*limit(?:ed|_error)?|too many requests|\b(?:429|500|502|503|504|524)\b)\b/i.test(message);
 }
 
 export class AgentManager {
