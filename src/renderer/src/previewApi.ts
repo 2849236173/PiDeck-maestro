@@ -35,6 +35,8 @@ const projects: Project[] = [
 ];
 
 let previewAgentTitle: string | null = null;
+let previewThinkingLevel = "low";
+let previewFastMode = false;
 
 function getAgents(): AgentTab[] {
 	return [
@@ -889,7 +891,8 @@ export function createPreviewApi(): PiDesktopApi {
 				modelName: "Preview GPT",
 				provider: "preview",
 				modelId: "preview",
-				thinkingLevel: "low",
+				thinkingLevel: previewThinkingLevel,
+				fastMode: previewFastMode,
 				contextPercent: 12,
 				contextTokens: 12000,
 				contextWindow: 100000,
@@ -914,10 +917,22 @@ export function createPreviewApi(): PiDesktopApi {
 				modelName: "Preview GPT",
 				thinkingLevel: "medium",
 			}),
-			setThinking: async (_agentId, level) => ({
-				modelName: "Preview GPT",
-				thinkingLevel: level,
-			}),
+			setThinking: async (_agentId, level) => {
+				previewThinkingLevel = level;
+				return {
+					modelName: "Preview GPT",
+					thinkingLevel: previewThinkingLevel,
+					fastMode: previewFastMode,
+				};
+			},
+			setFastMode: async (_agentId, enabled) => {
+				previewFastMode = enabled;
+				return {
+					modelName: "Preview GPT",
+					thinkingLevel: previewThinkingLevel,
+					fastMode: previewFastMode,
+				};
+			},
 			getPlanDraft: async (agentId) => ({
 				agentId,
 				path: "preview/current.md",

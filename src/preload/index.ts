@@ -980,6 +980,12 @@ const api = {
 				agentId,
 				level,
 			) as Promise<AgentRuntimeState>,
+		setFastMode: (agentId: string, enabled: boolean) =>
+			ipcRenderer.invoke(
+				ipcChannels.agentsSetFastMode,
+				agentId,
+				enabled,
+			) as Promise<AgentRuntimeState>,
 		getPlanDraft: (agentId: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.agentsPlanDraftGet,

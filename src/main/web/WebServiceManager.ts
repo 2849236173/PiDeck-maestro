@@ -36,6 +36,7 @@ type WebServiceDependencies = {
 	refreshModels: (agentId: string) => Promise<AgentRuntimeState>;
 	cycleThinking: (agentId: string) => Promise<AgentRuntimeState>;
 	setThinking: (agentId: string, level: string) => Promise<AgentRuntimeState>;
+	setFastMode: (agentId: string, enabled: boolean) => Promise<AgentRuntimeState>;
 };
 
 export class WebServiceManager {
@@ -204,6 +205,18 @@ export class WebServiceManager {
 			if (setThinkingMatch && request.method === "POST") {
 				const body = await this.readJson<{ level?: string }>(request);
 				const state = await this.deps.setThinking(decodeURIComponent(setThinkingMatch[1]), body.level ?? "");
+				this.sendJson(response, { state });
+				return;
+			}
+			const setFastModeMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/fast-mode$/);
+			if (setFastModeMatch && request.method === "POST") {
+				const remoteAddress = request.socket.remoteAddress?.replace(/^::ffff:/, "");
+				if (remoteAddress !== "127.0.0.1" && remoteAddress !== "::1") {
+					this.sendError(response, 403, "Fast mode is only available from loopback");
+					return;
+				}
+				const body = await this.readJson<{ enabled?: boolean }>(request);
+				const state = await this.deps.setFastMode(decodeURIComponent(setFastModeMatch[1]), body.enabled === true);
 				this.sendJson(response, { state });
 				return;
 			}

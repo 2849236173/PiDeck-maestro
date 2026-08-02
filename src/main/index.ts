@@ -2159,10 +2159,15 @@ function registerIpc() {
 		// 用户手动指定的路径优先于自动检测
 		const settings = settingsStore.get();
 		const status = await piLocator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
+		const pathBackfilled = Boolean(status.installed && status.command && status.command !== settings.customPiPath);
+		if (pathBackfilled) {
+			await settingsStore.update({ customPiPath: status.command });
+		}
 		void appLogger.info("pi", "Pi check completed", {
 			installed: status.installed,
 			version: status.version,
 			command: status.command,
+			pathBackfilled,
 			error: status.error,
 		});
 		return status;
@@ -3308,6 +3313,14 @@ function registerIpc() {
 			return result;
 		},
 	);
+	ipcMain.handle(
+		ipcChannels.agentsSetFastMode,
+		async (_event, agentId: string, enabled: boolean) => {
+			const result = await agentManager.setFastMode(agentId, enabled);
+			void appLogger.info("agent", "Agent Fast mode changed", { agentId, enabled });
+			return result;
+		},
+	);
 	ipcMain.handle(ipcChannels.agentsPlanDraftGet, (_event, agentId: string) =>
 		agentManager.getPlanDraft(agentId),
 	);
@@ -3711,6 +3724,7 @@ app.whenReady().then(async () => {
 		refreshModels: (agentId) => agentManager.refreshModels(agentId),
 		cycleThinking: (agentId) => agentManager.cycleThinking(agentId),
 		setThinking: (agentId, level) => agentManager.setThinking(agentId, level),
+		setFastMode: (agentId, enabled) => agentManager.setFastMode(agentId, enabled),
 	});
 	terminalManager = new TerminalSessionManager(
 		(agentId) => agentManager.getCwd(agentId),
@@ -3752,12 +3766,16 @@ app.whenReady().then(async () => {
  * 这些工作不影响首帧可见，但会拖慢 packaged app 的“点击图标 → 窗口出来”。
  */
 async function runPostWindowStartupTasks(): Promise<void> {
+	// Agent 创建可早于窗口后台任务，因此先把 Pi 环境与 Fast 扩展部署注册成 readiness gate。
+	const fastExtensionReady = syncWslEnvironment(settingsStore.get())
+		.then(() => extensionManager.ensureFastExtension());
+	agentManager.setFastExtensionReady(fastExtensionReady);
 	// PiDeck 旧版内置扩展与 pi-maestro-flow 功能重复，不再自动部署；
 	// ExtensionManager 会对用户目录中已存在的旧文件做一次默认禁用迁移，且允许用户删除。
 	// 并行做无依赖的后台初始化，缩短窗口出现后的空闲等待。
 	await Promise.all([
-		syncWslEnvironment(settingsStore.get()).catch((error) => {
-			console.error("Failed to sync WSL config:", error);
+		fastExtensionReady.catch((error) => {
+			console.error("Failed to sync WSL config or deploy Fast extension:", error);
 		}),
 		applyDesktopProxy(settingsStore.get()).catch((error) => {
 			console.error("Failed to apply desktop proxy:", error);

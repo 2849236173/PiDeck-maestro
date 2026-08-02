@@ -19,6 +19,8 @@ let state: WebState = { projects: [], agents: [], messagesByAgent: {} };
 let connected = false;
 let polling = false;
 let pollTimer: number | undefined;
+
+const WEB_STATE_POLL_INTERVAL_MS = 200;
 const stateListeners = new Set<(tabs: AgentTab[]) => void>();
 const messageListeners = new Set<(payload: { agentId: string; messages: ChatMessage[] }) => void>();
 let lastMessages = new Map<string, string>();
@@ -82,7 +84,7 @@ function ensurePolling() {
 	void refreshState().catch(() => undefined);
 	pollTimer = window.setInterval(() => {
 		void refreshState().catch(() => undefined);
-	}, 600);
+	}, WEB_STATE_POLL_INTERVAL_MS);
 }
 
 function subscribe<T>(set: Set<(payload: T) => void>, callback: (payload: T) => void) {
@@ -208,6 +210,13 @@ export function createBrowserApi(): PiDesktopApi {
 				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["setThinking"]>> }>(
 					`/api/agents/${encodeURIComponent(agentId)}/thinking`,
 					{ method: "POST", body: JSON.stringify({ level }) },
+				);
+				return result.state;
+			},
+			setFastMode: async (agentId, enabled) => {
+				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["setFastMode"]>> }>(
+					`/api/agents/${encodeURIComponent(agentId)}/fast-mode`,
+					{ method: "POST", body: JSON.stringify({ enabled }) },
 				);
 				return result.state;
 			},

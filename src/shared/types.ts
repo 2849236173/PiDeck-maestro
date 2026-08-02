@@ -306,6 +306,10 @@ export type AgentRuntimeState = {
 	modelName?: string;
 	provider?: string;
 	modelId?: string;
+	/** Fast 服务层开关；与思考等级完全独立。 */
+	fastMode?: boolean;
+	/** Fast 扩展是否已就绪；undefined 兼容旧/预览 runtime。 */
+	fastModeSupported?: boolean;
 	thinkingLevel?: string;
 	isStreaming?: boolean;
 	isCompacting?: boolean;

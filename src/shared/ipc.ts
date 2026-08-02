@@ -184,6 +184,7 @@ export const ipcChannels = {
 	agentsRefreshModels: "agents:refresh-models",
 	agentsCycleThinking: "agents:cycle-thinking",
 	agentsSetThinking: "agents:set-thinking",
+	agentsSetFastMode: "agents:set-fast-mode",
 	agentsPlanDraftGet: "agents:plan-draft-get",
 	agentsPlanDraftSave: "agents:plan-draft-save",
 	agentsPlanDraftApprove: "agents:plan-draft-approve",

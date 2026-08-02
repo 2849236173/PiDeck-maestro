@@ -1,5 +1,6 @@
+import { app } from "electron";
 import { execFile } from "node:child_process";
-import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MAESTRO_EXTENSION_PACKAGES } from "../../shared/types";
 import type { AppSettings, MaestroExtensionHealth, MaestroExtensionPackageStatus, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
@@ -37,6 +38,22 @@ export class ExtensionManager {
 		private readonly locator: PiLocator,
 		private readonly getSettings: SettingsProvider,
 	) {}
+
+	async ensureFastExtension(): Promise<void> {
+		const sourceRoot = app.isPackaged
+			? join(process.resourcesPath, "extensions")
+			: join(app.getAppPath(), "resources", "extensions");
+		const source = join(sourceRoot, "pi-deck-fast-tier.ts");
+		const destinationDir = join(this.agentDir, "extensions");
+		const destination = join(destinationDir, "pi-deck-fast-tier.ts");
+		try {
+			await readFile(source, "utf8");
+			await mkdir(destinationDir, { recursive: true });
+			await copyFile(source, destination);
+		} catch (error) {
+			throw new Error(`Failed to deploy PiDeck Fast extension: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
 
 	/** 将扩展文件边界切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
 	configureWsl(environment: WslEnvironment | null) {
@@ -244,7 +261,13 @@ export class ExtensionManager {
 
 	async checkPiUpdate(): Promise<PiUpdateCheckResult> {
 		try {
-			const status = await this.locator.check(this.getSettings().customPiPath);
+			const settings = this.getSettings();
+			const status = await this.locator.check(
+				settings.customPiPath,
+				settings.wslEnabled,
+				settings.wslDistro,
+				settings.wslUser,
+			);
 			if (!status.installed) return { hasUpdate: false, error: status.error ?? "pi 未安装" };
 			const latestVersion = await this.npmViewVersion("@earendil-works/pi-coding-agent");
 			return {
@@ -452,7 +475,13 @@ export class ExtensionManager {
 
 	private async detectPiVersion(): Promise<string | null> {
 		try {
-			const status = await this.locator.check(this.getSettings().customPiPath);
+			const settings = this.getSettings();
+			const status = await this.locator.check(
+				settings.customPiPath,
+				settings.wslEnabled,
+				settings.wslDistro,
+				settings.wslUser,
+			);
 			if (status.installed && status.version) {
 				this.piVersion = status.version;
 				return status.version;

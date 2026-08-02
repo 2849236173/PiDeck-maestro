@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Zap,
   Code,
   MessageCircle,
   MessageSquare,
@@ -84,6 +85,7 @@ import {
 } from "./agentListDisplay";
 import { resolveLocale, setI18nLocale, t } from "./i18n";
 import { mergeAgentRuntimeState } from "./utils/agentRuntimeState";
+import { supportsFastMode } from "./utils/modelFastMode";
 import { sameSessionSummaryList } from "./utils/sessionSummaryList";
 import {
   acknowledgeUnknownPrompt,
@@ -560,6 +562,7 @@ export function App() {
   >([]);
   const [composerModePickerOpen, setComposerModePickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
+  const [fastModeAvailable, setFastModeAvailable] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
   const sendBehaviorMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 如果用户在 Agent 忙碌时开始撰写，保持分段发送控件，避免 Agent 恰好结束时按钮在手边消失。
@@ -1659,6 +1662,14 @@ export function App() {
     ? runtimeStateByAgent[activeAgentId]
     : undefined;
   const activeRuntimeState = agentRuntimeState;
+  useEffect(() => {
+    // Fast is offered only when both the selected model and the service extension support it.
+    setFastModeAvailable(Boolean(
+      activeRuntimeState?.modelId &&
+      supportsFastMode(activeRuntimeState.modelId) &&
+      activeRuntimeState.fastModeSupported !== false,
+    ));
+  }, [activeRuntimeState?.modelId, activeRuntimeState?.fastModeSupported]);
   const activeProjectHasBusyAgent = Boolean(
     activeProjectId && displayAgents.some((agent) =>
       agent.projectId === activeProjectId && (
@@ -4572,6 +4583,11 @@ export function App() {
         model.id,
       );
       applyAgentRuntimeState(activeAgentId, state);
+      setFastModeAvailable(Boolean(
+        state.modelId &&
+        supportsFastMode(state.modelId) &&
+        state.fastModeSupported !== false,
+      ));
       setModelPickerOpen(false);
       return;
     }
@@ -4600,31 +4616,38 @@ export function App() {
     applyAgentRuntimeState(activeAgentId, state);
   }
 
-  async function openThinkingPicker() {
+  function openThinkingPicker() {
     setThinkingPickerOpen(true);
   }
 
+  async function toggleFastMode() {
+    if (!activeAgentId || isPendingAgentId(activeAgentId) || !activeRuntimeState || !fastModeAvailable) return;
+    try {
+      const state = await api.agents.setFastMode(activeAgentId, !activeRuntimeState.fastMode);
+      applyAgentRuntimeState(activeAgentId, state);
+    } catch (error) {
+      showToast(t("app.fastModeSwitchFailed", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
+
   async function selectThinking(level: string) {
-    // 有 agent → RPC 立即生效
     if (activeAgentId && !isPendingAgentId(activeAgentId)) {
       try {
         const state = await api.agents.setThinking(activeAgentId, level);
         applyAgentRuntimeState(activeAgentId, state);
         setThinkingPickerOpen(false);
         if (state.thinkingLevel && state.thinkingLevel !== level) {
-          showToast(
-            t("app.thinkingUnsupported", {
-              level,
-              fallback: state.thinkingLevel,
-            }),
-          );
+          showToast(t("app.thinkingUnsupported", {
+            level,
+            fallback: state.thinkingLevel,
+          }));
         }
       } catch (error) {
-        showToast(
-          t("app.thinkingSwitchFailed", {
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
+        showToast(t("app.thinkingSwitchFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }));
       }
     } else {
       setThinkingPickerOpen(false);
@@ -4660,6 +4683,12 @@ export function App() {
       ? [
           "用户不同意当前计划，请根据以下理由修改计划并重新展示确认：",
           action.reason,
+          `Plan draft: ${action.draft.path}`,
+        ].join("\n\n")
+      : action.kind === "discuss"
+      ? [
+          "用户希望就当前计划继续讨论（暂不修改计划文件）：",
+          action.message,
           `Plan draft: ${action.draft.path}`,
         ].join("\n\n")
       : [
@@ -8261,6 +8290,26 @@ export function App() {
                       const level = THINKING_LEVELS.find((item) => item.value === currentThinkingLevel);
                       return level ? t(level.labelKey) : currentThinkingLevel;
                     })()}
+                  </button>
+                )}
+                {activeRuntimeState && (
+                  <button
+                    type="button"
+                    className={`composer-bar-btn fast${activeRuntimeState.fastMode ? " active" : ""}`}
+                    disabled={isAgentBusy || isAgentStarting || !fastModeAvailable}
+                    onClick={() => void toggleFastMode()}
+                    title={t(
+                      fastModeAvailable
+                        ? "app.fastModeHint"
+                        : activeRuntimeState.fastModeSupported === false
+                          ? "app.fastModeExtensionUnavailable"
+                          : "app.fastModeUnavailable",
+                    )}
+                    aria-label={t("app.fastMode")}
+                    aria-pressed={activeRuntimeState.fastMode === true}
+                  >
+                    <Zap size={14} strokeWidth={2} aria-hidden="true" />
+                    <span>{t("app.fastMode")}</span>
                   </button>
                 )}
               </div>

@@ -150,6 +150,11 @@ export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
 	private readonly messages = new Map<string, ChatMessage[]>();
 
+	private readonly fastModeByAgent = new Map<string, boolean>();
+	private readonly fastModeMarkerPaths = new Map<string, string>();
+	private readonly fastModeMutations = new Map<string, Promise<void>>();
+	private fastExtensionReady: Promise<void> = Promise.resolve();
+	private fastExtensionAvailable = true;
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
 	/** 当前正在流式更新的 assistant 消息；tool 事件插入时仍要继续更新同一个回答块。 */
@@ -827,7 +832,18 @@ export class AgentManager {
 		);
 	}
 
+	setFastExtensionReady(ready: Promise<void>) {
+		// Until the extension bootstrap settles, the renderer must not offer a toggle
+		// that the backend could only reject during the same startup window.
+		this.fastExtensionAvailable = false;
+		this.fastExtensionReady = ready.then(
+			() => { this.fastExtensionAvailable = true; },
+			() => { this.fastExtensionAvailable = false; },
+		);
+	}
+
 	private async createUnlocked(input: CreateAgentInput) {
+		await this.fastExtensionReady;
 		const t0 = Date.now();
 		const project = this.getProject(input.projectId);
 		if (!project) throw new Error(`Project not found: ${input.projectId}`);
@@ -1035,6 +1051,7 @@ export class AgentManager {
 				| undefined;
 			tab.sessionId = data?.sessionId;
 			tab.sessionPath = data?.sessionFile ?? input.sessionPath;
+			await this.hydrateFastMode(id, tab.sessionPath);
 			tab.title =
 				input.title ||
 				data?.sessionName ||
@@ -1295,7 +1312,8 @@ export class AgentManager {
 		// 后续消息必须带 streamingBehavior 否则 pi 直接返回 error。这里自动兜底。
 		// images 用于传递粘贴/拖拽的图片，pi 会将 base64 图片直接传给支持视觉的模型。
 		try {
-			const promptIsExtensionCommand = await this.promptMatchesRegisteredExtensionCommand(runtime, agentMessage);
+			// Do not preflight get_commands here: extension discovery can be slow and
+			// must not delay submitting the user's prompt or the first model token.
 			const requestPayload: Record<string, unknown> = {
 				type: "prompt",
 				message: agentMessage,
@@ -1322,12 +1340,13 @@ export class AgentManager {
 				return { accepted: false, error: errorMessage };
 			}
 
-			if (promptIsExtensionCommand) {
-				// 机制：Pi 扩展命令可在 prompt 阶段直接执行并返回，不进入 agent run。
-				// 证据：@earendil-works/pi-coding-agent/dist/core/agent-session.js 中 AgentSession.prompt()
-				//      先调用 _tryExecuteExtensionCommand()；命中后 return，不再调用 _runAgentPrompt()。
-				// 推导：不能等 agent_end；只有 Pi get_state 明确报告无剩余工作时才恢复 idle。
-				this.scheduleIdleCheckAfterExtensionCommand(input.agentId);
+			if (agentMessage.trim().startsWith("/")) {
+				// Check after prompt submission. Extension commands can return without
+				// agent_end, so this preserves idle reconciliation without preflight latency.
+				const promptIsExtensionCommand = await this.promptMatchesRegisteredExtensionCommand(runtime, agentMessage);
+				if (promptIsExtensionCommand) {
+					this.scheduleIdleCheckAfterExtensionCommand(input.agentId);
+				}
 			}
 			return { accepted: true };
 		} catch (error) {
@@ -1899,6 +1918,8 @@ export class AgentManager {
 			modelId: model?.id,
 			thinkingLevel: state?.thinkingLevel,
 			isStreaming: state?.isStreaming,
+			fastMode: this.fastModeByAgent.get(agentId) ?? false,
+			fastModeSupported: this.fastExtensionAvailable,
 			isCompacting:
 				state?.isCompacting ||
 				this.rpcCompactingAgents.has(agentId) ||
@@ -1985,7 +2006,7 @@ export class AgentManager {
 		});
 	}
 
-	private async emitRuntimeState(agentId: string) {
+	private async emitRuntimeState(agentId: string): Promise<AgentRuntimeState | undefined> {
 		try {
 			const state = await this.getRuntimeState(agentId);
 			const latestToolSequence = this.toolStateSequenceByAgent.get(agentId) ?? 0;
@@ -1995,8 +2016,10 @@ export class AgentManager {
 			state.executingToolName = this.toolExecutingByAgent.get(agentId) ?? undefined;
 			state.toolStateSequence = latestToolSequence;
 			this.emit(ipcChannels.agentsRuntimeState, { agentId, state });
+			return state;
 		} catch {
 			// 运行态刷新失败不影响主流程；下一次轮询或事件会继续同步。
+			return undefined;
 		}
 	}
 
@@ -2135,6 +2158,70 @@ export class AgentManager {
 			throw new Error(response.error ?? "Failed to cycle thinking level");
 		}
 		return this.getRuntimeState(agentId);
+	}
+
+	private fastModeMarkerPath(sessionPath: string): string {
+		return `${this.toSessionHostPath(sessionPath)}.fast-mode`;
+	}
+
+	private async hydrateFastMode(agentId: string, sessionPath?: string): Promise<boolean> {
+		this.fastModeMarkerPaths.delete(agentId);
+		if (!sessionPath) {
+			this.fastModeByAgent.set(agentId, false);
+			return false;
+		}
+		const markerPath = this.fastModeMarkerPath(sessionPath);
+		this.fastModeMarkerPaths.set(agentId, markerPath);
+		try {
+			const marker = await readFile(markerPath, "utf8");
+			const enabled = marker.trim() === "fast";
+			this.fastModeByAgent.set(agentId, enabled);
+			return enabled;
+		} catch {
+			this.fastModeByAgent.set(agentId, false);
+			return false;
+		}
+	}
+
+	private async writeFastModeMarker(agentId: string, enabled: boolean): Promise<void> {
+		const runtime = this.requireRuntime(agentId);
+		if (!runtime.tab.sessionPath) {
+			throw new Error("Fast mode requires a persisted session");
+		}
+		const markerPath = this.fastModeMarkerPath(runtime.tab.sessionPath);
+		if (enabled) {
+			await writeFile(markerPath, "fast\n", "utf8");
+		} else {
+			await rm(markerPath, { force: true });
+		}
+		this.fastModeMarkerPaths.set(agentId, markerPath);
+	}
+
+	private clearFastModeCache(agentId: string) {
+		this.fastModeByAgent.delete(agentId);
+		this.fastModeMarkerPaths.delete(agentId);
+	}
+
+	async setFastMode(agentId: string, enabled: boolean) {
+		this.requireRuntime(agentId);
+		await this.fastExtensionReady;
+		if (!this.fastExtensionAvailable) {
+			throw new Error("Fast mode extension is unavailable");
+		}
+		const previous = this.fastModeMutations.get(agentId) ?? Promise.resolve();
+		const mutation = previous.catch(() => undefined).then(async () => {
+			await this.writeFastModeMarker(agentId, enabled);
+			this.fastModeByAgent.set(agentId, enabled);
+		});
+		this.fastModeMutations.set(agentId, mutation);
+		try {
+			await mutation;
+		} finally {
+			if (this.fastModeMutations.get(agentId) === mutation) {
+				this.fastModeMutations.delete(agentId);
+			}
+		}
+		return (await this.emitRuntimeState(agentId)) ?? this.getRuntimeState(agentId);
 	}
 
 	async setThinking(agentId: string, level: string) {
@@ -2835,6 +2922,7 @@ export class AgentManager {
 
 		// 停止旧进程并清理状态
 		runtime.process.stop();
+		this.clearFastModeCache(agentId);
 		this.agents.delete(agentId);
 		this.messages.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
@@ -2943,7 +3031,9 @@ export class AgentManager {
 			.request({ type: "get_state" })
 			.catch(() => ({ data: undefined }));
 		const state = stateResponse.data as { sessionFile?: string; sessionName?: string } | undefined;
+		this.clearFastModeCache(agentId);
 		if (state?.sessionFile) runtime.tab.sessionPath = state.sessionFile;
+		await this.hydrateFastMode(agentId, runtime.tab.sessionPath);
 		if (state?.sessionName) runtime.tab.title = state.sessionName;
 		await this.loadMessages(agentId).catch(() => undefined);
 		this.emitState();
@@ -3185,7 +3275,10 @@ export class AgentManager {
 		// 标记用户主动停止，退出处理器将跳过自动重连
 		this.userInitiatedStop.add(agentId);
 		const process = runtime.process;
+		this.clearFastModeCache(agentId);
 		this.agents.delete(agentId);
+		this.fastModeByAgent.delete(agentId);
+		this.fastModeMarkerPaths.delete(agentId);
 		this.messages.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
@@ -3367,7 +3460,7 @@ export class AgentManager {
 	 * Pi 的 agent_end 是当前回合的硬边界；如果上游漏发工具结束事件，
 	 * 子代理不能继续保持 running/finalizing，否则只能等 stalled 计时器兜底。
 	 */
-	private finalizeSubAgentsAfterAgentEnd(
+	private async finalizeSubAgentsAfterAgentEnd(
 		agentId: string,
 		turnOutcome: "completed" | "failed" | "cancelled",
 		willRetry = false,
@@ -3383,6 +3476,10 @@ export class AgentManager {
 			// 只收敛已脱离 activeToolCalls 的孤立项，避免把重试中的子代理误杀。
 			if (willRetry && (!activeToolCalls || activeToolCalls.has(subAgent.parentToolCallId))) continue;
 			if (subAgent.status !== "pending" && subAgent.status !== "running" && subAgent.status !== "finalizing") continue;
+			// agent_end can race the directory watcher. Consume only this file's
+			// unread JSONL tail before converging, so a just-written stopReason=error
+			// cannot be lost without turning every tool update into a disk scan.
+			if (subAgent.sessionFile) await this.extractSubAgentInfo(subAgent);
 			const hasSessionFailure = Boolean(subAgent.sessionFile && this.subAgentScanState.get(subAgent.sessionFile)?.hasError);
 			const status = hasSessionFailure ? "failed" : turnOutcome;
 			subAgents.set(id, {
@@ -3906,10 +4003,13 @@ export class AgentManager {
 		}
 		this.agents.clear();
 		this.messages.clear();
+		this.fastModeByAgent.clear();
+		this.fastModeMarkerPaths.clear();
+		this.fastModeMutations.clear();
 		this.emitState();
 	}
 
-	private handlePiEvent(agentId: string, event: unknown) {
+	private async handlePiEvent(agentId: string, event: unknown) {
 		// 通知本地监听器（FeishuBridge 等主进程内部订阅）
 		for (const listener of this.localEventListeners) {
 			try { listener(agentId, event); } catch {}
@@ -4054,7 +4154,7 @@ export class AgentManager {
 			const retryAttempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
 			const endedWithUnknownError =
 				typed.stopReason === "error" || errorMessages.length > 0;
-			this.finalizeSubAgentsAfterAgentEnd(
+			await this.finalizeSubAgentsAfterAgentEnd(
 				agentId,
 				typed.stopReason === "aborted"
 					? "cancelled"
@@ -4725,9 +4825,9 @@ export class AgentManager {
 		}
 
 		this.messages.set(agentId, list);
-		// upsertAssistantMessage 被 text_delta/thinking_delta 高频调用，走节流合并；
-		// message_end/thinking_end 等终态调用方会在调用后显式 flush，保证最终状态及时。
-		this.scheduleMessageEmit(agentId);
+		// The first visible assistant chunk should not wait for the streaming batch window;
+		// later deltas remain coalesced to avoid flooding IPC and React.
+		this.scheduleMessageEmit(agentId, !existing && list[list.length - 1]?.role === "assistant");
 	}
 
 	private upsertToolMessage(
