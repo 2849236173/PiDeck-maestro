@@ -33,7 +33,14 @@ test("parent tool end finalizes remaining active teammate placeholders", () => {
   assert.match(manager, /toolStatus === "done" && snapshots\.length === 0 \? "finalizing"/);
   assert.match(manager, /parent tool 进入终态后，收敛仍挂在同一 toolCallId/);
   assert.match(manager, /subAgent\.parentToolCallId !== toolCallId/);
-  assert.match(manager, /toolStatus === "error" \? "failed" : "completed"/);
+  assert.match(manager, /toolStatus === "error" \? "failed"/);
+});
+
+test("agent end finalizes child placeholders when the upstream tool end is missing", () => {
+  const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+  assert.match(manager, /finalizeSubAgentsAfterAgentEnd\(\s*agentId/);
+  assert.match(manager, /turnOutcome: "completed" \| "failed" \| "cancelled"/);
+  assert.match(manager, /cached: true/);
 });
 
 test("teammate lifecycle creates immediate placeholders and does not complete on assistant stop", () => {
@@ -73,6 +80,19 @@ test("sub-agent details reuse rich assistant rendering and separate active count
   assert.doesNotMatch(panel, /typeof task\.subject === 'string' \? task\.subject : ''/);
 });
 
+test("sub-agent terminal state prioritizes child errors and progress-based stalls", () => {
+  const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+
+  assert.match(manager, /hasSessionFailure = Boolean\(existing\?\.sessionFile/);
+  assert.match(manager, /hasRuntimeFailure \|\| hasSessionFailure \|\| toolStatus === "error"/);
+  assert.match(manager, /if \(state\.hasError\) \{[\s\S]*?subAgent\.status = 'failed'/);
+  assert.match(manager, /willRetry = false/);
+  assert.match(manager, /if \(willRetry && \(!activeToolCalls \|\| activeToolCalls\.has\(subAgent\.parentToolCallId\)\)\) continue/);
+  assert.match(manager, /const hasProgressField = \[/);
+  assert.match(manager, /if \(!hasProgressField\) return/);
+  assert.match(manager, /const stalled = now - subAgent\.lastUpdate > AgentManager\.SUB_AGENT_STALL_MS/);
+  assert.doesNotMatch(manager, /const stalled = Boolean\(subAgent\.sessionFile\)/);
+});
 test("sub-agent detail stays content-sized and tool counting supports Pi session records", () => {
   const detailModal = readFileSync("src/renderer/src/components/app/SubAgentDetailModal.tsx", "utf8");
   const styles = readFileSync("src/renderer/src/styles.css", "utf8");

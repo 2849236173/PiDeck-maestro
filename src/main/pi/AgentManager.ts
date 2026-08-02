@@ -3250,11 +3250,13 @@ export class AgentManager {
 				?? byToolTask.get(`${toolCallId}:${taskIndex}`);
 			const id = existing?.id ?? correlationId ?? `tool:${toolCallId}:${taskIndex}`;
 			const runtimeStatus = String(item.status ?? "").toLowerCase();
-			// parent tool 已结束且没有结构化进度时，宁可将占位标 finalizing，
-			// 再由下方收敛逻辑给出终态，避免无 snapshots 时误标 completed。
+			const hasRuntimeFailure = runtimeStatus === "failed" || runtimeStatus === "error" || runtimeStatus === "exception";
+			// 失败信号优先于父工具的 done：子会话可能已经写入 stopReason=error，
+			// 此时不能让父工具的成功结束覆盖子代理真实结果。
+			const hasSessionFailure = Boolean(existing?.sessionFile && this.subAgentScanState.get(existing.sessionFile)?.hasError);
 			const status: import('../../shared/types').SubAgentStatus =
-				runtimeStatus === "completed" ? "completed" :
-				runtimeStatus === "failed" || toolStatus === "error" ? "failed" :
+				runtimeStatus === "completed" && !hasRuntimeFailure && !hasSessionFailure ? "completed" :
+				hasRuntimeFailure || hasSessionFailure || toolStatus === "error" ? "failed" :
 				runtimeStatus === "cancelled" ? "cancelled" :
 				runtimeStatus === "finalizing" || item.resultReadyAt ? "finalizing" :
 				toolStatus === "done" && snapshots.length === 0 ? "finalizing" :
@@ -3299,8 +3301,6 @@ export class AgentManager {
 		// parent tool 进入终态后，收敛仍挂在同一 toolCallId 上的 active/finalizing 子项，
 		// 避免 agent_end 丢失时面板长期显示“正在收尾”。
 		if (toolCallId && (toolStatus === "done" || toolStatus === "error")) {
-			const terminalStatus: import('../../shared/types').SubAgentStatus =
-				toolStatus === "error" ? "failed" : "completed";
 			for (const [id, subAgent] of subAgents.entries()) {
 				if (subAgent.parentToolCallId !== toolCallId) continue;
 				if (
@@ -3310,6 +3310,9 @@ export class AgentManager {
 				) {
 					continue;
 				}
+				const hasSessionFailure = Boolean(subAgent.sessionFile && this.subAgentScanState.get(subAgent.sessionFile)?.hasError);
+				const terminalStatus: import('../../shared/types').SubAgentStatus =
+					hasSessionFailure || toolStatus === "error" ? "failed" : "completed";
 				subAgents.set(id, {
 					...subAgent,
 					status: terminalStatus,
@@ -3321,6 +3324,41 @@ export class AgentManager {
 		}
 
 		this.emitSubAgentState(agentId);
+	}
+
+	/**
+	 * 收敛没有收到 tool_execution_end 的子代理占位。
+	 * Pi 的 agent_end 是当前回合的硬边界；如果上游漏发工具结束事件，
+	 * 子代理不能继续保持 running/finalizing，否则只能等 stalled 计时器兜底。
+	 */
+	private finalizeSubAgentsAfterAgentEnd(
+		agentId: string,
+		turnOutcome: "completed" | "failed" | "cancelled",
+		willRetry = false,
+	) {
+		const subAgents = this.subAgentsByAgent.get(agentId);
+		if (!subAgents) return;
+		const now = Date.now();
+		let changed = false;
+		const activeToolCalls = this.activeToolCallsByAgent.get(agentId);
+		for (const [id, subAgent] of subAgents.entries()) {
+			if (!subAgent.parentToolCallId) continue;
+			// Pi 原生重试时，仍活跃的父工具可能继续产生合法子生命周期；
+			// 只收敛已脱离 activeToolCalls 的孤立项，避免把重试中的子代理误杀。
+			if (willRetry && (!activeToolCalls || activeToolCalls.has(subAgent.parentToolCallId))) continue;
+			if (subAgent.status !== "pending" && subAgent.status !== "running" && subAgent.status !== "finalizing") continue;
+			const hasSessionFailure = Boolean(subAgent.sessionFile && this.subAgentScanState.get(subAgent.sessionFile)?.hasError);
+			const status = hasSessionFailure ? "failed" : turnOutcome;
+			subAgents.set(id, {
+				...subAgent,
+				status,
+				cached: true,
+				endTime: subAgent.endTime ?? now,
+				lastUpdate: now,
+			});
+			changed = true;
+		}
+		if (changed) this.emitSubAgentState(agentId);
 	}
 
 	/** 启动/重启 maestro UCL（GUI SSE）通道；未分配端口时静默跳过 */
@@ -3377,11 +3415,16 @@ export class AgentManager {
 						+ (typeof info.outputTokens === "number" ? info.outputTokens : 0)
 					: undefined;
 			const durationMs = typeof info.durationMs === "number" ? info.durationMs : undefined;
-			if (tokens === undefined && durationMs === undefined) return;
+			const hasProgressField = [
+				"status", "message", "toolCount", "tokens", "inputTokens", "outputTokens", "durationMs",
+			].some((key) => Object.prototype.hasOwnProperty.call(info, key));
+			if (!hasProgressField) return;
 			subAgents.set(id, {
 				...subAgent,
 				...(tokens !== undefined ? { tokens } : {}),
 				...(durationMs !== undefined ? { durationMs } : {}),
+				lastUpdate: Date.now(),
+				...(subAgent.stalled ? { stalled: undefined, endTime: undefined } : {}),
 			});
 			this.emitSubAgentState(agentId);
 			return;
@@ -3699,6 +3742,14 @@ export class AgentManager {
 			subAgent.toolCount = state.toolCount;
 			if (state.lastMessage) subAgent.lastMessage = state.lastMessage;
 
+			if (state.hasError) {
+				// stopReason=error 是子会话的权威失败信号，即使父工具随后报告 done，
+				// 也必须进入失败历史，不能停留在 finalizing 或被覆盖为 completed。
+				subAgent.status = 'failed';
+				subAgent.cached = true;
+				subAgent.endTime = subAgent.endTime ?? Date.now();
+			}
+
 			// assistant stop 只表示模型结果已经可用；teammate 仍可能等待 agent_end、
 			// 结构化输出或 handoff barrier。实时追踪的记录必须保留 finalizing，
 			// 只有工具结构化进度才能给出权威终态；历史孤立文件则沿用 completed。
@@ -3714,8 +3765,10 @@ export class AgentManager {
 	}
 
 	/** 发送子代理状态更新到前端 */
-	/** 停滞判定阈值：活跃子代理的会话文件超过此时长未更新，视为疑似停滞（进程消失/通知丢失） */
-	private static readonly SUB_AGENT_STALL_MS = 120_000;
+	/** 停滞判定阈值：活跃子代理超过此时长没有任何进展信号，视为疑似停滞。
+	 * 这是无进展上限，不是主会话 timeout，也不会把子代理静默改成成功。 */
+	// 子代理保持 Pi 的原生 timeout 配置，不因主会话的重试策略而人为延长空闲等待。
+	private static readonly SUB_AGENT_STALL_MS = 300_000;
 
 	/**
 	 * 构建子代理状态快照。活跃条目附加 stalled 标记：
@@ -3729,7 +3782,7 @@ export class AgentManager {
 
 		for (const subAgent of subAgents.values()) {
 			if (subAgent.status === 'pending' || subAgent.status === 'running' || subAgent.status === 'finalizing') {
-				const stalled = Boolean(subAgent.sessionFile) && now - subAgent.lastUpdate > AgentManager.SUB_AGENT_STALL_MS;
+				const stalled = now - subAgent.lastUpdate > AgentManager.SUB_AGENT_STALL_MS;
 				// stalled 仍保留活跃状态以支持恢复，但显示耗时冻结在越过停滞阈值的时刻；
 				// 后续文件更新会移除派生 endTime 并恢复实时计时。
 				running.push(stalled
@@ -3965,6 +4018,13 @@ export class AgentManager {
 			const retryAttempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
 			const endedWithUnknownError =
 				typed.stopReason === "error" || errorMessages.length > 0;
+			this.finalizeSubAgentsAfterAgentEnd(
+				agentId,
+				typed.stopReason === "aborted"
+					? "cancelled"
+					: errorMsg || endedWithUnknownError ? "failed" : "completed",
+				typed.willRetry === true,
+			);
 			const deckRetryInProgress =
 				retryAttempt > 0 && this.pendingDeckModelRetries.has(agentId);
 			const canDeckRetry =
