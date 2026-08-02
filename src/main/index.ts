@@ -94,6 +94,7 @@ import { resolveLocalPiAgentDir, resolvePiAgentDir } from "./pi/PiAgentPaths";
 import { PiLocator } from "./pi/PiLocator";
 import { PiRpcClient } from "./pi/PiRpcClient";
 import { testPiProxy } from "./pi/PiProxyTester";
+import { normalizePiRuntimeSettings } from "./pi/PiRuntimeSettings";
 import { SessionScanner } from "./sessions/SessionScanner";
 import { SubAgentSessionRegistry } from "./sessions/SubAgentSessionRegistry";
 import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
@@ -3719,6 +3720,11 @@ app.whenReady().then(async () => {
 	// 启动关键路径只等设置加载与 IPC 注册，尽快 createWindow。
 	// 扩展部署、WSL 同步、代理/Web 服务/宠物等后置，避免打包后点击启动要先等一长串磁盘/网络 IO。
 	await settingsStore.load();
+	// 本地 settings.json 只有一次小文件读写，必须在开放 Agent IPC 前完成，
+	// 避免用户启动后的首个模型请求仍沿用过短 timeout 或关闭的 Pi 原生重试。
+	await ensurePiSettingsDefaults(resolveLocalPiAgentDir()).catch((error) => {
+		void appLogger.warn("settings", "Failed to ensure local pi runtime settings", error);
+	});
 	registerIpc();
 	registerFeishuIpc();
 	await createWindow();
@@ -3824,8 +3830,7 @@ async function runPostWindowStartupTasks(): Promise<void> {
 		})
 		.catch(() => undefined);
 
-	// 启动后异步检查 RPC 超时时间，如果小于 600 秒则自动修正为 600 秒
-	// 避免用户配置的过小超时（如 30 秒）导致启动或命令执行频繁超时
+	// 启动后异步检查并规范化 Pi 重试设置；不覆盖用户配置的 RPC/流空闲超时。
 	setTimeout(() => {
 		void settingsStore.ensureRpcTimeoutMinimum().catch((error) => {
 			void appLogger.warn("settings", "Failed to ensure rpcTimeout minimum", error);
@@ -3864,7 +3869,6 @@ async function ensurePiSettingsDefaults(configDir: string, piVersionHint?: strin
 		hideThinkingBlock: false,
 		defaultProjectTrust: "ask",
 		compaction: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
-		retry: { enabled: true, maxRetries: 3 },
 	};
 
 	if (piVersionHint && !current.lastChangelogVersion) {
@@ -3878,6 +3882,10 @@ async function ensurePiSettingsDefaults(configDir: string, piVersionHint?: strin
 			changed = true;
 		}
 	}
+
+	const normalized = normalizePiRuntimeSettings(current);
+	current = normalized.settings;
+	changed ||= normalized.changed;
 
 	if (changed) {
 		await mkdir(configDir, { recursive: true });

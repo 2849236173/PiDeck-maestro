@@ -990,6 +990,19 @@ export class AgentManager {
 		try {
 			void this.appLogger?.info("agent", "Agent get_state request completed", { agentId: id });
 			const state = await statePromise;
+			// Pi 原生重试会从当前上下文重新发起失败的模型调用，因此即使本轮已经执行工具，
+			// 也不会像整轮 prompt 重放那样重复副作用。启动时显式开启，兼容用户旧配置中
+			// retry.enabled=false 的情况；最大次数和退避参数由启动前规范化的 settings.json 提供。
+			const retryResponse = await client.request(
+				{ type: "set_auto_retry", enabled: true },
+				10_000,
+			);
+			if (!retryResponse.success) {
+				void this.appLogger?.warn("agent", "Pi auto retry could not be enabled", {
+					agentId: id,
+					error: retryResponse.error,
+				});
+			}
 			const t4 = Date.now();
 			void this.appLogger?.info("agent", "Agent get_state completed", {
 				agentId: id,
@@ -4895,9 +4908,44 @@ export class AgentManager {
 			// agent_start 会把 pending 状态更新为 success；这里保持 running，
 			// 避免重试 RPC 尚未开始时 UI 提前显示完成。
 		} catch (error) {
-			this.pendingDeckModelRetries.delete(agentId);
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			const attempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
+			// 重试准备、switch_session 或 prompt preflight 本身也可能遇到瞬时网络/RPC
+			// 错误。它们不能直接消耗掉整个重试生命周期，否则用户只会看到一次重试。
+			if (
+				isRetryableModelRequestError(errorMessage) &&
+				attempt < DECK_MODEL_RETRY_POLICY.maxRetries
+			) {
+				const nextAttempt = attempt + 1;
+				const nextDelayMs = deckModelRetryDelayMs(nextAttempt);
+				this.deckModelRetryAttempts.set(agentId, nextAttempt);
+				this.pendingDeckModelRetries.add(agentId);
+				this.upsertRetryStatusMessage(
+					agentId,
+					{
+						attempt: nextAttempt,
+						maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+						errorMessage,
+						delayMs: nextDelayMs,
+						phase: "waiting",
+					},
+					"running",
+				);
+				const runtime = this.agents.get(agentId);
+				if (runtime) runtime.tab.status = "running";
+				this.emitState();
+				void this.appLogger?.warn("agent", "Deck model retry rescheduled after retry-path failure", {
+					agentId,
+					attempt: nextAttempt,
+					maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries,
+					delayMs: nextDelayMs,
+					error: errorMessage,
+				});
+				void this.retryLastPromptAfterModelError(agentId, nextDelayMs);
+				return;
+			}
+
+			this.pendingDeckModelRetries.delete(agentId);
 			this.upsertRetryStatusMessage(
 				agentId,
 				{ attempt, maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries, errorMessage, phase: "error" },

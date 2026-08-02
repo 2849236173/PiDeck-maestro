@@ -120,6 +120,16 @@ test("Deck retries transient model failures five times with progressive delays",
   assert.match(agentEnd, /phase: "success"[\s\S]*?"success"/);
   assert.match(agentEnd, /phase: "error"[\s\S]*?"error"/);
 
+  const retryPath = sourceBetween(
+    "private async retryLastPromptAfterModelError",
+    "private addDetailedErrorMessage",
+  );
+  assert.match(retryPath, /isRetryableModelRequestError\(errorMessage\)/);
+  assert.match(retryPath, /attempt < DECK_MODEL_RETRY_POLICY\.maxRetries/);
+  assert.match(retryPath, /nextAttempt = attempt \+ 1/);
+  assert.match(retryPath, /pendingDeckModelRetries\.add\(agentId\)/);
+  assert.match(retryPath, /retryLastPromptAfterModelError\(agentId, nextDelayMs\)/);
+
   const agentSettled = sourceBetween(
     'if (typed.type === "agent_settled")',
     'typed.type === "message_update"',
@@ -130,6 +140,8 @@ test("Deck retries transient model failures five times with progressive delays",
   const isRetryable = loadRetryClassifier();
   assert.equal(isRetryable("terminated"), true);
   assert.equal(isRetryable("Upstream stream terminated"), true);
+  assert.equal(isRetryable("fetch failed"), true);
+  assert.equal(isRetryable("stream_read_error: connection closed"), true);
   assert.equal(isRetryable("Request cancelled and terminated by user"), false);
 });
 
