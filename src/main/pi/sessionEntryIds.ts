@@ -97,15 +97,39 @@ export function collectDescendantEntryIds(
 	return removeIds;
 }
 
+export type ResendTextCandidate = string | readonly string[];
+
+function normalizeTextCandidates(text: ResendTextCandidate): string[] {
+	return [...new Set((Array.isArray(text) ? text : [text]).filter((value): value is string => typeof value === "string"))];
+}
+
+function isImagePlaceholderCandidate(candidates: string[], allowImageFallback: boolean): boolean {
+	return allowImageFallback && candidates.includes("[图片]");
+}
+
+function isImageUserMessage(
+	message: { content?: unknown } | undefined,
+	extractText: (content: unknown) => string,
+): boolean {
+	if (!message) return false;
+	const content = message.content;
+	if (!Array.isArray(content)) return !extractText(content).trim();
+	return content.some((block) => block && typeof block === "object" && (block as { type?: unknown }).type === "image");
+}
+
 /**
  * 在 JSONL 中按「角色 + 文本」找最后一次匹配的用户消息行。
- * 用于乐观更新消息（无 entryId）的重发定位：优先最后一次，避免重复文案命中更早的历史。
+ * 重试时传入 agentMessage 和 UI 文本两个候选值：前者是实际落盘正文，后者只用于
+ * 兼容旧会话或未能保留宿主包装的记录。图片消息允许匹配空文本/默认描述，和根节点校验规则一致。
  */
 export function findLastUserMessageLine(
 	lines: string[],
-	text: string,
+	text: ResendTextCandidate,
 	extractText: (content: unknown) => string,
+	options: { allowImageFallback?: boolean } = {},
 ): { lineIndex: number; entry: Record<string, unknown> } | null {
+	const candidates = normalizeTextCandidates(text);
+	const allowImageFallback = isImagePlaceholderCandidate(candidates, options.allowImageFallback === true);
 	let found: { lineIndex: number; entry: Record<string, unknown> } | null = null;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]?.trim();
@@ -116,11 +140,11 @@ export function findLastUserMessageLine(
 			const message = entry.message as { role?: string; content?: unknown } | undefined;
 			if (message?.role !== "user") continue;
 			const entryText = extractText(message.content);
-			if (entryText === text) {
+			if (candidates.includes(entryText) || (allowImageFallback && isImageUserMessage(message, extractText))) {
 				found = { lineIndex: i, entry };
 			}
 		} catch {
-			// 跳过
+			// 跳过无法解析的行
 		}
 	}
 	return found;
@@ -132,18 +156,22 @@ export function findLastUserMessageLine(
  */
 export function assertResendRootEntry(
 	entry: Record<string, unknown>,
-	expectedText: string,
+	expectedText: ResendTextCandidate,
 	extractText: (content: unknown) => string,
+	options: { allowImageFallback?: boolean } = {},
 ): void {
 	const message = entry.message as { role?: string; content?: unknown } | undefined;
 	if (!message || message.role !== "user") {
 		throw new Error("Resend root must be a user message entry");
 	}
+	const candidates = normalizeTextCandidates(expectedText);
 	const entryText = extractText(message.content);
-	// 图片消息桌面端可能显示为「[图片]」，与 JSONL 原文不完全一致时放宽
-	if (entryText !== expectedText && expectedText !== "[图片]") {
+	// 图片消息桌面端可能显示为「[图片]」，或被 pi 规范化为空文案/默认描述。
+	const imageFallback = isImagePlaceholderCandidate(candidates, options.allowImageFallback === true)
+		&& isImageUserMessage(message, extractText);
+	if (!candidates.includes(entryText) && !imageFallback) {
 		throw new Error(
-			`Resend root text mismatch: expected ${JSON.stringify(expectedText.slice(0, 80))}, got ${JSON.stringify(entryText.slice(0, 80))}`,
+			`Resend root text mismatch: expected ${JSON.stringify(candidates[0]?.slice(0, 80) ?? "")}, got ${JSON.stringify(entryText.slice(0, 80))}`,
 		);
 	}
 }

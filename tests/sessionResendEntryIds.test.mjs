@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
 	alignEntryIdsForDisplayMessages,
@@ -15,6 +16,14 @@ function extractText(content) {
 		.map((c) => c.text ?? "")
 		.join("");
 }
+
+test("AgentManager binds the persisted entryId back to the optimistic message", () => {
+	const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+	assert.match(manager, /const optimisticMessage = nextMessages\.find\(\(message\) => message\.id === lastPrompt\.messageId\)/);
+	assert.match(manager, /this\.extractText\(lastPrompt\.agentMessage\)/);
+	assert.match(manager, /entryId: historyMessage\.meta\.entryId/);
+	assert.doesNotMatch(manager, /lastPrompt\.messageId = historyMessage\.id/);
+});
 
 test("takeActiveEntryId always advances even when caller skips render", () => {
 	const ids = ["u1", "a_empty", "t1", "u2"];
@@ -136,6 +145,35 @@ test("wrong early root would wipe history — assertResendRootEntry blocks non-u
 		() => assertResendRootEntry(wrongUser, "resend-me", extractText),
 		/text mismatch/,
 	);
+});
+
+test("findLastUserMessageLine accepts the persisted agentMessage before the UI text", () => {
+	const lines = [
+		JSON.stringify({
+			type: "message",
+			id: "u-plan",
+			message: { role: "user", content: [{ type: "text", text: "<host>\nPlan instructions\nactual prompt" }] },
+		}),
+	];
+	const found = findLastUserMessageLine(
+		lines,
+		["<host>\nPlan instructions\nactual prompt", "actual prompt"],
+		extractText,
+	);
+	assert.equal(found?.entry.id, "u-plan");
+});
+
+test("findLastUserMessageLine accepts image entries for an image-only optimistic message", () => {
+	const lines = [
+		JSON.stringify({
+			type: "message",
+			id: "u-image",
+			message: { role: "user", content: [{ type: "image", data: "base64" }] },
+		}),
+	];
+	const found = findLastUserMessageLine(lines, "[图片]", extractText, { allowImageFallback: true });
+	assert.equal(found?.entry.id, "u-image");
+	assert.doesNotThrow(() => assertResendRootEntry(found.entry, "[图片]", extractText, { allowImageFallback: true }));
 });
 
 test("findLastUserMessageLine prefers the latest duplicate text", () => {

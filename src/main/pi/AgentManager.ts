@@ -557,6 +557,27 @@ export class AgentManager {
 			retryMessageId ? new Set([retryMessageId]) : undefined,
 		);
 		this.messages.set(agentId, nextMessages);
+		const lastPrompt = this.lastPromptByAgent.get(agentId);
+		if (lastPrompt) {
+			// RPC 历史消息带有 pi 的 entryId；将它绑定回乐观气泡后，后续 Deck 重试可直接按
+			// JSONL 根节点定位。匹配同时使用 UI 文本和 extractMessageText 的去宿主结果，
+			// 覆盖 Plan/飞书等 agentMessage 与 UI 文案不同的场景。
+			const optimisticMessage = nextMessages.find((message) => message.id === lastPrompt.messageId);
+			const persistedTextCandidates = new Set([
+				optimisticMessage?.text,
+				this.extractText(lastPrompt.agentMessage),
+			].filter((text): text is string => Boolean(text)));
+			const historyMessage = [...messages].reverse().find((message) =>
+				message.role === "user" && message.meta?.entryId &&
+				persistedTextCandidates.has(message.text),
+			);
+			if (optimisticMessage && historyMessage?.meta?.entryId) {
+				optimisticMessage.meta = {
+					...optimisticMessage.meta,
+					entryId: historyMessage.meta.entryId,
+				};
+			}
+		}
 		this.refreshAutoTitle(agentId);
 		this.scheduleMessageEmit(agentId, true);
 		return nextMessages;
@@ -2348,6 +2369,8 @@ export class AgentManager {
 		lines: string[],
 		messages: ChatMessage[],
 		msg: ChatMessage,
+		matchText: string | readonly string[] = msg.text,
+		matchOptions: { allowImageFallback?: boolean } = {},
 	): { lineIndex: number; entry: Record<string, any> } {
 		const entryId = msg.meta?.entryId as string | undefined;
 
@@ -2394,7 +2417,12 @@ export class AgentManager {
 		// 重发若绑到更早 root 会把中间整段对话当后代删掉。
 		console.log(`[locateJsonlEntry] scheme3 scanning by role=${msg.role} + text match`);
 		if (msg.role === "user") {
-			const last = findLastUserMessageLine(lines, msg.text, (content) => this.extractText(content));
+			const last = findLastUserMessageLine(
+				lines,
+				matchText,
+				(content) => this.extractText(content),
+				matchOptions,
+			);
 			if (last) {
 				console.log(`[locateJsonlEntry] scheme3 last-user found at line=${last.lineIndex}`);
 				return last;
@@ -2660,28 +2688,36 @@ export class AgentManager {
 			const raw = await readFile(sessionHostPath, "utf8").catch(() => "");
 			if (!raw) throw new Error("Session file is empty");
 			const lines = raw.split(/\r?\n/);
+			const original = this.lastPromptByAgent.get(agentId);
+			const resendTexts = original?.messageId === messageId
+				? [original.agentMessage, msg.text]
+				: [msg.text];
+			const resendOptions = { allowImageFallback: Boolean(msg.images?.length) };
 			let lineIndex = -1;
 			let entry: Record<string, any>;
 			try {
-				const located = this.locateJsonlEntry(lines, messages, msg);
+				const located = this.locateJsonlEntry(lines, messages, msg, resendTexts, resendOptions);
 				lineIndex = located.lineIndex;
 				entry = located.entry;
 				// entryId 错位时可能定位到 assistant 或更早的 user；
-				// 校验失败则回退到「最后一条同文案 user」，禁止带着错误根继续截断。
-				assertResendRootEntry(entry, msg.text, (content) => this.extractText(content));
+				// 校验失败则回退到「最后一条候选正文 user」，禁止带着错误根继续截断。
+				assertResendRootEntry(entry, resendTexts, (content) => this.extractText(content), resendOptions);
 			} catch (locateError) {
-				const fallback = findLastUserMessageLine(lines, msg.text, (content) =>
-					this.extractText(content),
+				const fallback = findLastUserMessageLine(
+					lines,
+					resendTexts,
+					(content) => this.extractText(content),
+					resendOptions,
 				);
 				if (!fallback) throw locateError;
-				void this.appLogger?.warn("agent", "Prepare resend: entry locate mismatch, using last text match", {
+				void this.appLogger?.warn("agent", "Prepare resend: entry locate mismatch, using last candidate match", {
 					agentId,
 					messageId,
 					error: locateError instanceof Error ? locateError.message : String(locateError),
 				});
 				lineIndex = fallback.lineIndex;
 				entry = fallback.entry;
-				assertResendRootEntry(entry, msg.text, (content) => this.extractText(content));
+				assertResendRootEntry(entry, resendTexts, (content) => this.extractText(content), resendOptions);
 			}
 			const rootEntryId = typeof (entry as any)?.id === "string" ? String((entry as any).id) : undefined;
 			if (!rootEntryId) throw new Error("User message entryId missing");
@@ -4969,6 +5005,9 @@ export class AgentManager {
 			// 避免重试 RPC 尚未开始时 UI 提前显示完成。
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
+			const userErrorMessage = /Message not found in session file|Resend root text mismatch|User message entryId missing/.test(errorMessage)
+				? "无法在会话文件中定位原消息（可能与 Plan/宿主指令/图片消息的落盘内容不同），请手动重发或新建会话。"
+				: errorMessage;
 			const attempt = this.deckModelRetryAttempts.get(agentId) ?? 0;
 			// 重试准备、switch_session 或 prompt preflight 本身也可能遇到瞬时网络/RPC
 			// 错误。它们不能直接消耗掉整个重试生命周期，否则用户只会看到一次重试。
@@ -5008,10 +5047,10 @@ export class AgentManager {
 			this.pendingDeckModelRetries.delete(agentId);
 			this.upsertRetryStatusMessage(
 				agentId,
-				{ attempt, maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries, errorMessage, phase: "error" },
+				{ attempt, maxAttempts: DECK_MODEL_RETRY_POLICY.maxRetries, errorMessage: userErrorMessage, phase: "error" },
 				"error",
 			);
-			this.addDetailedErrorMessage(agentId, `模型请求自动重试失败\n${errorMessage}`, attempt);
+			this.addDetailedErrorMessage(agentId, `模型请求自动重试失败\n${userErrorMessage}`, attempt);
 			this.deckModelRetryAttempts.delete(agentId);
 			const runtime = this.agents.get(agentId);
 			if (runtime) runtime.tab.status = "error";
