@@ -526,6 +526,8 @@ export function App() {
   const [messagesByAgent, setMessagesByAgent] = useState<
     Record<string, ChatMessage[]>
   >({});
+  const messagesByAgentRef = useRef(messagesByAgent);
+  messagesByAgentRef.current = messagesByAgent;
   const [files, setFiles] = useState<FileTreeNode[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsByProject, setSessionsByProject] = useState<
@@ -1229,6 +1231,8 @@ export function App() {
   /** 标记当前滚动是否由程序触发（ResizeObserver / scrollToBottom 等），
    *  用于在 scroll 事件中区分用户手动滚动，防止竞态误关 autoScroll。 */
   const programmaticScrollRef = useRef(false);
+  /** 标记全量消息替换由压缩触发；布局完成后由 useLayoutEffect 锚到压缩卡片。 */
+  const compactionJustOccurredRef = useRef(false);
   /** 是否显示"移动到最新"按钮 */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   /** 会话定位跳转到尚未加载的旧消息时，先扩展分页再在 effect 中滚动定位；此状态保存待跳转的消息 id。 */
@@ -1676,6 +1680,7 @@ export function App() {
     messages: activeMessages,
     initialPageSize: 50,
     pageSize: 50,
+    resetKey: activeAgentId,
     enabled: activeMessages.length > 50,
   });
 
@@ -2246,6 +2251,16 @@ export function App() {
       // 全量推送（结构性变更/短列表）：直接替换
       if (payload.messages) {
         const full = payload.messages;
+        const previousMessages = messagesByAgentRef.current[payload.agentId] ?? [];
+        const isCompactionReplace = full.some((message) => message.meta?.type === "compaction") &&
+          (full.length < previousMessages.length || !previousMessages.some((message) => message.meta?.type === "compaction"));
+        if (isCompactionReplace) {
+          // 压缩会重建时间线并收缩消息数组；等新布局完成后定位到压缩卡片，避免跳到最新消息。
+          compactionJustOccurredRef.current = true;
+          setAutoScroll(false);
+          autoScrollRef.current = false;
+          setShowScrollToBottom(true);
+        }
         setMessagesByAgent((current) => {
           const prevMessages = current[payload.agentId];
           // 消息数量相同且引用相同时跳过更新,减少输入框重渲染
@@ -2965,7 +2980,7 @@ export function App() {
     // 使用 ref 而非闭包值，防止 DOM 变化与 React 状态更新之间的时序间隙造成滚动抢跑：
     // 用户已滚到上方（autoScroll=false），但状态更新尚未生效，observer 闭包中的 autoScroll 仍为 true。
     const scrollIfNeeded = () => {
-      if (!autoScrollRef.current) return;
+      if (compactionJustOccurredRef.current || !autoScrollRef.current) return;
       programmaticScrollRef.current = true;
       timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
     };
@@ -2977,6 +2992,15 @@ export function App() {
 
     return () => resizeObserver.disconnect();
   }, [activeAgentId, autoScroll, activeAgent?.status, activeMessages.length]);
+
+  useLayoutEffect(() => {
+    if (!compactionJustOccurredRef.current) return;
+    const card = document.querySelector(".compaction-card") as HTMLElement | null;
+    if (!card) return;
+    compactionJustOccurredRef.current = false;
+    programmaticScrollRef.current = true;
+    card.scrollIntoView({ behavior: "instant", block: "start" });
+  }, [activeMessages.length, paginatedMessages.length]);
 
   // 加载更多历史消息后，按顶部锁定的方式恢复滚动位置。
   // 历史消息会插入到 .message-list 顶部，若不补偿新增高度，浏览器保持原 scrollTop 会导致视图跳动，

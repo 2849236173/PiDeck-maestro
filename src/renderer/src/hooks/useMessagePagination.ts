@@ -10,6 +10,8 @@ interface MessagePaginationOptions {
   initialPageSize?: number;
   pageSize?: number;
   maxVisibleMessages?: number;
+  /** 切换 Agent/会话时重置分页窗口。 */
+  resetKey?: string | number | null;
   enabled?: boolean;
 }
 
@@ -34,6 +36,7 @@ export function useMessagePagination({
   initialPageSize = DEFAULT_INITIAL_PAGE_SIZE,
   pageSize = DEFAULT_PAGE_SIZE,
   maxVisibleMessages = DEFAULT_MAX_VISIBLE,
+  resetKey = null,
   enabled = true,
 }: MessagePaginationOptions): MessagePaginationResult {
   const [visibleCount, setVisibleCount] = useState(initialPageSize);
@@ -45,29 +48,34 @@ export function useMessagePagination({
     setIsLoading(false);
   }, [initialPageSize]);
 
-  // 当切换会话时重置
-  useEffect(() => {
-    if (messages.length === 0) {
-      reset();
-    }
-  }, [messages.length === 0, reset]);
-
-  // 跟踪上一次的完整消息数量，用于区分“新增消息（流式追加）”与“手动加载更多导致的 visibleCount 变化”。
-  // 只有 messages.length 真正增长时才自动展开窗口，避免手动 loadMore/loadUntilIncluded 后窗口被意外拉满。
+  // 跟踪上一次的完整消息数量，用于区分追加、收缩和分页操作。
   const prevMessageCountRef = useRef(messages.length);
 
-  // 当有新消息追加时，智能处理：少量新消息（<10条，典型为流式回答）自动纳入可视窗口。
-  // 仅按新增条数递增 visibleCount，避免用户在回看历史时被新消息强行拉满窗口。
+  // 切换 Agent 时重新从首屏窗口开始，并同步长度基线，避免切换瞬间被误判为压缩收缩。
   useEffect(() => {
-    if (!enabled) return;
+    prevMessageCountRef.current = messages.length;
+    reset();
+  }, [resetKey, reset]);
+
+  // 会话切换到空列表时也恢复初始窗口。
+  useEffect(() => {
+    if (messages.length === 0) reset();
+  }, [messages.length, reset]);
+
+  // 消息因压缩而收缩时，旧的尾部分页窗口已不再对应原来的消息边界；
+  // 临时展示当前全量，确保压缩卡片和归档区不会落在分页窗口之外。
+  useEffect(() => {
     const prev = prevMessageCountRef.current;
     const delta = messages.length - prev;
     prevMessageCountRef.current = messages.length;
-    if (delta > 0 && delta < 10) {
-      setVisibleCount((prevCount) =>
-        Math.min(prevCount + delta, messages.length, maxVisibleMessages),
-      );
+    if (delta < 0) {
+      setVisibleCount(Math.min(messages.length, maxVisibleMessages));
+      return;
     }
+    if (!enabled || delta === 0 || delta >= 10) return;
+    setVisibleCount((prevCount) =>
+      Math.min(prevCount + delta, messages.length, maxVisibleMessages),
+    );
   }, [messages.length, enabled, maxVisibleMessages]);
 
   // 加载更多历史消息

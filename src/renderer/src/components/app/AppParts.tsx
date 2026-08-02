@@ -2557,13 +2557,17 @@ function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success
 export const CompactionCard = memo(function CompactionCard(props: {
 	message: ChatMessage;
 }) {
-	const [expanded, setExpanded] = useState(false);
 	const summary = props.message.text;
 	const tokensBefore = (props.message.meta as any)?.tokensBefore;
 	const compactionCount = (props.message.meta as any)?.compactionCount;
 	const archivedMessages = (props.message.meta as any)?.archivedMessages as ChatMessage[] | undefined;
 	const time = formatTime(props.message.timestamp);
 	const hasArchived = Array.isArray(archivedMessages) && archivedMessages.length > 0;
+	// 归档是压缩前时间线的唯一入口；有归档时默认展开，避免压缩后用户误以为历史消失。
+	const [expanded, setExpanded] = useState(hasArchived);
+	useEffect(() => {
+		if (hasArchived) setExpanded(true);
+	}, [hasArchived]);
 
 	return (
 		<article
