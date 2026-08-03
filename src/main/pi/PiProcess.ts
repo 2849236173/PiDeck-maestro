@@ -239,22 +239,30 @@ export class PiProcess extends EventEmitter {
     if (cached?.status === "pending") return cached.promise;
 
     const promise = new Promise<boolean>((resolve) => {
-      const invocation = this.locator.createInvocation(command, ["--version"]);
-      execFile(invocation.command, invocation.args, {
-        encoding: "utf8" as const,
-        timeout: 5_000,
-        shell: false,
-        env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix),
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      }, (error, stdout) => {
-        const ok = !error;
-        const minorVersion = ok ? this.parseMinorVersion(stdout.trim()) : 0;
-        PiProcess.versionCache.set(command, { status: "done", ok, minorVersion });
-        this.piMinorVersion = minorVersion;
-        if (this.diagnostics?.command === command) this.diagnostics.versionCheck = ok;
-        this.emit("version-check", { ok, minorVersion });
-        resolve(ok);
-      });
+      const runAttempt = (attempt: number) => {
+        const invocation = this.locator.createInvocation(command, ["--version"]);
+        execFile(invocation.command, invocation.args, {
+          encoding: "utf8" as const,
+          timeout: 20_000,
+          shell: false,
+          env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix),
+          windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+        }, (error, stdout) => {
+          if (error && attempt < 2) {
+            setTimeout(() => runAttempt(attempt + 1), 250);
+            return;
+          }
+          const ok = !error;
+          const minorVersion = ok ? this.parseMinorVersion(stdout.trim()) : 0;
+          PiProcess.versionCache.set(command, { status: "done", ok, minorVersion });
+          this.piMinorVersion = minorVersion;
+          if (this.diagnostics?.command === command) this.diagnostics.versionCheck = ok;
+          this.emit("version-check", { ok, minorVersion });
+          resolve(ok);
+        });
+      };
+
+      runAttempt(1);
     });
     PiProcess.versionCache.set(command, { status: "pending", promise });
     return promise;

@@ -78,6 +78,7 @@ test("uses the pi cmd shim bin directory as PATH prefix on Windows when node.exe
 		assert.equal(invocation.shell, false);
 		assert.equal(invocation.pathPrefix, binDir);
 		assert.equal(invocation.windowsVerbatimArguments, true);
+		assert.match(invocation.args[3], /^"".*pi\.cmd" --version"$/i);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

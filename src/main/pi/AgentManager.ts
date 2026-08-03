@@ -5791,6 +5791,31 @@ export class AgentManager {
 			return { kind: "status", ok: true, lines, keepDetail: true };
 		}
 
+		// bash_bg：后台运行返回 pid/命令摘要，前台同步返回输出长度。
+		// 把"运行中 / 已退出"这种生命周期信息压成单行 status 卡，避免用户看到原始 JSON 不知道在哪看。
+		if (name === "bash_bg") {
+			const lines: string[] = [];
+			const command = typeof details.command === "string" ? details.command : (typeof details.cmd === "string" ? details.cmd : undefined);
+			if (command) lines.push(command.slice(0, 200));
+			if (typeof details.pid === "number") lines.push(`pid: ${details.pid}`);
+			if (typeof details.status === "string") lines.push(`status: ${details.status}`);
+			if (typeof details.exitCode === "number") lines.push(`exit: ${details.exitCode}`);
+			if (typeof details.running === "boolean") lines.push(details.running ? "running" : "completed");
+			if (lines.length === 0) return undefined;
+			return { kind: "status", ok: details.error === undefined && details.exitCode !== 1, lines, keepDetail: true };
+		}
+
+		// source_check：repo/skill 健康检查；details 含 ok/errors 计数或布尔，命中即给出极简状态行。
+		if (name === "source_check") {
+			const lines: string[] = [];
+			if (typeof details.target === "string") lines.push(details.target.slice(0, 160));
+			if (typeof details.checked === "number") lines.push(`checked: ${details.checked}`);
+			if (typeof details.errors === "number") lines.push(`errors: ${details.errors}`);
+			if (typeof details.ok === "boolean") lines.push(details.ok ? "ok" : "failed");
+			if (lines.length === 0) return undefined;
+			return { kind: "status", ok: details.ok !== false, lines, keepDetail: true };
+		}
+
 		if (name === "run-control") {
 			const lines = [
 				...(typeof details.action === "string" ? [details.action] : []),

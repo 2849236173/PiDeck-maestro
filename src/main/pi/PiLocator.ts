@@ -165,13 +165,17 @@ export class PiLocator {
     // Windows 仅支持 .cmd/.exe/裸命令，不再走 PowerShell .ps1。
     // npm/yarn/pnpm 生成的 pi.ps1 与 pi.cmd 指向同一个包入口，但 PowerShell 的执行策略、编码和引号规则更复杂；
     // 对桌面端来说，统一使用 cmd shim 能减少检测与 agent 启动路径差异。
-    // Windows npm 全局命令通常是 .cmd shim；当命令路径本身需要引号时，cmd /s /c
-    // 需要额外一层外引号才能正确解析用户名含空格的路径；不需要引号的路径不能套外层引号，
-    // 否则 cmd 会把 `C:\...\pi.cmd --version` 整段当作命令名。
-    const innerCommand = [command, ...args]
-      .map((part) => this.quoteCmdArgument(part))
+    // Windows npm 全局命令通常是 .cmd shim；cmd.exe /s /c 解析这类 shim 时，
+    // 即使路径没有空格也必须使用外层引号，
+    // 否则 npm 生成的 pi.cmd 可能一直等待而不是返回 --version。
+    const isBatchShim = /(?:[\\/]|^)(?:pi|[^\\/]+)\.(?:cmd|bat)$/i.test(command);
+    const commandPart = isBatchShim
+      ? `"${command.replace(/"/g, '""')}"`
+      : this.quoteCmdArgument(command);
+    const innerCommand = [commandPart, ...args]
+      .map((part, index) => index === 0 ? part : this.quoteCmdArgument(part))
       .join(" ");
-    const commandLine = this.needsCmdQuote(command) ? `"${innerCommand}"` : innerCommand;
+    const commandLine = isBatchShim || this.needsCmdQuote(command) ? `"${innerCommand}"` : innerCommand;
     return {
       command: process.env.ComSpec || "cmd.exe",
       args: ["/d", "/s", "/c", commandLine],
@@ -229,7 +233,9 @@ export class PiLocator {
     if (normalizedCustomPath && this.isUnsupportedPowerShellShim(normalizedCustomPath)) {
       return this.unsupportedPowerShellStatus(normalizedCustomPath, this.getSearchDirs());
     }
-    const command = normalizedCustomPath || this.resolveCommand(customPath, wslEnabled, wslDistro, wslUser);
+    const command = normalizedCustomPath
+      || await this.discoverCommand(wslEnabled, wslDistro, wslUser)
+      || this.resolveCommand(customPath, wslEnabled, wslDistro, wslUser);
     const searchedDirs = this.getSearchDirs();
 
     if (command.startsWith("wsl://")) {
@@ -244,6 +250,63 @@ export class PiLocator {
     }
 
     return this.runCheck(command, searchedDirs);
+  }
+
+  /**
+   * 使用系统命令发现 pi 的真实入口。
+   * Windows 优先 where.exe pi.cmd，Unix 使用 which pi；失败时由 check() 回退目录扫描。
+   */
+  async discoverCommand(wslEnabled?: boolean, wslDistro?: string, wslUser?: string): Promise<string | undefined> {
+    if (wslEnabled && process.platform === "win32" && wslDistro && wslUser) {
+      return this.resolveWslCommand(wslDistro, wslUser);
+    }
+
+    const env = this.createProcessEnv();
+    if (process.platform === "win32") {
+      const whereExe = join(process.env.SystemRoot || "C:\\Windows", "System32", "where.exe");
+      const executable = existsSync(whereExe) ? whereExe : "where.exe";
+      for (const name of ["pi.cmd", "pi.exe", "pi"]) {
+        const found = await new Promise<string | undefined>((resolve) => {
+          execFile(executable, [name], {
+            env,
+            windowsHide: true,
+            timeout: 3_000,
+            encoding: "utf8",
+          }, (error, stdout) => {
+            if (error) {
+              resolve(undefined);
+              return;
+            }
+            const command = stdout
+              .split(/\r?\n/)
+              .map(line => line.trim())
+              .find(line => line && existsSync(line) && !line.toLowerCase().endsWith(".ps1"));
+            resolve(command);
+          });
+        });
+        if (found) return found;
+      }
+      return undefined;
+    }
+
+    return new Promise<string | undefined>((resolve) => {
+      execFile("which", ["pi"], {
+        env,
+        windowsHide: true,
+        timeout: 3_000,
+        encoding: "utf8",
+      }, (error, stdout) => {
+        if (error) {
+          resolve(undefined);
+          return;
+        }
+        const command = stdout
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .find(line => line && existsSync(line));
+        resolve(command);
+      });
+    });
   }
 
   /**
@@ -310,27 +373,56 @@ export class PiLocator {
    * 使用 encoding: 'buffer' 避免 Windows 中文环境下 stderr 的 GBK 输出被 utf8 错误解码导致乱码。
    */
   private async runCheck(command: string, searchedDirs: string[]): Promise<PiInstallStatus> {
-    return new Promise(resolve => {
-      const invocation = this.createInvocation(command, ["--version"]);
-      execFile(invocation.command, invocation.args, {
-        env: this.createProcessEnv(undefined, invocation.pathPrefix, invocation.wsl),
-        shell: invocation.shell,
-        windowsHide: true,
-        timeout: 8_000,
-        encoding: 'buffer',
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      }, (error, stdout, stderr) => {
-        if (error) {
-          // 优先使用 stderr 中的实际错误信息（如"系统找不到指定的文件"），
-          // 并处理 Windows GBK 编码问题。兜底用 error.message 但去掉冗余的命令行前缀。
-          const raw = this.decodeBuffer(stderr) || this.cleanExecError(error.message);
-          resolve({ installed: false, command, searchedDirs, error: raw });
-          return;
-        }
+    const maxAttempts = process.platform === "win32" ? 2 : 1;
+    // pi CLI 启动时会加载 provider 和扩展，Windows Electron 环境下首次启动可能超过 8 秒。
+    const timeoutMs = 20_000;
 
-        const version = this.decodeBuffer(stdout).trim();
-        resolve({ installed: true, command, searchedDirs, version });
-      });
+    return new Promise(resolve => {
+      const runAttempt = (attempt: number) => {
+        const invocation = this.createInvocation(command, ["--version"]);
+        execFile(invocation.command, invocation.args, {
+          env: this.createProcessEnv(undefined, invocation.pathPrefix, invocation.wsl),
+          shell: invocation.shell,
+          windowsHide: true,
+          timeout: timeoutMs,
+          encoding: 'buffer',
+          windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+        }, (error, stdout, stderr) => {
+          if (error) {
+            // Windows 上 cmd shim 偶发会在进程创建/退出竞态中返回空 stderr；
+            // 短退避重试一次，避免一次瞬态失败直接阻断 Pi 更新检查。
+            if (attempt < maxAttempts) {
+              setTimeout(() => runAttempt(attempt + 1), 250);
+              return;
+            }
+
+            // 优先使用 stderr 中的实际错误信息（如"系统找不到指定的文件"），
+            // 并处理 Windows GBK 编码问题。兜底用 error.message，但补充退出码/超时
+            // 信息，避免日志只剩一条无法区分原因的完整 cmd 命令行。
+            const childError = error as NodeJS.ErrnoException & {
+              killed?: boolean;
+              signal?: string;
+            };
+            const stderrText = this.decodeBuffer(stderr).trim();
+            const detail = stderrText || this.cleanExecError(error.message);
+            const code = childError.code ? ` [${childError.code}]` : "";
+            const killed = childError.killed ? "（进程被终止）" : "";
+            const signal = childError.signal ? `（signal: ${childError.signal}）` : "";
+            resolve({
+              installed: false,
+              command,
+              searchedDirs,
+              error: `${detail}${code}${killed}${signal}`,
+            });
+            return;
+          }
+
+          const version = this.decodeBuffer(stdout).trim();
+          resolve({ installed: true, command, searchedDirs, version });
+        });
+      };
+
+      runAttempt(1);
     });
   }
 
