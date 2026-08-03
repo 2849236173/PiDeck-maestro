@@ -9,6 +9,7 @@ import { ModelFailoverTab } from "./config/ModelFailoverTab";
 import { RawTab } from "./config/RawTab";
 import { TrustTab } from "./config/TrustTab";
 import { SettingsTab } from "./config/SettingsTab";
+import { VisionTab } from "./config/VisionTab";
 import { PromptsTab } from "./config/PromptsTab";
 import { SkillsTab } from "./config/SkillsTab";
 import { ExtensionsTab } from "./config/ExtensionsTab";
@@ -124,6 +125,10 @@ type ConfigModalProps = {
 	onSaved: () => void;
 	projectPath?: string;
 	initialSection?: ConfigSection;
+	/** 当前激活的 Agent ID，用于把 /vision 等命令直接送进输入框 */
+	activeAgentId?: string;
+	/** 把给定文本写入指定 agent 的输入框；用于 VisionTab 一键插入 /vision 命令 */
+	onInsertPromptIntoAgent?: (agentId: string, text: string) => void;
 };
 
 class ConfigModalErrorBoundary extends Component<
@@ -1743,21 +1748,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 					)}
 
 					{section === "config" && tab === "vision" && (
-						<div className="config-hint-card vision-config-guide">
-							<div>
-								<strong>{t("vision.title")}</strong>
-								<p>{t("vision.description")}</p>
-							</div>
-							<Button
-								variant="secondary"
-								onClick={() => {
-									void navigator.clipboard.writeText("/vision");
-									showToast(t("vision.copied"));
-								}}
-							>
-								{t("vision.copyCommand")}
-							</Button>
-						</div>
+						<VisionTab
+							data={settingsData}
+							modelsData={modelsData}
+							onInsertPrompt={props.onInsertPromptIntoAgent && props.activeAgentId
+								? (text) => props.onInsertPromptIntoAgent?.(props.activeAgentId!, text)
+								: undefined}
+						/>
 					)}
 
 					{section === "config" && !loading && (tab === "raw" || tab === "apiManager") && (

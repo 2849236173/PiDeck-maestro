@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { X, Plus, Check } from "lucide-react";
+import { X, Plus, Check, ShieldCheck, AlertTriangle, Trash2 } from "lucide-react";
 import type { AuthFile, SettingsFile, ModelsFile } from "./configTypes";
 import { ConfigComboboxInput } from "./ConfigShared";
+import { Button } from "../components/ui/Button";
+import { IconButton } from "../components/ui/IconButton";
 import { t } from "../i18n";
 
 // ── 可用模型列表聚合（含供应商信息，供 enabledModels 多选用） ──
@@ -192,9 +194,9 @@ export function SettingsTab(props: {
 					</div>
 				</div>
 
-				{/* ── 重试配置 ── */}
-				<div className="config-retry-group">
-					<div className="config-settings-row config-retry-header-row">
+			{/* ── 重试配置 ── */}
+			<div className="config-retry-group">
+				<div className="config-settings-row config-retry-header-row">
 					<span className="config-settings-section-title">{t("config.retry.title")}</span>
 					<span className="config-settings-section-hint">{t("config.retry.hint")}</span>
 				</div>
@@ -206,11 +208,18 @@ export function SettingsTab(props: {
 					<span className="config-settings-key">{t("config.retry.baseDelayMs")}</span>
 					<input className="config-settings-input" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
 				</div>
-				</div>
+			</div>
+
+			{/* ── 权限规则（对应 pi settings.json 的 permissions 字段） ── */}
+			<PermissionsCard
+				value={getPermissionsValue(data)}
+				disableBypassDisabled={getDisableBypassValue(data)}
+				onChange={(next) => updatePermissions(data, next.permissions, next.disableBypass)}
+			/>
 
 				{entries
-					// sessionDir / retry / enabledModels 已有专用区块，避免列表里重复一行
-					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir")
+					// sessionDir / retry / enabledModels / permissions 已有专用区块，避免列表里重复一行
+					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir" && key !== "permissions")
 					.map(([key, value]) => (
 					<div key={key} className="config-settings-row">
 						<span className="config-settings-key">{configLabel(key)}</span>
@@ -597,5 +606,201 @@ function SettingsValueInput(props: {
 		/>
 	);
 }
+
+// ── Permissions 子区块（settings.json 的 permissions.{allow,ask,deny,defaultMode}） ──
+
+type PermissionBehavior = "allow" | "ask" | "deny";
+type PermissionMode = "default" | "plan" | "dontAsk" | "bypassPermissions";
+
+interface PermissionsValue {
+	allow: string[];
+	ask: string[];
+	deny: string[];
+	defaultMode?: PermissionMode;
+}
+
+const PERMISSION_MODE_OPTIONS: Array<{ value: PermissionMode; labelKey: string; tone: "default" | "warning" | "danger" }> = [
+	{ value: "default", labelKey: "config.permissions.mode.default", tone: "default" },
+	{ value: "plan", labelKey: "config.permissions.mode.plan", tone: "default" },
+	{ value: "dontAsk", labelKey: "config.permissions.mode.dontAsk", tone: "warning" },
+	{ value: "bypassPermissions", labelKey: "config.permissions.mode.bypassPermissions", tone: "danger" },
+];
+
+function getPermissionsValue(data: SettingsFile): PermissionsValue {
+	const raw = (data as Record<string, unknown>).permissions;
+	if (!raw || typeof raw !== "object") return { allow: [], ask: [], deny: [] };
+	const src = raw as Record<string, unknown>;
+	const readList = (key: PermissionBehavior): string[] =>
+		Array.isArray(src[key]) ? (src[key] as unknown[]).filter((v): v is string => typeof v === "string") : [];
+	const mode = typeof src.defaultMode === "string" && PERMISSION_MODE_OPTIONS.some((o) => o.value === src.defaultMode)
+		? (src.defaultMode as PermissionMode)
+		: undefined;
+	return { allow: readList("allow"), ask: readList("ask"), deny: readList("deny"), defaultMode: mode };
+}
+
+function getDisableBypassValue(data: SettingsFile): boolean {
+	const raw = (data as Record<string, unknown>).permissions;
+	return typeof (raw as Record<string, unknown> | undefined)?.disableBypassPermissionsMode === "string";
+}
+
+function updatePermissions(data: SettingsFile, next: PermissionsValue, disableBypass: boolean): SettingsFile {
+	const { permissions: _ignored, ...rest } = data as Record<string, unknown>;
+	const nextPermissions: Record<string, unknown> = {
+		allow: next.allow,
+		ask: next.ask,
+		deny: next.deny,
+	};
+	if (next.defaultMode) nextPermissions.defaultMode = next.defaultMode;
+	if (disableBypass) nextPermissions.disableBypassPermissionsMode = "disable";
+	return { ...rest, permissions: nextPermissions };
+}
+
+function PermissionsCard(props: {
+	value: PermissionsValue;
+	disableBypassDisabled: boolean;
+	onChange: (next: { permissions: PermissionsValue; disableBypass: boolean }) => void;
+}) {
+	const apply = (patch: Partial<PermissionsValue>) => props.onChange({ permissions: { ...props.value, ...patch }, disableBypass: props.disableBypassDisabled });
+	const setDisableBypass = (disabled: boolean) => props.onChange({ permissions: props.value, disableBypass: disabled });
+
+	// 同一 rule 在 add/ask/deny 之间互斥：加入新桶时从其他桶里移除相同文本，避免重复规则污染。
+	const addRule = (behavior: PermissionBehavior, text: string) => {
+		const trimmed = text.trim();
+		if (!trimmed) return;
+		const next: PermissionsValue = { ...props.value, [behavior]: [...new Set([...props.value[behavior], trimmed])] };
+		for (const other of ["allow", "ask", "deny"] as const) {
+			if (other === behavior) continue;
+			next[other] = props.value[other].filter((rule) => rule !== trimmed);
+		}
+		props.onChange({ permissions: next, disableBypass: props.disableBypassDisabled });
+	};
+	const removeRule = (behavior: PermissionBehavior, text: string) => {
+		apply({ [behavior]: props.value[behavior].filter((rule) => rule !== text) });
+	};
+
+	const mode = props.value.defaultMode ?? "default";
+	const bypassBlocked = props.disableBypassDisabled;
+	const setMode = (next: PermissionMode) => {
+		if (next === "bypassPermissions" && bypassBlocked) return;
+		apply({ defaultMode: next === "default" ? undefined : next });
+	};
+
+	return (
+		<div className="config-permissions-group">
+			<div className="config-settings-row config-retry-header-row">
+					<span className="config-settings-section-title">
+						<ShieldCheck size={14} aria-hidden="true" /> {t("permissions.title")}
+					</span>
+					<span className="config-settings-section-hint">{t("permissions.hint")}</span>
+				</div>
+
+				<div className="config-permissions-mode-row">
+					<span className="config-settings-key">{t("permissions.defaultMode")}</span>
+					<div className="config-permissions-mode-buttons" role="group" aria-label={t("permissions.defaultMode")}>
+						{PERMISSION_MODE_OPTIONS.map((option) => {
+							const active = mode === option.value;
+							const blocked = option.value === "bypassPermissions" && bypassBlocked;
+							return (
+								<button
+									key={option.value}
+									type="button"
+									className={`config-permissions-mode-button tone-${option.tone}${active ? " active" : ""}`}
+									aria-pressed={active}
+									disabled={blocked}
+									onClick={() => setMode(option.value)}
+								>
+									{t(option.labelKey as Parameters<typeof t>[0])}
+								</button>
+							);
+						})}
+					</div>
+				</div>
+
+				{mode === "bypassPermissions" ? (
+					<div className="config-permissions-warning">
+						<AlertTriangle size={14} aria-hidden="true" />
+						<span>{t("permissions.bypassWarning")}</span>
+					</div>
+				) : null}
+
+				<label className="config-permissions-disable-bypass">
+					<input
+						type="checkbox"
+						checked={bypassBlocked}
+						onChange={(e) => setDisableBypass(e.target.checked)}
+					/>
+					<span>{t("permissions.disableBypass")}</span>
+				</label>
+
+			{(["allow", "ask", "deny"] as const).map((behavior) => (
+				<PermissionsRuleList
+					key={behavior}
+					behavior={behavior}
+					rules={props.value[behavior]}
+					onAdd={(text) => addRule(behavior, text)}
+					onRemove={(text) => removeRule(behavior, text)}
+				/>
+			))}
+		</div>
+	);
+}
+
+function PermissionsRuleList(props: {
+	behavior: PermissionBehavior;
+	rules: string[];
+	onAdd: (text: string) => void;
+	onRemove: (text: string) => void;
+}) {
+	const [text, setText] = useState("");
+	const submit = () => {
+		if (!text.trim()) return;
+		props.onAdd(text);
+		setText("");
+	};
+	const labelKey = `permissions.behavior.${props.behavior}` as const;
+	const placeholderKey = `permissions.placeholder.${props.behavior}` as const;
+	const emptyKey = `permissions.behavior.${props.behavior}.empty` as const;
+	return (
+		<div className="config-permissions-rules">
+			<div className="config-permissions-rules-header">
+				<span className="config-permissions-behavior-label">{t(labelKey)}</span>
+				<span className="config-permissions-behavior-count">{props.rules.length}</span>
+			</div>
+			<div className="config-permissions-rules-input">
+				<input
+					className="config-settings-input"
+					type="text"
+					value={text}
+					placeholder={t(placeholderKey)}
+					onChange={(e) => setText(e.target.value)}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") {
+							e.preventDefault();
+							submit();
+						}
+					}}
+				/>
+				<Button buttonSize="sm" variant="secondary" onClick={submit} disabled={!text.trim()}>
+					<Plus size={12} /> {t("permissions.addRule")}
+				</Button>
+			</div>
+			{props.rules.length === 0 ? (
+				<div className="config-permissions-rules-empty">{t(emptyKey)}</div>
+			) : (
+				<ul className="config-permissions-rules-list">
+					{props.rules.map((rule) => (
+						<li key={rule} className="config-permissions-rules-item">
+							<code title={rule}>{rule}</code>
+							<IconButton label={t("common.delete")} onClick={() => props.onRemove(rule)}>
+								<Trash2 size={12} />
+							</IconButton>
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
+	);
+}
+
 
 
