@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
+import { createInterface } from "node:readline";
 import { app, shell } from "electron";
+import { createReadStream } from "node:fs";
 import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
@@ -685,6 +687,50 @@ export class SessionScanner {
   }
 
   /**
+   * 读取本地/WSL 文件的前 N 行，避免大文件导致 V8 OOM。
+   * 用于摘要生成；需要全文的读取（readMessages / readChatMessages）仍用 readSessionRawText。
+   */
+  private async readFirstNLines(filePath: string, maxLines: number, signal?: AbortSignal): Promise<string> {
+    const isWsl = this.isWslPath(filePath);
+
+    if (isWsl) {
+      return new Promise((resolve, reject) => {
+        execFile(this.wslExePath, [
+          "-d", this.wslConfig!.distro, "-u", this.wslConfig!.user,
+          "head", "-n", String(maxLines), "--", filePath,
+        ], {
+          shell: this.wslShell,
+          encoding: "utf8",
+          timeout: 15_000,
+          signal,
+          windowsHide: true,
+        }, (err, stdout) => {
+          if (err) reject(err);
+          else resolve(stdout);
+        });
+      });
+    }
+
+    // Windows / 本地：流式读取前 N 行
+    return new Promise((resolve, reject) => {
+      const lines: string[] = [];
+      let lineCount = 0;
+      const stream = createInterface({
+        input: createReadStream(filePath, { encoding: "utf8", highWaterMark: 64 * 1024 }),
+      });
+      stream.on("line", (line: string) => {
+        if (lineCount < maxLines) {
+          lines.push(line);
+          lineCount++;
+        }
+      });
+      stream.on("close", () => resolve(lines.join("\n")));
+      stream.on("error", reject);
+      signal?.addEventListener("abort", () => { stream.close(); reject(signal.reason ?? new Error("aborted")); }, { once: true });
+    });
+  }
+
+  /**
    * 从会话 JSONL 文件头部读取模型和思考级别信息。
    * 取最后一条 model_change / thinking_level_change 记录作为当前值。
    */
@@ -976,7 +1022,8 @@ export class SessionScanner {
     const cached = this.summaryCache.get(filePath, version);
     if (cached !== undefined) return cached ? this.applyRegisteredParent(filePath, cached) : null;
 
-    const raw = await this.readSessionRaw(filePath, signal, scanContext);
+    // 摘要生成只读前 200 行，避免大 session 文件（如 3+ GiB）导致 V8 OOM。
+    const raw = await this.readFirstNLines(filePath, 200, signal);
     const lines = raw.split(/\r?\n/).filter(Boolean);
     if (lines.length === 0) {
       this.summaryCache.set(filePath, version, null);
