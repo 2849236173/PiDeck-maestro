@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Copy, Eye, Pencil, Plus } from "lucide-react";
+import { Copy, Eye, Pencil, Plus, Rocket, Check } from "lucide-react";
 import type { ModelsFile, SettingsFile } from "./configTypes";
 import { Button } from "../components/ui/Button";
 import { IconButton } from "../components/ui/IconButton";
@@ -69,6 +69,22 @@ export function VisionTab(props: {
 		showNotice(t("vision.copied"), 1500);
 	};
 
+	// 点击候选模型 → 直接发送到会话并执行
+	const handleSelectAndSend = (provider: string, modelId: string) => {
+		if (!props.onInsertPrompt) return;
+		const cmd = `/vision ${provider}/${modelId}`;
+		props.onInsertPrompt(cmd);
+		showNotice(t("vision.modelSent"), 1500);
+	};
+
+	// 点击候选模型 → 追加到命令草稿
+	const handleAppendDraft = (provider: string, modelId: string) => {
+		setDraft((prev) => (prev.trim() ? `${prev.trim()} ${provider}/${modelId}` : `${provider}/${modelId}`));
+	};
+
+	// 当前选中的模型（用于高亮）
+	const selectedModel = draft.match(/\/vision\s+(\S+\/\S+)/)?.[1] ?? "";
+
 	return (
 		<div className="vision-tab">
 			<div className="config-toolbar vision-toolbar">
@@ -113,7 +129,7 @@ export function VisionTab(props: {
 					placeholder={t("vision.insertPlaceholder")}
 				/>
 				<Button variant="primary" onClick={sendDraft} disabled={!draft.trim() || !props.onInsertPrompt}>
-					<Plus size={14} aria-hidden="true" /> {t("vision.insertButton")}
+					<Rocket size={14} aria-hidden="true" /> {t("vision.sendAndExecute")}
 				</Button>
 			</div>
 
@@ -131,22 +147,52 @@ export function VisionTab(props: {
 					onChange={(e) => setFilter(e.target.value)}
 					placeholder={t("vision.candidatesFilter")}
 				/>
+				<p className="vision-candidates-hint">{t("vision.selectHint")}</p>
 				{filtered.length === 0 ? (
 					<div className="config-empty">{t("vision.noImageModel")}</div>
 				) : (
 					<ul className="vision-candidates-list">
-						{filtered.map((c) => (
-							<li key={`${c.provider}/${c.id}`} className="vision-candidates-item">
-								<span className="vision-candidates-name">{c.name ?? c.id}</span>
-								<span className="vision-candidates-provider">{c.provider}/{c.id}</span>
-								<IconButton
-									label={t("vision.appendDraft")}
-									onClick={() => setDraft((prev) => (prev.trim() ? `${prev.trim()} ${c.provider}/${c.id}` : c.provider + "/" + c.id))}
+						{filtered.map((c) => {
+							const modelKey = `${c.provider}/${c.id}`;
+							const isSelected = selectedModel === modelKey;
+							return (
+								<li
+									key={modelKey}
+									className={`vision-candidates-item${isSelected ? " selected" : ""}`}
+									onClick={() => handleSelectAndSend(c.provider, c.id)}
 								>
-									<Plus size={12} />
-								</IconButton>
-							</li>
-						))}
+									<div className="vision-candidates-info">
+										<span className="vision-candidates-name">{c.name ?? c.id}</span>
+										<span className="vision-candidates-provider">{modelKey}</span>
+									</div>
+									<div className="vision-candidates-actions">
+										<IconButton
+											label={t("vision.sendToSession")}
+											onClick={(e) => {
+												e.stopPropagation();
+												handleSelectAndSend(c.provider, c.id);
+											}}
+										>
+											<Rocket size={14} />
+										</IconButton>
+										<IconButton
+											label={t("vision.appendDraft")}
+											onClick={(e) => {
+												e.stopPropagation();
+												handleAppendDraft(c.provider, c.id);
+											}}
+										>
+											<Plus size={14} />
+										</IconButton>
+										{isSelected && (
+											<span className="vision-candidates-selected-badge">
+												<Check size={12} aria-hidden="true" /> {t("vision.selected")}
+											</span>
+										)}
+									</div>
+								</li>
+							);
+						})}
 					</ul>
 				)}
 			</div>

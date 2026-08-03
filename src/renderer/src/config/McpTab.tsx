@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { DatabaseZap, RefreshCw, ServerCog } from "lucide-react";
+import { DatabaseZap, RefreshCw, ServerCog, Copy, CheckCircle, Loader2, X } from "lucide-react";
 import type { McpConfigScope, McpConfigSnapshot, McpConfigSource } from "../../../shared/types";
 import { Button } from "../components/ui/Button";
 import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
@@ -32,6 +32,14 @@ export function McpTab(props: { workspacePath?: string }) {
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [authState, setAuthState] = useState<"idle" | "copied" | "waiting" | "success" | "failed">("idle");
+
+	const handleCopyAuthCommand = () => {
+		void navigator.clipboard.writeText("/mcp-auth");
+		setAuthState("copied");
+		showNotice(t("mcp.auth.copied"), 1600);
+		setTimeout(() => setAuthState("idle"), 3000);
+	};
 
 	const editableSource = useMemo(() => {
 		if (!snapshot) return null;
@@ -136,20 +144,47 @@ export function McpTab(props: { workspacePath?: string }) {
 
 			{error ? <div className="config-error">{error}</div> : null}
 
-			<div className="config-hint-card mcp-auth-hint">
-				<div>
-					<strong>{t("mcp.auth.title")}</strong>
-					<p>{t("mcp.auth.description")}</p>
+			<div className="mcp-auth-guide">
+				<div className="mcp-auth-guide-title">
+					<strong>{t("mcp.auth.guide")}</strong>
 				</div>
-				<Button
-					variant="secondary"
-					onClick={() => {
-						void navigator.clipboard.writeText("/mcp-auth");
-						showNotice(t("mcp.auth.copied"), 1600);
-					}}
-				>
-					{t("mcp.auth.copyCommand")}
-				</Button>
+				<div className="mcp-auth-step" data-step="1">
+					<span className="mcp-auth-step-num">1</span>
+					<span>{t("mcp.auth.step1")}</span>
+					<Button variant="secondary" buttonSize="sm" onClick={handleCopyAuthCommand}>
+						<Copy size={12} aria-hidden="true" /> {t("mcp.auth.copyCommand")}
+					</Button>
+				</div>
+				<div className="mcp-auth-step" data-step="2">
+					<span className="mcp-auth-step-num">2</span>
+					<span>{t("mcp.auth.step2")}</span>
+				</div>
+				<div className="mcp-auth-step" data-step="3">
+					<span className="mcp-auth-step-num">3</span>
+					<span>{t("mcp.auth.step3")}</span>
+				</div>
+				<div className="mcp-auth-step-status">
+					{authState === "copied" && (
+						<span className="mcp-auth-status success">
+							<CheckCircle size={14} aria-hidden="true" /> {t("mcp.auth.copied")}
+						</span>
+					)}
+					{authState === "waiting" && (
+						<span className="mcp-auth-status waiting">
+							<Loader2 size={14} className="spin" aria-hidden="true" /> {t("mcp.auth.waiting")}
+						</span>
+					)}
+					{authState === "success" && (
+						<span className="mcp-auth-status success">
+							<CheckCircle size={14} aria-hidden="true" /> {t("mcp.auth.success")}
+						</span>
+					)}
+					{authState === "failed" && (
+						<span className="mcp-auth-status failed">
+							<X size={14} aria-hidden="true" /> {t("mcp.auth.failed")}
+						</span>
+					)}
+				</div>
 			</div>
 
 			<ConfigEntryList

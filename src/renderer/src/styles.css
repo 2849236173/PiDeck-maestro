@@ -20051,6 +20051,42 @@ a.config-btn {
 .config-permissions-behavior-count {
   font-variant-numeric: tabular-nums;
 }
+.config-permissions-templates {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-md);
+}
+.config-permissions-templates-label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+.config-permissions-templates-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.permission-rule-template-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.permission-rule-template-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-strong);
+}
 .config-permissions-rules-input {
   display: flex;
   gap: 6px;
@@ -20191,11 +20227,51 @@ a.config-btn {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.vision-candidates-item:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+}
+.vision-candidates-item.selected {
+  background: var(--color-bg-active);
+  border-color: var(--color-primary);
+}
+.vision-candidates-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.vision-candidates-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.vision-candidates-selected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: var(--font-size-micro);
+  font-weight: 500;
+  color: var(--color-primary);
+  background: var(--color-bg-active);
+  border-radius: var(--radius-sm);
+}
+.vision-candidates-hint {
+  margin: 4px 0 8px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
 }
 .vision-candidates-name {
   font-size: var(--font-size-caption);
   color: var(--color-text-primary);
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .vision-candidates-provider {
   font-family: var(--font-family-business);
@@ -22478,6 +22554,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: flex-end;
+	align-items: center;
 	gap: var(--space-2);
 }
 
@@ -22485,6 +22562,31 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	display: inline-flex;
 	align-items: center;
 	gap: var(--space-1);
+}
+
+.plan-confirm-keyboard-hint {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+	padding: var(--space-2) var(--space-3);
+	margin-right: auto;
+	background: var(--color-bg-subtle);
+	border-radius: var(--radius-sm);
+	font-size: var(--font-size-caption);
+	color: var(--color-text-muted);
+}
+.plan-confirm-keyboard-hint span {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.plan-confirm-keyboard-hint kbd {
+	padding: 2px 6px;
+	background: var(--color-bg);
+	border: 1px solid var(--color-border);
+	border-radius: 3px;
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-micro);
 }
 
 /* MCP configuration tab */
@@ -22500,6 +22602,75 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	color: var(--color-text-muted);
 	font-size: var(--font-size-sm);
 	line-height: var(--line-height-sm);
+}
+
+/* MCP OAuth 认证指引 */
+.mcp-auth-guide {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	padding: var(--space-4);
+	background: var(--color-bg-secondary);
+	border: 1px solid var(--color-border-subtle);
+	border-radius: var(--radius-lg);
+}
+.mcp-auth-guide-title {
+	margin-bottom: var(--space-1);
+}
+.mcp-auth-guide-title strong {
+	font-size: var(--font-size-body);
+	color: var(--color-text-primary);
+}
+.mcp-auth-step {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) 0;
+}
+.mcp-auth-step-num {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: var(--color-primary);
+	color: white;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: var(--font-size-caption);
+	font-weight: 600;
+	flex-shrink: 0;
+}
+.mcp-auth-step span {
+	font-size: var(--font-size-body);
+	color: var(--color-text-secondary);
+}
+.mcp-auth-step-status {
+	margin-top: var(--space-2);
+	padding-top: var(--space-3);
+	border-top: 1px solid var(--color-border-subtle);
+}
+.mcp-auth-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: var(--font-size-caption);
+	font-weight: 500;
+}
+.mcp-auth-status.success {
+	color: var(--color-success);
+}
+.mcp-auth-status.waiting {
+	color: var(--color-text-muted);
+}
+.mcp-auth-status.failed {
+	color: var(--color-danger);
+}
+@keyframes spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+.spin {
+	animation: spin 1s linear infinite;
 }
 
 .mcp-summary-grid {

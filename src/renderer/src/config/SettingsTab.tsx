@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { X, Plus, Check, ShieldCheck, AlertTriangle, Trash2 } from "lucide-react";
+import { X, Plus, Check, ShieldCheck, AlertTriangle, Trash2, Terminal, GitBranch, Globe, FileCode } from "lucide-react";
 import type { AuthFile, SettingsFile, ModelsFile } from "./configTypes";
 import { ConfigComboboxInput } from "./ConfigShared";
 import { Button } from "../components/ui/Button";
@@ -760,11 +760,36 @@ function PermissionsRuleList(props: {
 	const labelKey = `permissions.behavior.${props.behavior}` as const;
 	const placeholderKey = `permissions.placeholder.${props.behavior}` as const;
 	const emptyKey = `permissions.behavior.${props.behavior}.empty` as const;
+
+	// 常用规则模板
+	const templates: Array<{ label: string; rule: string; icon: React.ReactNode }> = [
+		{ label: "Bash rm", rule: "Bash(rm -rf *)", icon: <Terminal size={12} aria-hidden="true" /> },
+		{ label: "Bash push", rule: "Bash(git push *)", icon: <GitBranch size={12} aria-hidden="true" /> },
+		{ label: "WebFetch", rule: "WebFetch(*)", icon: <Globe size={12} aria-hidden="true" /> },
+		{ label: "Read", rule: "Read(*)", icon: <FileCode size={12} aria-hidden="true" /> },
+	];
+
 	return (
 		<div className="config-permissions-rules">
 			<div className="config-permissions-rules-header">
 				<span className="config-permissions-behavior-label">{t(labelKey)}</span>
 				<span className="config-permissions-behavior-count">{props.rules.length}</span>
+			</div>
+			<div className="config-permissions-templates">
+				<span className="config-permissions-templates-label">{t("permissions.commonRules")}</span>
+				<div className="config-permissions-templates-buttons">
+					{templates.map((tmpl) => (
+						<button
+							key={tmpl.rule}
+							type="button"
+							className="permission-rule-template-btn"
+							title={tmpl.rule}
+							onClick={() => props.onAdd(tmpl.rule)}
+						>
+							{tmpl.icon} {tmpl.label}
+						</button>
+					))}
+				</div>
 			</div>
 			<div className="config-permissions-rules-input">
 				<input

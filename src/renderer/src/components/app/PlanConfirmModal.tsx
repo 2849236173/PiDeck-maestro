@@ -110,6 +110,28 @@ export function PlanConfirmModal(props: {
 		await submitAction({ kind: "approve", draft: currentDraft });
 	};
 
+	// 键盘快捷键：Ctrl+Enter 批准，Ctrl+E 编辑，Esc 关闭
+	useEffect(() => {
+		if (!props.open || mode !== "preview" || loading || submitting) return;
+		const handler = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && !e.ctrlKey && !e.metaKey) {
+				e.preventDefault();
+				props.onClose();
+			}
+			if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+				e.preventDefault();
+				void handleApprove();
+			}
+			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e") {
+				e.preventDefault();
+				setMode("edit");
+				setError(null);
+			}
+		};
+		window.addEventListener("keydown", handler);
+		return () => window.removeEventListener("keydown", handler);
+	}, [props.open, mode, loading, submitting, currentDraft]);
+
 	return (
 		<Modal open={props.open} onClose={props.onClose} title={title} size="full" contentClassName="plan-confirm-modal">
 			<div className="plan-confirm-shell">
@@ -157,6 +179,11 @@ export function PlanConfirmModal(props: {
 				<div className="plan-confirm-actions">
 					{mode === "preview" && (
 						<>
+							<div className="plan-confirm-keyboard-hint">
+								<span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> {t("planConfirm.keyboardHint.approve")}</span>
+								<span><kbd>Esc</kbd> {t("planConfirm.keyboardHint.close")}</span>
+								<span><kbd>Ctrl</kbd>+<kbd>E</kbd> {t("planConfirm.keyboardHint.edit")}</span>
+							</div>
 							<Button variant="danger" onClick={() => setMode("reject")} disabled={!draft || loading || Boolean(submitting)}>
 								<X size={15} aria-hidden="true" /> {t("planConfirm.reject")}
 							</Button>
