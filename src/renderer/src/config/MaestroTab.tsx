@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, RefreshCw, RotateCcw } from "lucide-react";
+import { AlertTriangle, Check, Globe, MapPin, RefreshCw, RotateCcw } from "lucide-react";
 import {
 	TEAMMATE_MODEL_TASK_TYPES,
 	type TeammateModelConfigScope,
@@ -244,21 +244,34 @@ export function MaestroTab({
 			</div>
 
 			<div className="maestro-config-toolbar">
-				<SelectField
-					className="maestro-scope-select"
-					label={t("maestro.scope")}
-					value={scope}
-					onChange={(value) => setScope(value as TeammateModelConfigScope)}
-					options={[
-						{ value: "global", label: t("maestro.scope.global") },
-						{
-							value: "workspace",
-							label: t("maestro.scope.workspace"),
-							disabled: !workspacePath,
-						},
-					]}
-					description={selectedSource?.path ?? t("maestro.workspaceUnavailable")}
-				/>
+				<div className="maestro-scope-card">
+					<div className="maestro-scope-header">
+						{scope === "global" ? (
+							<Globe size={16} aria-hidden="true" />
+						) : (
+							<MapPin size={16} aria-hidden="true" />
+						)}
+						<span className="maestro-scope-label">{t("maestro.currentScope")}</span>
+						<span className={`maestro-scope-badge ${scope}`}>
+							{scope === "global" ? t("maestro.scope.global") : t("maestro.scope.workspace")}
+						</span>
+					</div>
+					<SelectField
+						className="maestro-scope-select"
+						label=""
+						value={scope}
+						onChange={(value) => setScope(value as TeammateModelConfigScope)}
+						options={[
+							{ value: "global", label: t("maestro.scope.global") },
+							{
+								value: "workspace",
+								label: t("maestro.scope.workspace"),
+								disabled: !workspacePath,
+							},
+						]}
+					/>
+					<p className="maestro-scope-path">{selectedSource?.path ?? t("maestro.workspaceUnavailable")}</p>
+				</div>
 				<div className="maestro-model-count">
 					{t("maestro.availableModels", { count: availableModels.length })}
 				</div>

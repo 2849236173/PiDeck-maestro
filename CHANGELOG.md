@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.6-15 - 2026-08-03
+
+### Configuration flows aligned with pi-maestro-flow
+
+- Removed the API Manager tab that overlapped Models; provider/model setup stays on Models + Auth.
+- Redesigned Model Failover as a dual pane: pick primary → check/reorder fallbacks → enable → save.
+- MCP now follows scope → imports → add/edit servers / OAuth helper → save.
+- Hooks follow event → command+timeout handler → save; Web Search follows grouped key edit → save.
+- Vision is clarified as a session `/vision` helper; image capability still comes from Models.
+
 ## v0.6.6-14-fix - 2026-08-03
 
 ### Bug fixes

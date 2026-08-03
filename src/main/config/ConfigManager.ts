@@ -1221,6 +1221,15 @@ export class ConfigManager {
 		return this.readJsonFile<Record<string, unknown>>("api-manager.json", {});
 	}
 
+	async saveApiManager(config: Record<string, unknown>): Promise<{ valid: boolean; error?: string }> {
+		try {
+			await this.writeJsonFile("api-manager.json", config);
+			return { valid: true };
+		} catch (error) {
+			return { valid: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
 	async getRawConfig(fileName: string): Promise<ConfigFileReadResult<Record<string, unknown>>> {
 		const allowed = ["models.json", "auth.json", "settings.json", "trust.json", "api-manager.json", "permissions.json", "vision.json", "lsp.json"];
 		if (!allowed.includes(fileName)) throw new Error(`不允许读取的文件：${fileName}`);

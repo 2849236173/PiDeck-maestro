@@ -3406,6 +3406,9 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configGetApiManager, () =>
 		configManager.getApiManagerConfig(),
 	);
+	ipcMain.handle(ipcChannels.configSaveApiManager, (_event, config: Record<string, unknown>) =>
+		configManager.saveApiManager(config),
+	);
 	ipcMain.handle(ipcChannels.configGetRaw, (_event, fileName: string) =>
 		configManager.getRawConfig(fileName),
 	);

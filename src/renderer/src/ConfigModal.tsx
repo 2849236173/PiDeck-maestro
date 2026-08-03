@@ -405,11 +405,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 					// Teammate 路由候选必须来自 Pi 已配置模型；只读本地 models.json，不触发远端发现。
 					const res = await api.config.getModels();
 					setModelsData(normalizeModelsFile(res.parsed));
-				} else if (target === "apiManager") {
-					const res = await api.config.getApiManager();
-					setRawFileName("api-manager.json");
-					setRawContent(res.raw);
-					setConfigDiagnostic(res.diagnostic ?? null);
 				} else if (target === "trust") {
 					const res = await api.config.getTrust();
 					setTrustData(res.parsed as Record<string, boolean>);
@@ -425,18 +420,14 @@ function ConfigModalContent(props: ConfigModalProps) {
 								? "auth.json"
 								: tab === "trust"
 									? "trust.json"
-									: tab === "apiManager"
-										? "api-manager.json"
-										: "settings.json";
+									: "settings.json";
 					setRawFileName(fileName);
 					const res =
 						fileName === "models.json"
 							? await api.config.getModels()
 							: fileName === "auth.json"
 								? await api.config.getAuth()
-								: fileName === "api-manager.json"
-									? await api.config.getApiManager()
-									: await api.config.getRaw(fileName);
+								: await api.config.getRaw(fileName);
 					setRawContent(res.raw);
 					setConfigDiagnostic(res.diagnostic ?? null);
 				}
@@ -1020,9 +1011,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 			await loadConfig("models");
 			// Raw 保存也触发模型刷新，确保运行中的 Agent 实时生效
 			void refreshRunningAgents();
-		} else if (rawFileName === "auth.json") await loadConfig("auth");
+		} 		else if (rawFileName === "auth.json") await loadConfig("auth");
 		else if (rawFileName === "trust.json") await loadConfig("trust");
-		else if (rawFileName === "api-manager.json") await handleRawFileChange("api-manager.json");
 		else await loadConfig("settings");
 	};
 
@@ -1038,9 +1028,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 						? await api.config.getAuth()
 						: fileName === "trust.json"
 							? await api.config.getTrust()
-							: fileName === "api-manager.json"
-								? await api.config.getApiManager()
-								: await api.config.getRaw(fileName);
+							: await api.config.getRaw(fileName);
 			setRawContent(res.raw);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -1387,7 +1375,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 		{ id: "settings", label: t("config.nav.settings") },
 		{ id: "maestro", label: t("config.nav.maestro") },
 		{ id: "trust", label: t("config.nav.trust") },
-		{ id: "apiManager", label: t("config.nav.apiManager") },
 		{ id: "vision", label: t("config.nav.vision") },
 		{ id: "raw", label: t("config.nav.raw") },
 	];
@@ -1713,7 +1700,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 					)}
 
 					{section === "modelFailover" && !loading && (
-						<ModelFailoverTab workspacePath={props.projectPath} />
+						<ModelFailoverTab workspacePath={props.projectPath} modelsData={modelsData} />
 					)}
 
 					{section === "hooks" && !loading && (
@@ -1747,7 +1734,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 						/>
 					)}
 
-					{section === "config" && tab === "vision" && (
+					{section === "config" && !loading && tab === "vision" && (
 						<VisionTab
 							data={settingsData}
 							modelsData={modelsData}
@@ -1757,17 +1744,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 						/>
 					)}
 
-					{section === "config" && !loading && (tab === "raw" || tab === "apiManager") && (
+					{section === "config" && !loading && tab === "raw" && (
 						<RawTab
-							fileName={tab === "apiManager" ? "api-manager.json" : rawFileName}
+							fileName={rawFileName}
 							content={rawContent}
 							saving={saving}
-							onChangeFileName={(name) => {
-								if (tab === "apiManager" && name !== "api-manager.json") {
-									setTab("raw");
-								}
-								handleRawFileChange(name);
-							}}
+							onChangeFileName={handleRawFileChange}
 							onChangeContent={setRawContent}
 							onSave={handleSaveRaw}
 						/>

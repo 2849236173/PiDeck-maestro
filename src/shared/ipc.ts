@@ -231,6 +231,7 @@ export const ipcChannels = {
 	configSaveHooks: "config:save-hooks",
 	configSaveSkillConfig: "config:save-skill-config",
 	configSaveWebSearch: "config:save-web-search",
+	configSaveApiManager: "config:save-api-manager",
 	configSaveSmartSearch: "config:save-smart-search",
 	configSaveRaw: "config:save-raw",
 	configExport: "config:export",

@@ -759,6 +759,11 @@ const api = {
 				valid: boolean;
 				error?: string;
 			}>,
+		saveApiManager: (config: Record<string, unknown>) =>
+			ipcRenderer.invoke(ipcChannels.configSaveApiManager, config) as Promise<{
+				valid: boolean;
+				error?: string;
+			}>,
 		saveTeammateModels: (request: TeammateModelConfigSaveRequest) =>
 			ipcRenderer.invoke(
 				ipcChannels.configSaveTeammateModels,

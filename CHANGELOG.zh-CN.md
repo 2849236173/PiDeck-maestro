@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.6.6-15 - 2026-08-03
+
+### 配置页基础流对齐 pi-maestro-flow
+
+1. 移除与 Models 冲突的 API Manager 页签；Provider / 模型仍走 Models + Auth。
+2. Model Failover 改为双栏：选主模型 → 勾选/排序 fallback → 启用开关 → 保存。
+3. MCP 改为作用域 → imports → 服务器增删改 / OAuth 引导 → 保存。
+4. Hooks 改为事件 → 命令+超时处理器 → 保存；Web Search 改为分组键值编辑 → 保存。
+5. Vision 明确为会话 `/vision` 辅助流；图像能力仍在 Models 页声明。
+
 ## v0.6.6-14-fix - 2026-08-03
 
 ### Bug 修复

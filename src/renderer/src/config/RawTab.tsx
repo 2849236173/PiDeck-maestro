@@ -10,7 +10,6 @@ const RAW_FILE_OPTIONS = [
 	{ value: "auth.json", label: "auth.json" },
 	{ value: "settings.json", label: "settings.json" },
 	{ value: "trust.json", label: "trust.json" },
-	{ value: "api-manager.json", label: "api-manager.json" },
 	{ value: "permissions.json", label: "permissions.json" },
 	{ value: "vision.json", label: "vision.json" },
 	{ value: "lsp.json", label: "lsp.json" },

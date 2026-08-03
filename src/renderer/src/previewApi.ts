@@ -757,6 +757,7 @@ export function createPreviewApi(): PiDesktopApi {
 			saveModels: async () => ({ valid: true }),
 			saveAuth: async () => ({ valid: true }),
 			saveSettings: async () => ({ valid: true }),
+			saveApiManager: async () => ({ valid: true }),
 			saveTeammateModels: async () => ({ valid: true }),
 			saveCompaction: async () => ({ valid: true }),
 			getMcp: async (workspacePath) => ({

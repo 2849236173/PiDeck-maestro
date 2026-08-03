@@ -87,16 +87,15 @@ export function VisionTab(props: {
 
 	return (
 		<div className="vision-tab">
-			<div className="config-toolbar vision-toolbar">
+			<div className="vision-header">
 				<div>
-					<strong>{t("vision.title")}</strong>
+					<h3>{t("vision.title")}</h3>
 					<p>{t("vision.description")}</p>
 				</div>
-				<div className="config-toolbar-actions">
-					<Button variant="secondary" onClick={() => copyVisionCommand()}>
-						<Copy size={14} aria-hidden="true" /> {t("vision.copyCommand")}
-					</Button>
-				</div>
+				<Button variant="secondary" buttonSize="sm" onClick={() => copyVisionCommand()}>
+					<Copy size={14} aria-hidden="true" />
+					{t("vision.copyCommand")}
+				</Button>
 			</div>
 
 			<div className="vision-summary">
@@ -106,13 +105,13 @@ export function VisionTab(props: {
 						<strong>{t("vision.defaultFallback")}</strong>
 						<span>
 							{defaultProvider || t("vision.unsetProvider")}
-							{defaultModel ? ` · ${defaultModel}` : ""}
+							{defaultModel ? ` / ${defaultModel}` : ""}
 						</span>
 						<small>{t("vision.defaultFallbackHint")}</small>
 					</div>
 				</div>
 				<div className="vision-card">
-					<Pencil size={18} aria-hidden="true" />
+					<Rocket size={18} aria-hidden="true" />
 					<div>
 						<strong>{t("vision.runInline")}</strong>
 						<span>{t("vision.runInlineHint")}</span>
@@ -121,32 +120,39 @@ export function VisionTab(props: {
 				</div>
 			</div>
 
-			<div className="vision-insert-row">
+			<div className="vision-command-row">
 				<TextField
 					label={t("vision.insertLabel")}
 					value={draft}
 					onChange={setDraft}
 					placeholder={t("vision.insertPlaceholder")}
 				/>
-				<Button variant="primary" onClick={sendDraft} disabled={!draft.trim() || !props.onInsertPrompt}>
-					<Rocket size={14} aria-hidden="true" /> {t("vision.sendAndExecute")}
+				<Button
+					variant="primary"
+					onClick={sendDraft}
+					disabled={!draft.trim() || !props.onInsertPrompt}
+				>
+					<Rocket size={14} aria-hidden="true" />
+					{t("vision.sendAndExecute")}
 				</Button>
 			</div>
 
 			<div className="vision-candidates">
 				<div className="vision-candidates-header">
-					<strong>{t("vision.candidates")}</strong>
-					<span className="vision-candidates-count">
-						{filtered.length} / {imageCandidates.length}
-					</span>
+					<div className="vision-candidates-title">
+						<strong>{t("vision.candidates")}</strong>
+						<span className="vision-candidates-count">
+							{filtered.length} / {imageCandidates.length}
+						</span>
+					</div>
+					<input
+						className="config-settings-input vision-candidates-filter"
+						type="text"
+						value={filter}
+						onChange={(e) => setFilter(e.target.value)}
+						placeholder={t("vision.candidatesFilter")}
+					/>
 				</div>
-				<input
-					className="config-settings-input vision-candidates-filter"
-					type="text"
-					value={filter}
-					onChange={(e) => setFilter(e.target.value)}
-					placeholder={t("vision.candidatesFilter")}
-				/>
 				<p className="vision-candidates-hint">{t("vision.selectHint")}</p>
 				{filtered.length === 0 ? (
 					<div className="config-empty">{t("vision.noImageModel")}</div>
@@ -163,7 +169,7 @@ export function VisionTab(props: {
 								>
 									<div className="vision-candidates-info">
 										<span className="vision-candidates-name">{c.name ?? c.id}</span>
-										<span className="vision-candidates-provider">{modelKey}</span>
+										<code className="vision-candidates-provider">{modelKey}</code>
 									</div>
 									<div className="vision-candidates-actions">
 										<IconButton
@@ -186,7 +192,7 @@ export function VisionTab(props: {
 										</IconButton>
 										{isSelected && (
 											<span className="vision-candidates-selected-badge">
-												<Check size={12} aria-hidden="true" /> {t("vision.selected")}
+												<Check size={12} aria-hidden="true" />
 											</span>
 										)}
 									</div>
