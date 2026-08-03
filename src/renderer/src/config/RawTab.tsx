@@ -1,5 +1,7 @@
 import { t } from "../i18n";
-import { ConfigSelect } from "./ConfigShared";
+import { Button } from "../components/ui/Button";
+import { SelectField } from "../components/ui/SelectField";
+import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
 
 // ── Raw Tab ─────────────────────────────────────────────
 
@@ -9,6 +11,9 @@ const RAW_FILE_OPTIONS = [
 	{ value: "settings.json", label: "settings.json" },
 	{ value: "trust.json", label: "trust.json" },
 	{ value: "api-manager.json", label: "api-manager.json" },
+	{ value: "permissions.json", label: "permissions.json" },
+	{ value: "vision.json", label: "vision.json" },
+	{ value: "lsp.json", label: "lsp.json" },
 ];
 
 export function RawTab(props: {
@@ -22,25 +27,29 @@ export function RawTab(props: {
 	return (
 		<div className="config-raw-tab">
 			<div className="config-toolbar">
-				<ConfigSelect
+				<SelectField
+					label={t("config.openRawFile")}
 					value={props.fileName}
 					options={RAW_FILE_OPTIONS}
 					onChange={props.onChangeFileName}
 				/>
-				<button
-					className="config-btn primary"
+				<Button
+					variant="primary"
 					onClick={props.onSave}
 					disabled={props.saving}
+					loading={props.saving}
 				>
-					{props.saving ? t("common.saving") : t("common.save")}
-				</button>
+					{t("common.save")}
+				</Button>
 			</div>
-			<textarea
-				className="config-raw-editor"
-				value={props.content}
-				onChange={(e) => props.onChangeContent(e.target.value)}
-				spellCheck={false}
-			/>
+			<div className="config-raw-editor">
+				<LazyMonacoEditor
+					value={props.content}
+					language="json"
+					height="100%"
+					onChange={(value) => props.onChangeContent(value ?? "")}
+				/>
+			</div>
 		</div>
 	);
 }

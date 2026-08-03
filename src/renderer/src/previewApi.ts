@@ -660,6 +660,7 @@ export function createPreviewApi(): PiDesktopApi {
 			getSettings: async () => ({ raw: "{}", parsed: {} }),
 			getTrust: async () => ({ raw: "{}", parsed: {} }),
 			getApiManager: async () => ({ raw: "{}", parsed: {} }),
+			getRaw: async () => ({ raw: "{}", parsed: {} }),
 			getSkillConfig: async (workspacePath) => {
 				const defaultSkillConfig = {
 					version: "1.0.0",

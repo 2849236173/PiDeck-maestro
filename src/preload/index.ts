@@ -704,6 +704,12 @@ const api = {
 				parsed: Record<string, unknown>;
 				diagnostic?: ConfigFileDiagnostic;
 			}>,
+		getRaw: (fileName: string) =>
+			ipcRenderer.invoke(ipcChannels.configGetRaw, fileName) as Promise<{
+				raw: string;
+				parsed: Record<string, unknown>;
+				diagnostic?: ConfigFileDiagnostic;
+			}>,
 		getTeammateModels: (workspacePath?: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.configGetTeammateModels,

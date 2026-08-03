@@ -561,6 +561,7 @@ export function App() {
     Array<{ name: string; path: string; description: string; content: string; argumentHint?: string }>
   >([]);
   const [composerModePickerOpen, setComposerModePickerOpen] = useState(false);
+  const [permissionBypassByAgent, setPermissionBypassByAgent] = useState<Record<string, boolean>>({});
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
   const [fastModeAvailable, setFastModeAvailable] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
@@ -5421,6 +5422,19 @@ export function App() {
     });
   }
 
+  async function togglePermissionBypass() {
+    const agentId = activeAgentId;
+    if (!agentId || isAgentBusy || isAgentStarting) return;
+    const enabled = !(permissionBypassByAgent[agentId] === true);
+    await sendPrompt({
+      agentId,
+      message: enabled ? "/permissions yolo" : "/permissions normal",
+      images: [],
+      agentMode: currentComposerAgentMode,
+    });
+    setPermissionBypassByAgent((current) => ({ ...current, [agentId]: enabled }));
+  }
+
   async function sendPromptAsFollowUp() {
     const targetAgentId = activeAgentId;
     const livePrompt = targetAgentId
@@ -8233,6 +8247,16 @@ export function App() {
                     )}
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`composer-bar-btn${activeAgentId && permissionBypassByAgent[activeAgentId] ? " active" : ""}`}
+                  disabled={isAgentBusy || isAgentStarting || !activeAgentId}
+                  onClick={() => void togglePermissionBypass()}
+                  title={t("app.permissionBypassTitle")}
+                  aria-pressed={activeAgentId ? permissionBypassByAgent[activeAgentId] === true : false}
+                >
+                  <span>{t("app.permissionBypass")}</span>
+                </button>
                 <button
                   type="button"
                   className="composer-bar-btn icon"

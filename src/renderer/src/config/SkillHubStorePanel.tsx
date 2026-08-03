@@ -1,7 +1,10 @@
 // @ts-nocheck - SkillHub store panel, new feature
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Download, ArrowLeft, Check, AlertCircle, X, Trash2, BadgeCheck } from "lucide-react";
+import { Search, Download, ArrowLeft, Check, AlertCircle, X, Trash2, BadgeCheck, TerminalSquare } from "lucide-react";
 import { t } from "../i18n";
+import { Button } from "../components/ui/Button";
+import { IconButton } from "../components/ui/IconButton";
+import { TextField } from "../components/ui/TextField";
 import { showNotice } from "../utils/notice";
 import { openInSystemBrowser } from "../utils/openExternal";
 import type { SkillHubItem, SkillHubDetail, SkillHubSearchResult, SkillHubInstallResult, PiSkillListResult } from "../../../shared/types";
@@ -220,19 +223,47 @@ export function SkillHubStorePanel() {
 		}
 	};
 
-	// Detail view
+	const handleUninstall = async () => {
+		if (!detail) return;
+		try {
+			const list: PiSkillListResult = await (window as any).piDesktop.skills.list();
+			const matches = list.skills.filter((skill) => skill.name.toLowerCase() === detail.skill.displayName.toLowerCase() && !skill.readOnly);
+			if (matches.length === 0) {
+				showNotice(t("config.skillHubNotInstalled"), 1800, "error");
+				return;
+			}
+			for (const skill of matches) await (window as any).piDesktop.skills.delete(skill.path);
+			setInstalledSlugs((current) => { const next = new Set(current); next.delete(detail.skill.slug); return next; });
+			persistedRef.current = persistedRef.current.filter((entry) => entry.slug !== detail.skill.slug);
+			savePersisted(persistedRef.current);
+			showNotice(t("config.skillHubUninstalled"), 1800);
+		} catch (err) {
+			showNotice(err instanceof Error ? err.message : String(err), 4000, "error");
+		}
+	};
+
 	if (previewSlug) {
+		const skill = detail?.skill;
 		return (
 			<div className="skillhub-panel">
 				<div className="skillhub-detail-toolbar">
-					<button className="config-btn" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
-						<ArrowLeft size={14} />
-						{t("config.promptStoreBack")}
-					</button>
+					<Button variant="secondary" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
+						<ArrowLeft size={14} /> {t("config.promptStoreBack")}
+					</Button>
+					{skill && installedSlugs.has(skill.slug) ? <Button variant="danger" onClick={() => void handleUninstall()}>{t("config.skillHubUninstall")}</Button> : null}
 				</div>
-				<div className="config-empty" style={{ marginTop: 24 }}>
-					<p>{t("config.skillHubDetailNotAvailable")}</p>
-				</div>
+				{detailLoading ? <div className="config-loading">{t("common.loading")}</div> : skill ? (
+					<div className="skillhub-detail">
+						<h2>{skill.displayName}</h2>
+						<p>{skill.summary_zh || skill.summary}</p>
+						<div className="skillhub-detail-meta"><span>{skill.category}</span><span>{skill.stats.downloads} {t("common.results")}</span><span>{detail.latestVersion.version}</span><span>{detail.owner.displayName}</span></div>
+						<h3>{t("config.skillHubInstallCommand")}</h3>
+						<code>npx skills add {skill.slug}</code>
+						{detail.latestVersion.changelog ? <><h3>{t("config.skillHubChangelog")}</h3><p>{detail.latestVersion.changelog}</p></> : null}
+						<Button variant="primary" onClick={() => void handleInstall()} loading={installing}>{t("common.install")}</Button>
+						{installResult?.error ? <div className="config-error">{installResult.error}</div> : null}
+					</div>
+				) : <div className="config-empty">{t("config.skillHubDetailNotAvailable")}</div>}
 			</div>
 		);
 	}
@@ -252,24 +283,27 @@ export function SkillHubStorePanel() {
 						placeholder={t("config.skillHubSearchPlaceholder")}
 						disabled={searching}
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						variant="primary"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
+						loading={searching}
 					>
 						{searching ? t("common.searching") + "…" : <Search size={14} />}
-					</button>
+					</Button>
 				</div>
 				{!result && !searching && (
 					<div className="skillhub-suggestions">
 						{SUGGESTED_SEARCHES.map((s) => (
-							<button
+							<Button
 								key={s}
+								variant="ghost"
+								buttonSize="sm"
 								className="skillhub-suggestion-chip"
 								onClick={() => { setQuery(s); void handleSearch(s); }}
 							>
 								{s}
-							</button>
+							</Button>
 						))}
 					</div>
 				)}
@@ -291,11 +325,7 @@ export function SkillHubStorePanel() {
 						<article
 							key={item.slug}
 							className="skillhub-card"
-							onClick={() => {
-								openInSystemBrowser(
-									`https://www.skills.sh/search?q=${encodeURIComponent(item.name)}`
-								);
-							}}
+							onClick={() => void openDetail(item.slug)}
 						>
 							<div className="skillhub-card-main">
 								<strong className="skillhub-card-title">
@@ -314,9 +344,8 @@ export function SkillHubStorePanel() {
 								</div>
 							</div>
 							<div className="skillhub-card-actions">
-								<button
-									className="skillhub-card-action-btn"
-									title="复制安装命令"
+								<IconButton
+									label={t("config.skillHubCopyInstallCommand")}
 									onClick={(e) => {
 										e.stopPropagation();
 										const pkg = item.slug.slice(0, item.slug.lastIndexOf("/"));
@@ -324,12 +353,11 @@ export function SkillHubStorePanel() {
 										showNotice(t("app.codeCopied"), 1200);
 									}}
 								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-								</button>
+									<TerminalSquare size={14} />
+								</IconButton>
 								{!installedSlugs.has(item.slug) && (
-									<button
-										className="skillhub-card-action-btn primary"
-										title={t("common.install")}
+									<IconButton
+										label={t("common.install")}
 										disabled={installingSlugs.has(item.slug)}
 										onClick={async (e) => {
 											e.stopPropagation();
@@ -337,7 +365,7 @@ export function SkillHubStorePanel() {
 										}}
 									>
 										{installingSlugs.has(item.slug) ? <span className="skillhub-installing-dot" /> : <Download size={14} />}
-									</button>
+									</IconButton>
 								)}
 							</div>
 						</article>

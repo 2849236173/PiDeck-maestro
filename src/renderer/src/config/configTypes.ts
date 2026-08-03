@@ -1,4 +1,4 @@
-export type ConfigTab = "models" | "auth" | "settings" | "maestro" | "trust" | "raw";
+export type ConfigTab = "models" | "auth" | "settings" | "maestro" | "trust" | "apiManager" | "vision" | "raw";
 
 export type {
 	TeammateModelConfigSaveRequest,

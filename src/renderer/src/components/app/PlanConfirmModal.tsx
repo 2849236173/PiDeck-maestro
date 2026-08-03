@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, FilePenLine, X } from "lucide-react";
+import { Check, FilePenLine, MessageCircle, X } from "lucide-react";
 import type { PlanDraftSnapshot } from "../../../../shared/types";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
@@ -12,6 +12,7 @@ import { Modal } from "../ui/Modal";
 export type PlanConfirmAction =
 	| { kind: "approve"; draft: PlanDraftSnapshot }
 	| { kind: "reject"; reason: string; draft: PlanDraftSnapshot }
+	| { kind: "discuss"; message: string; draft: PlanDraftSnapshot }
 	| { kind: "change-request"; request: string; draft: PlanDraftSnapshot };
 
 export function PlanConfirmModal(props: {
@@ -22,7 +23,7 @@ export function PlanConfirmModal(props: {
 }) {
 	const [draft, setDraft] = useState<PlanDraftSnapshot | null>(null);
 	const [markdown, setMarkdown] = useState("");
-	const [mode, setMode] = useState<"preview" | "edit" | "reject" | "change-request">("preview");
+	const [mode, setMode] = useState<"preview" | "edit" | "reject" | "change-request" | "discuss">("preview");
 	const [feedback, setFeedback] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -55,7 +56,7 @@ export function PlanConfirmModal(props: {
 	}, [props.agentId, props.open]);
 
 	useEffect(() => {
-		if (mode === "reject" || mode === "change-request") {
+		if (mode === "reject" || mode === "change-request" || mode === "discuss") {
 			feedbackRef.current?.focus();
 		}
 	}, [mode]);
@@ -113,7 +114,7 @@ export function PlanConfirmModal(props: {
 		<Modal open={props.open} onClose={props.onClose} title={title} size="full" contentClassName="plan-confirm-modal">
 			<div className="plan-confirm-shell">
 				<div className="plan-confirm-meta">
-					<span>{draft?.status ?? "loading"}</span>
+					<span>{draft ? draft.status : t("planConfirm.loadingStatus")}</span>
 					{draft?.revision !== undefined ? <span>r{draft.revision}</span> : null}
 					{draft?.approvedAt ? <span>{t("planConfirm.approved")}</span> : null}
 					{draft?.handoffKey ? <code title={draft.handoffKey}>{draft.handoffKey.slice(0, 12)}</code> : null}
@@ -133,14 +134,14 @@ export function PlanConfirmModal(props: {
 							onChange={(value) => setMarkdown(value ?? "")}
 						/>
 					</div>
-				) : mode === "reject" || mode === "change-request" ? (
+				) : mode === "reject" || mode === "change-request" || mode === "discuss" ? (
 					<div className="plan-confirm-feedback">
 						<label>
-							<span>{mode === "reject" ? t("planConfirm.rejectReason") : t("planConfirm.changeRequest")}</span>
+							<span>{mode === "reject" ? t("planConfirm.rejectReason") : mode === "discuss" ? t("planConfirm.discussTopic") : t("planConfirm.changeRequest")}</span>
 							<textarea
 								ref={feedbackRef}
 								value={feedback}
-								placeholder={mode === "reject" ? t("planConfirm.rejectPlaceholder") : t("planConfirm.changePlaceholder")}
+								placeholder={mode === "reject" ? t("planConfirm.rejectPlaceholder") : mode === "discuss" ? t("planConfirm.discussPlaceholder") : t("planConfirm.changePlaceholder")}
 								onChange={(event) => setFeedback(event.target.value)}
 							/>
 						</label>
@@ -162,6 +163,9 @@ export function PlanConfirmModal(props: {
 							<Button variant="secondary" onClick={() => setMode("change-request")} disabled={!draft || loading || Boolean(submitting)}>
 								<FilePenLine size={15} aria-hidden="true" /> {t("planConfirm.requestChange")}
 							</Button>
+							<Button variant="secondary" onClick={() => setMode("discuss")} disabled={!draft || loading || Boolean(submitting)}>
+								<MessageCircle size={15} aria-hidden="true" /> {t("planConfirm.discuss")}
+							</Button>
 							<Button
 								variant="ghost"
 								onClick={() => {
@@ -171,6 +175,13 @@ export function PlanConfirmModal(props: {
 								disabled={!draft || loading || Boolean(submitting)}
 							>
 								{t("planConfirm.editMarkdown")}
+							</Button>
+							<Button
+								variant="ghost"
+								onClick={props.onClose}
+								disabled={loading || Boolean(submitting)}
+							>
+								{t("common.close")}
 							</Button>
 							<Button
 								variant="primary"
@@ -199,7 +210,7 @@ export function PlanConfirmModal(props: {
 							</Button>
 						</>
 					)}
-					{(mode === "reject" || mode === "change-request") && (
+					{(mode === "reject" || mode === "change-request" || mode === "discuss") && (
 						<>
 							<Button
 								variant="secondary"
@@ -218,12 +229,15 @@ export function PlanConfirmModal(props: {
 								onClick={() => {
 									if (!currentDraft) return;
 									const payload = feedback.trim();
-									void submitAction(mode === "reject"
-										? { kind: "reject", reason: payload, draft: currentDraft }
-										: { kind: "change-request", request: payload, draft: currentDraft });
+									const action = mode === "reject"
+										? { kind: "reject" as const, reason: payload, draft: currentDraft }
+										: mode === "discuss"
+										? { kind: "discuss" as const, message: payload, draft: currentDraft }
+										: { kind: "change-request" as const, request: payload, draft: currentDraft };
+									void submitAction(action);
 								}}
 							>
-								{mode === "reject" ? t("planConfirm.sendReason") : t("planConfirm.sendChangeRequest")}
+								{mode === "reject" ? t("planConfirm.sendReason") : mode === "discuss" ? t("planConfirm.sendDiscuss") : t("planConfirm.sendChangeRequest")}
 							</Button>
 						</>
 					)}

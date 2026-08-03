@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { ConfigEntryList, type ConfigEntryListItem } from "./ConfigEntryList";
 
 type Scope = "global" | "workspace";
 
@@ -33,6 +34,32 @@ export function ModelFailoverTab(props: { workspacePath?: string }) {
 	const [error, setError] = useState<string | null>(null);
 
 	const selectedSource = useMemo(() => scope === "workspace" ? snapshot?.workspace : snapshot?.global, [scope, snapshot]);
+
+	const entries = useMemo<ConfigEntryListItem[]>(() => {
+		try {
+			const parsed = JSON.parse(raw) as { fallbackModels?: Record<string, unknown> };
+			const chains = parsed.fallbackModels && typeof parsed.fallbackModels === "object" ? parsed.fallbackModels : {};
+			return Object.entries(chains).map(([id, value]) => ({
+				id,
+				label: id,
+				summary: Array.isArray(value) ? (value as unknown[]).map(String).join(" → ") : t("config.entries.invalid"),
+				invalid: !Array.isArray(value),
+			}));
+		} catch {
+			return [];
+		}
+	}, [raw]);
+
+	const updateChains = (mutate: (chains: Record<string, unknown>) => void) => {
+		try {
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			const chains = parsed.fallbackModels && typeof parsed.fallbackModels === "object" && !Array.isArray(parsed.fallbackModels) ? { ...(parsed.fallbackModels as Record<string, unknown>) } : {};
+			mutate(chains);
+			setRaw(JSON.stringify({ ...parsed, fallbackModels: chains }, null, 2));
+		} catch {
+			setError(t("modelFailover.invalidRoot"));
+		}
+	};
 
 	const load = async () => {
 		setLoading(true);
@@ -106,6 +133,17 @@ export function ModelFailoverTab(props: { workspacePath?: string }) {
 
 			{error ? <div className="config-error">{error}</div> : null}
 
+			<ConfigEntryList
+				items={entries}
+				onAdd={() => updateChains((chains) => {
+					let index = Object.keys(chains).length + 1;
+					let name = `provider/model-${index}`;
+					while (chains[name]) name = `provider/model-${++index}`;
+					chains[name] = [];
+				})}
+				onDelete={(id) => updateChains((chains) => { delete chains[id]; })}
+			/>
+
 			{loading && !snapshot ? (
 				<div className="config-loading">{t("common.loading")}</div>
 			) : snapshot ? (
@@ -135,11 +173,11 @@ export function ModelFailoverTab(props: { workspacePath?: string }) {
 
 					<div className="model-failover-editor-card">
 						<div className="model-failover-editor-header">
-							<div className="mcp-scope-switch" role="tablist" aria-label={t("modelFailover.editScope")}>
-								<Button buttonSize="sm" variant={scope === "global" ? "primary" : "secondary"} onClick={() => selectScope("global")}>
+							<div className="mcp-scope-switch" role="group" aria-label={t("modelFailover.editScope")}>
+								<Button buttonSize="sm" variant={scope === "global" ? "primary" : "secondary"} aria-pressed={scope === "global"} onClick={() => selectScope("global")}>
 									{t("modelFailover.global")}
 								</Button>
-								<Button buttonSize="sm" variant={scope === "workspace" ? "primary" : "secondary"} onClick={() => selectScope("workspace")} disabled={!props.workspacePath}>
+								<Button buttonSize="sm" variant={scope === "workspace" ? "primary" : "secondary"} aria-pressed={scope === "workspace"} onClick={() => selectScope("workspace")} disabled={!props.workspacePath}>
 									{t("modelFailover.project")}
 								</Button>
 							</div>

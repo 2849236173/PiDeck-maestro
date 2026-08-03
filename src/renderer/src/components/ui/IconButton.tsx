@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
+import type { ReactNode, MouseEvent } from "react";
 import { X } from "lucide-react";
 
 export function IconButton(props: {
 	label: string;
 	children: ReactNode;
-	onClick?: () => void;
+	onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
 	className?: string;
 	title?: string;
 	type?: "button" | "submit" | "reset";

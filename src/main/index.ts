@@ -3406,6 +3406,9 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.configGetApiManager, () =>
 		configManager.getApiManagerConfig(),
 	);
+	ipcMain.handle(ipcChannels.configGetRaw, (_event, fileName: string) =>
+		configManager.getRawConfig(fileName),
+	);
 	ipcMain.handle(
 		ipcChannels.configGetTeammateModels,
 		(_event, workspacePath?: string) =>

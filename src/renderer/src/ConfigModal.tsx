@@ -18,6 +18,7 @@ import { HooksTab } from "./config/HooksTab";
 import { WebSearchTab } from "./config/WebSearchTab";
 import { LogsTab } from "./config/LogsTab";
 import { CloseIconButton } from "./components/ui/IconButton";
+import { Button } from "./components/ui/Button";
 import { t } from "./i18n";
 import { LazyMonacoEditor } from "./components/ui/LazyMonacoEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
@@ -399,6 +400,11 @@ function ConfigModalContent(props: ConfigModalProps) {
 					// Teammate 路由候选必须来自 Pi 已配置模型；只读本地 models.json，不触发远端发现。
 					const res = await api.config.getModels();
 					setModelsData(normalizeModelsFile(res.parsed));
+				} else if (target === "apiManager") {
+					const res = await api.config.getApiManager();
+					setRawFileName("api-manager.json");
+					setRawContent(res.raw);
+					setConfigDiagnostic(res.diagnostic ?? null);
 				} else if (target === "trust") {
 					const res = await api.config.getTrust();
 					setTrustData(res.parsed as Record<string, boolean>);
@@ -414,16 +420,18 @@ function ConfigModalContent(props: ConfigModalProps) {
 								? "auth.json"
 								: tab === "trust"
 									? "trust.json"
-									: "settings.json";
+									: tab === "apiManager"
+										? "api-manager.json"
+										: "settings.json";
 					setRawFileName(fileName);
 					const res =
 						fileName === "models.json"
 							? await api.config.getModels()
 							: fileName === "auth.json"
 								? await api.config.getAuth()
-								: fileName === "trust.json"
-									? await api.config.getTrust()
-									: await api.config.getSettings();
+								: fileName === "api-manager.json"
+									? await api.config.getApiManager()
+									: await api.config.getRaw(fileName);
 					setRawContent(res.raw);
 					setConfigDiagnostic(res.diagnostic ?? null);
 				}
@@ -461,6 +469,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		if (section === "webSearch") return;
 		if (section === "editors") return;
 		if (section === "logs") return;
+		if (tab === "vision") return;
 		void loadConfig(tab);
 	}, [open, section, tab, loadConfig]);
 
@@ -512,19 +521,21 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const saveAndReload = async (
 		saveFn: () => Promise<{ valid: boolean; error?: string }>,
 		successMessage?: string,
-	) => {
+	): Promise<boolean> => {
 		setSaving(true);
 		setError(null);
 		try {
 			const result = await saveFn();
 			if (!result.valid) {
 				setError(result.error ?? t("config.saveFailed"));
-				return;
+				return false;
 			}
 			onSaved();
 			showToast(successMessage ?? t("config.saved"));
+			return true;
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
+			return false;
 		} finally {
 			setSaving(false);
 		}
@@ -870,10 +881,11 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleSaveModels = async () => {
-		await saveAndReload(
+		const saved = await saveAndReload(
 			() => api.config.saveModels(modelsData),
 			t("config.modelsSaved"),
 		);
+		if (!saved) return;
 		await loadConfig("models");
 
 		// 保存后自动刷新所有运行中的 Agent，使模型配置实时生效
@@ -969,32 +981,36 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleSaveAuth = async () => {
-		await saveAndReload(() => api.config.saveAuth(authData));
-		await loadConfig("auth");
+		if (await saveAndReload(() => api.config.saveAuth(authData))) {
+			await loadConfig("auth");
+		}
 	};
 
 	// ── Settings 操作 ────────────────────────────────────
 
 	const handleSaveSettings = async () => {
-		await saveAndReload(() => api.config.saveSettings(settingsData));
-		await loadConfig("settings");
+		if (await saveAndReload(() => api.config.saveSettings(settingsData))) {
+			await loadConfig("settings");
+		}
 	};
 
 	// ── Trust 操作 ────────────────────────────────────────
 
 	const handleSaveTrust = async () => {
-		await saveAndReload(() => api.config.saveRaw("trust.json", JSON.stringify(trustData, null, 2)));
-		await loadConfig("trust");
+		if (await saveAndReload(() => api.config.saveRaw("trust.json", JSON.stringify(trustData, null, 2)))) {
+			await loadConfig("trust");
+		}
 	};
 
 	// ── Raw 操作 ─────────────────────────────────────────
 
 	const handleSaveRaw = async () => {
 		const isModelsFile = rawFileName === "models.json";
-		await saveAndReload(
+		const saved = await saveAndReload(
 			() => api.config.saveRaw(rawFileName, rawContent),
 			isModelsFile ? (t("config.modelsSaved") as any) : undefined,
 		);
+		if (!saved) return;
 		if (isModelsFile) {
 			await loadConfig("models");
 			// Raw 保存也触发模型刷新，确保运行中的 Agent 实时生效
@@ -1019,7 +1035,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							? await api.config.getTrust()
 							: fileName === "api-manager.json"
 								? await api.config.getApiManager()
-								: await api.config.getSettings();
+								: await api.config.getRaw(fileName);
 			setRawContent(res.raw);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -1364,8 +1380,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 		{ id: "models", label: t("config.nav.models") },
 		{ id: "auth", label: t("config.nav.auth") },
 		{ id: "settings", label: t("config.nav.settings") },
-		{ id: "maestro", label: "Maestro" },
+		{ id: "maestro", label: t("config.nav.maestro") },
 		{ id: "trust", label: t("config.nav.trust") },
+		{ id: "apiManager", label: t("config.nav.apiManager") },
+		{ id: "vision", label: t("config.nav.vision") },
 		{ id: "raw", label: t("config.nav.raw") },
 	];
 
@@ -1492,7 +1510,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 						<ConfigDiagnosticCard
 							diagnostic={configDiagnostic}
 							onOpenDocs={() => api.app.openExternal(configDiagnostic.docsUrl)}
-							onOpenRaw={() => setTab("raw")}
+							onOpenRaw={() => {
+								setRawFileName(configDiagnostic.fileName);
+								setTab("raw");
+							}}
 						/>
 					)}
 
@@ -1721,12 +1742,35 @@ function ConfigModalContent(props: ConfigModalProps) {
 						/>
 					)}
 
-					{section === "config" && !loading && tab === "raw" && (
+					{section === "config" && tab === "vision" && (
+						<div className="config-hint-card vision-config-guide">
+							<div>
+								<strong>{t("vision.title")}</strong>
+								<p>{t("vision.description")}</p>
+							</div>
+							<Button
+								variant="secondary"
+								onClick={() => {
+									void navigator.clipboard.writeText("/vision");
+									showToast(t("vision.copied"));
+								}}
+							>
+								{t("vision.copyCommand")}
+							</Button>
+						</div>
+					)}
+
+					{section === "config" && !loading && (tab === "raw" || tab === "apiManager") && (
 						<RawTab
-							fileName={rawFileName}
+							fileName={tab === "apiManager" ? "api-manager.json" : rawFileName}
 							content={rawContent}
 							saving={saving}
-							onChangeFileName={handleRawFileChange}
+							onChangeFileName={(name) => {
+								if (tab === "apiManager" && name !== "api-manager.json") {
+									setTab("raw");
+								}
+								handleRawFileChange(name);
+							}}
 							onChangeContent={setRawContent}
 							onSave={handleSaveRaw}
 						/>

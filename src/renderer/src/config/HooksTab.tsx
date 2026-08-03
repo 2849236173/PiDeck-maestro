@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { ConfigEntryList, type ConfigEntryListItem } from "./ConfigEntryList";
 
 type HooksApi = {
 	getHooks: (workspacePath?: string) => Promise<HooksConfigSnapshot>;
@@ -28,6 +29,29 @@ export function HooksTab(props: { workspacePath?: string }) {
 
 	const activePath = useMemo(() => mode === "config" ? snapshot?.configPath : snapshot?.trustPath, [mode, snapshot]);
 	const activeDiagnostic = mode === "config" ? snapshot?.configDiagnostic : snapshot?.trustDiagnostic;
+	const activeRaw = mode === "config" ? configRaw : trustRaw;
+	const entries = useMemo<ConfigEntryListItem[]>(() => {
+		try {
+			const parsed = JSON.parse(activeRaw) as Record<string, unknown>;
+			const source = mode === "config" && parsed.hooks && typeof parsed.hooks === "object" ? parsed.hooks as Record<string, unknown> : parsed;
+			return Object.entries(source).map(([id, value]) => ({ id, label: id, summary: typeof value === "string" ? value : Array.isArray(value) ? t("hooks.entryCount", { count: value.length }) : t("config.entries.title") }));
+		} catch {
+			return [];
+		}
+	}, [activeRaw, mode]);
+
+	const updateEntries = (mutate: (source: Record<string, unknown>) => void) => {
+		try {
+			const parsed = JSON.parse(activeRaw) as Record<string, unknown>;
+			const nested = mode === "config" && parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks);
+			const source = nested ? { ...(parsed.hooks as Record<string, unknown>) } : { ...parsed };
+			mutate(source);
+			const next = nested ? { ...parsed, hooks: source } : source;
+			if (mode === "config") setConfigRaw(JSON.stringify(next, null, 2)); else setTrustRaw(JSON.stringify(next, null, 2));
+		} catch {
+			setError(t("hooks.invalidJson"));
+		}
+	};
 
 	const load = async () => {
 		if (!props.workspacePath) return;
@@ -93,6 +117,17 @@ export function HooksTab(props: { workspacePath?: string }) {
 			{error ? <div className="config-error">{error}</div> : null}
 			{activeDiagnostic ? <div className="config-error">{activeDiagnostic.message}</div> : null}
 
+			<ConfigEntryList
+				items={entries}
+				onAdd={() => updateEntries((source) => {
+					let index = Object.keys(source).length + 1;
+					let name = `entry-${index}`;
+					while (source[name]) name = `entry-${++index}`;
+					source[name] = mode === "config" ? [] : "";
+				})}
+				onDelete={(id) => updateEntries((source) => { delete source[id]; })}
+			/>
+
 			{loading && !snapshot ? (
 				<div className="config-loading">{t("common.loading")}</div>
 			) : snapshot ? (
@@ -119,9 +154,9 @@ export function HooksTab(props: { workspacePath?: string }) {
 
 					<div className="hooks-editor-card">
 						<div className="hooks-editor-header">
-							<div className="mcp-scope-switch" role="tablist" aria-label={t("hooks.editScope")}>
-								<Button buttonSize="sm" variant={mode === "config" ? "primary" : "secondary"} onClick={() => setMode("config")}>{t("hooks.configFile")}</Button>
-								<Button buttonSize="sm" variant={mode === "trust" ? "primary" : "secondary"} onClick={() => setMode("trust")}>{t("hooks.trustFile")}</Button>
+							<div className="mcp-scope-switch" role="group" aria-label={t("hooks.editScope")}>
+								<Button buttonSize="sm" variant={mode === "config" ? "primary" : "secondary"} aria-pressed={mode === "config"} onClick={() => setMode("config")}>{t("hooks.configFile")}</Button>
+								<Button buttonSize="sm" variant={mode === "trust" ? "primary" : "secondary"} aria-pressed={mode === "trust"} onClick={() => setMode("trust")}>{t("hooks.trustFile")}</Button>
 							</div>
 							<code title={activePath}>{activePath}</code>
 						</div>

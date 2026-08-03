@@ -1221,6 +1221,12 @@ export class ConfigManager {
 		return this.readJsonFile<Record<string, unknown>>("api-manager.json", {});
 	}
 
+	async getRawConfig(fileName: string): Promise<ConfigFileReadResult<Record<string, unknown>>> {
+		const allowed = ["models.json", "auth.json", "settings.json", "trust.json", "api-manager.json", "permissions.json", "vision.json", "lsp.json"];
+		if (!allowed.includes(fileName)) throw new Error(`不允许读取的文件：${fileName}`);
+		return this.readJsonFile<Record<string, unknown>>(fileName, {});
+	}
+
 	async ensureTrustedDirectory(directoryPath: string): Promise<void> {
 		const normalizedPath = this.normalizeTrustPath(directoryPath);
 		const trustConfig = await this.getTrustConfig();
@@ -1332,7 +1338,7 @@ export class ConfigManager {
 			};
 		}
 
-		const allowed = ["models.json", "auth.json", "settings.json", "trust.json", "api-manager.json"];
+		const allowed = ["models.json", "auth.json", "settings.json", "trust.json", "api-manager.json", "permissions.json", "vision.json", "lsp.json"];
 		if (!allowed.includes(fileName)) {
 			return { valid: false, error: `不允许编辑的文件：${fileName}` };
 		}

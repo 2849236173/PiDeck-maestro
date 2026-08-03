@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { ConfigEntryList, type ConfigEntryListItem } from "./ConfigEntryList";
 
 type McpApi = {
 	getMcp: (workspacePath?: string) => Promise<McpConfigSnapshot>;
@@ -37,6 +38,34 @@ export function McpTab(props: { workspacePath?: string }) {
 		const id = selectedScope === "workspace" ? "shared-project" : "pi-global";
 		return snapshot.sources.find((source) => source.id === id) ?? null;
 	}, [selectedScope, snapshot]);
+
+	const entries = useMemo<ConfigEntryListItem[]>(() => {
+		try {
+			const parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+			const servers = parsed.mcpServers && typeof parsed.mcpServers === "object" ? parsed.mcpServers : {};
+			return Object.entries(servers).map(([id, value]) => ({
+				id,
+				label: id,
+				summary: value && typeof value === "object" ? String((value as Record<string, unknown>).command ?? (value as Record<string, unknown>).url ?? t("mcp.serverNoCommand")) : t("config.entries.invalid"),
+				invalid: !value || typeof value !== "object" || Array.isArray(value),
+			}));
+		} catch {
+			return [];
+		}
+	}, [raw]);
+
+	const updateServers = (mutate: (servers: Record<string, unknown>) => void) => {
+		try {
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			const servers = parsed.mcpServers && typeof parsed.mcpServers === "object" && !Array.isArray(parsed.mcpServers)
+				? { ...(parsed.mcpServers as Record<string, unknown>) }
+				: {};
+			mutate(servers);
+			setRaw(JSON.stringify({ ...parsed, mcpServers: servers }, null, 2));
+		} catch {
+			setError(t("mcp.invalidJson"));
+		}
+	};
 
 	const load = async () => {
 		setLoading(true);
@@ -107,6 +136,33 @@ export function McpTab(props: { workspacePath?: string }) {
 
 			{error ? <div className="config-error">{error}</div> : null}
 
+			<div className="config-hint-card mcp-auth-hint">
+				<div>
+					<strong>{t("mcp.auth.title")}</strong>
+					<p>{t("mcp.auth.description")}</p>
+				</div>
+				<Button
+					variant="secondary"
+					onClick={() => {
+						void navigator.clipboard.writeText("/mcp-auth");
+						showNotice(t("mcp.auth.copied"), 1600);
+					}}
+				>
+					{t("mcp.auth.copyCommand")}
+				</Button>
+			</div>
+
+			<ConfigEntryList
+				items={entries}
+				onAdd={() => updateServers((servers) => {
+					let index = Object.keys(servers).length + 1;
+					let name = `server-${index}`;
+					while (servers[name]) name = `server-${++index}`;
+					servers[name] = { command: "" };
+				})}
+				onDelete={(id) => updateServers((servers) => { delete servers[id]; })}
+			/>
+
 			{loading && !snapshot ? (
 				<div className="config-loading">{t("common.loading")}</div>
 			) : snapshot ? (
@@ -151,10 +207,11 @@ export function McpTab(props: { workspacePath?: string }) {
 
 					<div className="mcp-editor-card">
 						<div className="mcp-editor-header">
-							<div className="mcp-scope-switch" role="tablist" aria-label={t("mcp.editScope")}>
+							<div className="mcp-scope-switch" role="group" aria-label={t("mcp.editScope")}>
 								<Button
 									buttonSize="sm"
 									variant={selectedScope === "global" ? "primary" : "secondary"}
+									aria-pressed={selectedScope === "global"}
 									onClick={() => selectScope("global")}
 								>
 									{t("mcp.scope.global")}
@@ -162,6 +219,7 @@ export function McpTab(props: { workspacePath?: string }) {
 								<Button
 									buttonSize="sm"
 									variant={selectedScope === "workspace" ? "primary" : "secondary"}
+									aria-pressed={selectedScope === "workspace"}
 									onClick={() => selectScope("workspace")}
 									disabled={!props.workspacePath}
 								>

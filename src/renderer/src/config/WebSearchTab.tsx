@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Globe2, RefreshCw } from "lucide-react";
 import type { SmartSearchConfigSnapshot, WebSearchConfigSnapshot } from "../../../shared/types";
 import { Button } from "../components/ui/Button";
 import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { ConfigEntryList, type ConfigEntryListItem } from "./ConfigEntryList";
 
 type ConfigSource = "smartSearch" | "webAccess";
 type ConfigSnapshot = SmartSearchConfigSnapshot | WebSearchConfigSnapshot;
@@ -57,6 +58,26 @@ export function WebSearchTab() {
 	};
 
 	const snapshot: ConfigSnapshot | null = source === "smartSearch" ? smartSnapshot : webSnapshot;
+	const entries = useMemo<ConfigEntryListItem[]>(() => {
+		try {
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			const providers = parsed.providers && typeof parsed.providers === "object" && !Array.isArray(parsed.providers) ? parsed.providers as Record<string, unknown> : parsed;
+			return Object.entries(providers).map(([id, value]) => ({ id, label: id, summary: value && typeof value === "object" ? t("config.entries.title") : String(value), invalid: value === null }));
+		} catch {
+			return [];
+		}
+	}, [raw]);
+	const updateProviders = (mutate: (providers: Record<string, unknown>) => void) => {
+		try {
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			const nested = parsed.providers && typeof parsed.providers === "object" && !Array.isArray(parsed.providers);
+			const providers = nested ? { ...(parsed.providers as Record<string, unknown>) } : { ...parsed };
+			mutate(providers);
+			setRaw(JSON.stringify(nested ? { ...parsed, providers } : providers, null, 2));
+		} catch {
+			setError(t("webSearch.invalidJson"));
+		}
+	};
 
 	const save = async () => {
 		setSaving(true);
@@ -99,6 +120,17 @@ export function WebSearchTab() {
 			{error ? <div className="config-error">{error}</div> : null}
 			{snapshot?.diagnostic ? <div className="config-error">{snapshot.diagnostic.message}</div> : null}
 
+			<ConfigEntryList
+				items={entries}
+				onAdd={() => updateProviders((providers) => {
+					let index = Object.keys(providers).length + 1;
+					let name = `provider-${index}`;
+					while (providers[name]) name = `provider-${++index}`;
+					providers[name] = {};
+				})}
+				onDelete={(id) => updateProviders((providers) => { delete providers[id]; })}
+			/>
+
 			{loading && !snapshot ? <div className="config-loading">{t("common.loading")}</div> : null}
 			{snapshot ? (
 				<>
@@ -110,12 +142,17 @@ export function WebSearchTab() {
 							<span>{snapshot.exists ? t("mcp.source.exists") : t("mcp.source.missing")}</span>
 						</div>
 					</div>
-					<div className="web-search-source-switch" role="tablist" aria-label={t("webSearch.configFile")}>
-						<Button buttonSize="sm" variant={source === "smartSearch" ? "primary" : "secondary"} onClick={() => selectSource("smartSearch")}>{t("webSearch.smartSearchConfig")}</Button>
-						<Button buttonSize="sm" variant={source === "webAccess" ? "primary" : "secondary"} onClick={() => selectSource("webAccess")}>{t("webSearch.webAccessConfig")}</Button>
-					</div>
 					<div className="web-search-editor-card">
-						<LazyMonacoEditor value={raw} language="json" height="100%" onChange={(value) => setRaw(value ?? "")} />
+						<div className="web-search-editor-header">
+							<div className="web-search-source-switch" role="group" aria-label={t("webSearch.configFile")}>
+								<Button buttonSize="sm" variant={source === "smartSearch" ? "primary" : "secondary"} aria-pressed={source === "smartSearch"} onClick={() => selectSource("smartSearch")}>{t("webSearch.smartSearchConfig")}</Button>
+								<Button buttonSize="sm" variant={source === "webAccess" ? "primary" : "secondary"} aria-pressed={source === "webAccess"} onClick={() => selectSource("webAccess")}>{t("webSearch.webAccessConfig")}</Button>
+							</div>
+							<code title={snapshot.path}>{snapshot.path}</code>
+						</div>
+						<div className="web-search-monaco-wrap">
+							<LazyMonacoEditor value={raw} language="json" height="100%" onChange={(value) => setRaw(value ?? "")} />
+						</div>
 					</div>
 				</>
 			) : null}

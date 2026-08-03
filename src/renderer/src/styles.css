@@ -60,6 +60,20 @@
   --line-height-input: 22px;
   --line-height-title: 24px;
   --line-height-heading: 28px;
+  /* Compatibility aliases used by older feature styles; resolve through the active semantic tokens. */
+  --font-size-xs: var(--font-size-micro);
+  --font-size-sm: var(--font-size-control);
+  --font-size-small: var(--font-size-control);
+  --line-height-xs: var(--line-height-micro);
+  --line-height-sm: var(--line-height-control);
+  --line-height-relaxed: var(--line-height-body);
+  --color-bg-primary: var(--color-bg-panel);
+  --color-bg-secondary: var(--color-bg-muted);
+  --color-bg-code: var(--color-code-bg);
+  --color-text: var(--color-text-primary);
+  --color-text-muted: var(--color-text-tertiary);
+  --color-success: var(--color-accent);
+  --color-border-emphasis: var(--color-border-strong);
   --color-bg-app: #f3f4f1;
   --color-bg-sidebar: #f7f7f3;
   --color-bg-panel: #ffffff;
@@ -22271,6 +22285,13 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	line-height: var(--line-height-xs);
 }
 
+.mcp-source-card small.config-error {
+	margin: 0;
+	padding: var(--space-1) var(--space-2);
+	font-size: var(--font-size-micro);
+	line-height: var(--line-height-micro);
+}
+
 .mcp-source-card code,
 .mcp-editor-header code {
 	overflow: hidden;
@@ -22644,10 +22665,131 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	flex: 1;
 	min-height: 360px;
 	min-width: 0;
+	flex-direction: column;
 	overflow: hidden;
+}
+
+.web-search-editor-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-3);
+	border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.web-search-editor-header code {
+	max-width: 48%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-xs);
+	color: var(--color-text-muted);
+}
+
+.web-search-monaco-wrap {
+	flex: 1;
+	min-height: 320px;
+	min-width: 0;
 }
 
 .web-search-source-switch {
 	display: flex;
+	flex-wrap: wrap;
 	gap: var(--space-2);
+}
+
+@media (max-width: 720px) {
+	.plan-confirm-shell {
+		padding: var(--space-3);
+	}
+
+	.plan-confirm-meta {
+		align-items: flex-start;
+		flex-wrap: wrap;
+		justify-content: flex-start;
+	}
+
+	.plan-confirm-meta code {
+		max-width: 100%;
+	}
+
+	.plan-confirm-actions {
+		justify-content: stretch;
+	}
+
+	.plan-confirm-actions .ui-button {
+		flex: 1 1 140px;
+	}
+
+	.mcp-server-row {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		align-items: start;
+	}
+
+	.mcp-server-row > span {
+		justify-self: start;
+	}
+
+	.mcp-editor-header,
+	.model-failover-editor-header,
+	.hooks-editor-header,
+	.skill-config-editor-header,
+	.web-search-editor-header {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.mcp-editor-header code,
+	.model-failover-editor-header code,
+	.hooks-editor-header code,
+	.skill-config-editor-header code,
+	.web-search-editor-header code {
+		max-width: 100%;
+	}
+
+	.mcp-scope-switch,
+	.web-search-source-switch {
+		width: 100%;
+	}
+}
+
+.config-entry-list {
+	margin: 12px 0;
+	padding: 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	background: var(--color-surface);
+}
+.config-entry-list-header,
+.config-entry-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+.config-entry-list-header { margin-bottom: 8px; }
+.config-entry-list-items { display: grid; gap: 4px; }
+.config-entry-row {
+	min-height: 40px;
+	padding: 6px 8px;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+}
+.config-entry-row[role="button"] { cursor: pointer; }
+.config-entry-row:hover,
+.config-entry-row:focus-visible,
+.config-entry-row.selected { border-color: var(--color-border-strong); background: var(--color-surface-hover); outline: none; }
+.config-entry-row.invalid { border-color: var(--color-danger); }
+.config-entry-row-copy { min-width: 0; display: grid; gap: 2px; }
+.config-entry-row-copy strong,
+.config-entry-row-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.config-entry-row-copy span { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.config-entry-row-copy small { font-size: var(--font-size-sm); }
+
+@media (max-width: 760px) {
+	.config-entry-list { margin-inline: 0; }
+	.config-entry-list-header { align-items: flex-start; }
+	.config-entry-row-copy span { white-space: normal; overflow-wrap: anywhere; }
 }

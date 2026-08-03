@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { ConfigEntryList, type ConfigEntryListItem } from "./ConfigEntryList";
 
 type Scope = "global" | "workspace";
 
@@ -34,6 +35,30 @@ export function SkillConfigTab(props: { workspacePath?: string }) {
 
 	const selectedSource = useMemo(() => scope === "workspace" ? snapshot?.workspace : snapshot?.global, [scope, snapshot]);
 	const selectedDiagnostic = selectedSource?.diagnostic;
+	const entries = useMemo<ConfigEntryListItem[]>(() => {
+		try {
+			const parsed = JSON.parse(raw) as { skills?: Record<string, unknown> };
+			const skills = parsed.skills && typeof parsed.skills === "object" ? parsed.skills : {};
+			return Object.entries(skills).map(([id, value]) => ({
+				id,
+				label: id,
+				summary: value && typeof value === "object" ? t("skillConfig.paramCount", { count: Object.keys((value as Record<string, unknown>).params ?? {}).length }) : t("config.entries.invalid"),
+				invalid: !value || typeof value !== "object" || Array.isArray(value),
+			}));
+		} catch {
+			return [];
+		}
+	}, [raw]);
+	const updateSkills = (mutate: (skills: Record<string, unknown>) => void) => {
+		try {
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			const skills = parsed.skills && typeof parsed.skills === "object" && !Array.isArray(parsed.skills) ? { ...(parsed.skills as Record<string, unknown>) } : {};
+			mutate(skills);
+			setRaw(JSON.stringify({ ...parsed, skills }, null, 2));
+		} catch {
+			setError(t("skillConfig.invalidJson"));
+		}
+	};
 
 	const load = async () => {
 		setLoading(true);
@@ -100,6 +125,17 @@ export function SkillConfigTab(props: { workspacePath?: string }) {
 			{error ? <div className="config-error">{error}</div> : null}
 			{selectedDiagnostic ? <div className="config-error">{selectedDiagnostic.message}</div> : null}
 
+			<ConfigEntryList
+				items={entries}
+				onAdd={() => updateSkills((skills) => {
+					let index = Object.keys(skills).length + 1;
+					let name = `skill-${index}`;
+					while (skills[name]) name = `skill-${++index}`;
+					skills[name] = { enabled: true, params: {} };
+				})}
+				onDelete={(id) => updateSkills((skills) => { delete skills[id]; })}
+			/>
+
 			{loading && !snapshot ? (
 				<div className="config-loading">{t("common.loading")}</div>
 			) : snapshot ? (
@@ -130,9 +166,9 @@ export function SkillConfigTab(props: { workspacePath?: string }) {
 
 					<div className="skill-config-editor-card">
 						<div className="skill-config-editor-header">
-							<div className="mcp-scope-switch" role="tablist" aria-label={t("skillConfig.editScope")}>
-								<Button buttonSize="sm" variant={scope === "global" ? "primary" : "secondary"} onClick={() => selectScope("global")}>{t("modelFailover.global")}</Button>
-								<Button buttonSize="sm" variant={scope === "workspace" ? "primary" : "secondary"} onClick={() => selectScope("workspace")} disabled={!props.workspacePath}>{t("modelFailover.project")}</Button>
+							<div className="mcp-scope-switch" role="group" aria-label={t("skillConfig.editScope")}>
+								<Button buttonSize="sm" variant={scope === "global" ? "primary" : "secondary"} aria-pressed={scope === "global"} onClick={() => selectScope("global")}>{t("modelFailover.global")}</Button>
+								<Button buttonSize="sm" variant={scope === "workspace" ? "primary" : "secondary"} aria-pressed={scope === "workspace"} onClick={() => selectScope("workspace")} disabled={!props.workspacePath}>{t("modelFailover.project")}</Button>
 							</div>
 							<code title={selectedSource?.path}>{selectedSource?.path}</code>
 						</div>
