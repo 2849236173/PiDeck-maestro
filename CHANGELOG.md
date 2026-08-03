@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.6-14 - 2026-08-03
+
+### Configuration page permissions and Vision execution panel
+
+- Introduced a dedicated permissions subsection in the configuration page, including abort, table edit, rule editing, and the new entries surfaced by upstream `ui.custom` compatibility shims. The remaining upstream compatibility gap is now tracked as `ISS-UI-001`.
+- Added the Vision execution panel so users can review and trigger Vision-tagged actions from the configuration surface without leaving the modal.
+- Hardened the configuration entry list and the API Manager / mcp-auth / Plan discuss entry points, with the latest PiDeck RPC configuration bridge feeding them.
+
+### Model retry chain and Fast mode
+
+- Enforced Pi native retry for transient model failures and unified the retry request across providers, so user-initiated retries no longer race with the Agent's internal retry loop.
+- Surfaced the full automatic retry state in the UI (active attempt, fallbacks tried, exhausted diagnostics), and prevented the retry stream from being torn down when the original request ends.
+- Added an independent Fast mode that uses the `service_tier` extension; Fast is shown only when the running Agent, effective model mapping, and provider capability all confirm it can be used. GPT 5.5 / 5.6 variants (Terra, Sol, Luna) are explicitly covered.
+
+### Agent, sub-agent, and Windows reliability
+
+- Kept pre-compaction messages visible so users do not lose context after a successful compaction.
+- Hardened the sub-agent terminal state and stalled entries now freeze their displayed elapsed time and resume normal timing when activity returns.
+- Hardened Windows pi CLI discovery and corrected custom Git Bash being misdetected as WSL, so the Settings-tab `pi` path stays stable.
+
+### Regression coverage
+
+- Added or expanded tests for Fast mode lifecycle, Fast mode visibility, model retry status, session resend entry binding, runtime settings, message pagination, and Windows pi CLI discovery.
+
 ## v0.6.6-13 - 2026-07-31
 
 ### Maestro configuration and workflow compatibility
