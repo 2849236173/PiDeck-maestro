@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.6-14-fix - 2026-08-03
+
+### Bug fixes
+
+- Fixed SessionScanner `readSummary` reading entire session files during directory scans, which caused V8 `FatalProcessOutOfMemory` when `~/.pi/agent/sessions` contains large session files (e.g. 3+ GiB across hundreds of files). Summary generation now streams only the first 200 lines; full-file reads are deferred to `readMessages` / `readChatMessages` / `exportHtml` which are triggered on-demand rather than during scans.
+
 ## v0.6.6-14 - 2026-08-03
 
 ### Configuration page permissions and Vision execution panel

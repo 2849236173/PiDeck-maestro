@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.6.6-14-fix - 2026-08-03
+
+### Bug 修复
+
+- 修复 SessionScanner 在目录扫描时一次性读取全部 session 文件的问题：当 `~/.pi/agent/sessions` 包含大量大文件（如数百个文件共 3+ GiB）时会导致 V8 `FatalProcessOutOfMemory`。现改为流式读取前 200 行生成摘要，全文读取仅在按需触发场景（readMessages / readChatMessages / exportHtml）中使用。
+
 ## v0.6.6-14 - 2026-08-03
 
 ### 配置页权限子区块与 Vision 执行面板
