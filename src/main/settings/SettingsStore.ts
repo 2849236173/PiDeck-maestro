@@ -29,6 +29,23 @@ function readPiAgentShowThinking(): boolean | undefined {
 	return undefined;
 }
 
+/**
+ * 读取 pi agent 的 settings.json 并从中提取 shellPath。
+ * 若 pi agent 文件不存在或 shellPath 未设置，返回 undefined。
+ */
+function readPiAgentShellPath(): string | undefined {
+	try {
+		const agentRaw = readFileSync(piAgentSettingsPath(), "utf8");
+		const agentSettings = JSON.parse(agentRaw) as Record<string, unknown>;
+		if (typeof agentSettings.shellPath === "string" && agentSettings.shellPath.trim()) {
+			return agentSettings.shellPath.trim();
+		}
+	} catch {
+		// 文件不存在或解析失败，静默忽略
+	}
+	return undefined;
+}
+
 const defaultSettings: AppSettings = {
   useNativeTitleBar: false,
   showNativeMenu: false,
@@ -133,6 +150,15 @@ export class SettingsStore {
     const computedShowThinking = readPiAgentShowThinking();
     if (computedShowThinking !== undefined) {
       this.settings.showThinking = computedShowThinking;
+    }
+    // 新安装或桌面设置被覆盖时，如果 pi agent 的 shellPath 已有自定义值，
+    // 尝试从 pi 配置恢复（避免重新安装后用户必须重新配置 Agent Shell）。
+    if (this.settings.agentShellMode === "auto" && !this.settings.agentShellPath) {
+      const existingShell = readPiAgentShellPath();
+      if (existingShell) {
+        this.settings.agentShellMode = "preset";
+        this.settings.agentShellPath = existingShell;
+      }
     }
     // 每次启动都校准安装类型：Windows 便携版由 electron-builder 注入运行时环境变量,
     // 该信号比旧 settings 更可信,可修正用户从安装版/旧版本迁移后残留的 installed 记录。

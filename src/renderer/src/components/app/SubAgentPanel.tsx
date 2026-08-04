@@ -90,13 +90,7 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertP
       })
     : [];
 
-  const plan = state.plan && typeof state.plan === 'object' ? state.plan as Record<string, unknown> : undefined;
-  const planMode = plan && typeof plan.mode === 'string' ? plan.mode : undefined;
-  const planStatus = plan && typeof plan.status === 'string' ? plan.status : undefined;
-  const planPath = plan && typeof plan.path === 'string' ? plan.path : undefined;
-  const planRevision = plan && typeof plan.revision === 'number' ? plan.revision : undefined;
-
-  const knowledge = workflow && workflow.knowledge && typeof workflow.knowledge === 'object'
+const knowledge = workflow && workflow.knowledge && typeof workflow.knowledge === 'object'
     ? workflow.knowledge as Record<string, unknown>
     : undefined;
   const knowledgeItems = knowledge
@@ -133,21 +127,6 @@ function MaestroStateSections({ state, collapsed, onToggle, agentIdle, onInsertP
                   <span className="maestro-panel-meta">{t('maestroPanel.approvalMode')}</span>
                 </div>
               ) : null}
-            </div>
-          )}
-        </section>
-      ) : null}
-      {planMode || planStatus || planPath ? (
-        <section className="subagent-section maestro-panel-section">
-          <SectionToggle title={t('maestroPanel.plan')} collapsed={Boolean(collapsed.plan)} onToggle={() => onToggle('plan')} />
-          {collapsed.plan ? null : (
-            <div className="maestro-panel-block">
-              <div className="maestro-panel-line">
-                {planMode ? <span className="maestro-panel-chip active">{planMode}</span> : null}
-                {planStatus ? <span className="maestro-panel-meta">{planStatus}</span> : null}
-                {planRevision !== undefined ? <span className="maestro-panel-meta">rev {planRevision}</span> : null}
-              </div>
-              {planPath ? <div className="maestro-panel-text">{planPath}</div> : null}
             </div>
           )}
         </section>
