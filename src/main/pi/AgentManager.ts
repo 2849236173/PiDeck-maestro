@@ -23,6 +23,8 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { PiProcess } from "./PiProcess";
+import { PiLocator } from "./PiLocator";
+import { resolveAgentShellPath } from "./AgentShellSync";
 import { MaestroGuiChannel } from "./MaestroGuiChannel";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
@@ -246,6 +248,7 @@ export class AgentManager {
 	/** 待处理的项目信任确认请求。key 为 requestId，用于在 Agent 启动前等待用户的信任决策。 */
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
 	private wslEnvironment: WslEnvironment | null = null;
+	private readonly agentShellLocator = new PiLocator();
 
 	/** 子代理状态追踪：key 为主会话 agentId，value 为子代理列表 */
 	private readonly subAgentsByAgent = new Map<string, Map<string, import('../../shared/types').SubAgent>>();
@@ -279,6 +282,32 @@ export class AgentManager {
 	configureWsl(environment: WslEnvironment | null): void {
 		this.wslEnvironment = environment;
 	}
+
+	/**
+	 * 在信任决策完成后、创建 PiProcess 前同步 Agent Shell。
+	 * WSL 运行时的 shell 属于 distro 内环境，不能把 Windows bash 路径写入全局 pi 配置。
+	 */
+	async ensureAgentShellPath(settings: import("../../shared/types").AppSettings): Promise<void> {
+		if (settings.wslEnabled) return;
+
+		const configured = await this.configManager.getSettingsConfig();
+		const current = typeof configured.parsed.shellPath === "string"
+			? configured.parsed.shellPath.trim()
+			: "";
+		const mode = settings.agentShellMode ?? "auto";
+		const nextPath = await resolveAgentShellPath({
+			mode,
+			wslEnabled: settings.wslEnabled,
+			currentPath: current,
+			selectedPath: settings.agentShellPath,
+			resolveAuto: () => this.agentShellLocator.resolveAutoAgentShell(),
+			validate: (path) => this.agentShellLocator.validateAgentShell(path),
+		});
+		if (nextPath && nextPath !== current) {
+			await this.configManager.saveSettingsShellPath(nextPath);
+		}
+	}
+
 
 	/** Windows 主进程文件操作必须使用可由 host 访问的路径。 */
 	private toSessionHostPath(sessionPath: string): string {
@@ -882,6 +911,7 @@ export class AgentManager {
 		const t1 = Date.now();
 		const trustOverride = await this.ensureProjectTrust(project);
 		const t2 = Date.now();
+		await this.ensureAgentShellPath(this.settingsStore.get());
 		void this.appLogger?.info("agent", "Agent pi process start", { agentId: id });
 		// 为 maestro UCL sidecar 预分配回环端口；会话未装 maestro 时该环境变量无副作用。
 		const guiPort = await allocateLoopbackPort();

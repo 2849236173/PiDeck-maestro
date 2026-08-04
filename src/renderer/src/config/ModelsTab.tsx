@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Trash2, X } from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { IconButton, CloseIconButton } from "../components/ui/IconButton";
+import { TextField } from "../components/ui/TextField";
 import { t } from "../i18n";
 import type { ModelItem, ModelsFile } from "./configTypes";
 import { ApiTypeInput, ConfigSelect, SecretInput } from "./ConfigShared";
@@ -246,22 +249,22 @@ export function ModelsTab(props: {
 					{t("config.count.providers", { count: providerNames.length })}
 				</span>
 				<div className="config-toolbar-actions">
-					<button
-						className="config-btn"
+					<Button
+						variant="secondary"
 						onClick={props.onStartAddProvider}
 						disabled={saving}
 					>
 						{t("config.addProvider")}
-					</button>
-					<button
-						className="config-btn"
+					</Button>
+					<Button
+						variant="secondary"
 						onClick={() => setShowGuide(!showGuide)}
 						disabled={saving}
 					>
 						{t("config.providerGuide")}
-					</button>
-					<button
-						className="config-btn danger-fill"
+					</Button>
+					<Button
+						variant="danger"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -273,10 +276,10 @@ export function ModelsTab(props: {
 						disabled={saving || providerNames.length === 0}
 					>
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
-					</button>
+					</Button>
 					{batchMode && (
-						<button
-							className="config-btn danger-fill"
+						<Button
+							variant="danger"
 							onClick={() => {
 								if (selectedProviders.size > 0) {
 									props.onDeleteProviders([...selectedProviders] as string[]);
@@ -287,15 +290,15 @@ export function ModelsTab(props: {
 							disabled={selectedProviders.size === 0}
 						>
 							{t("common.deleteSelected")} ({selectedProviders.size})
-						</button>
+						</Button>
 					)}
-					<button
-						className="config-btn primary"
+					<Button
+						variant="primary"
 						onClick={props.onSave}
 						disabled={saving}
 					>
 						{saving ? t("common.saving") : t("common.save")}
-					</button>
+					</Button>
 				</div>
 			</div>
 
@@ -304,7 +307,7 @@ export function ModelsTab(props: {
 				<div className="config-auth-guide config-provider-guide">
 					<div className="config-auth-guide-header">
 						<strong>{t("config.providerGuideTitle")}</strong>
-						<button className="config-icon-btn" onClick={() => setShowGuide(false)}>×</button>
+						<CloseIconButton label={t("common.close")} onClick={() => setShowGuide(false)} />
 					</div>
 					<div className="config-auth-guide-body">
 						<p>{t("config.providerGuideIntro")}</p>
@@ -375,23 +378,23 @@ export function ModelsTab(props: {
 
 			{props.addingProvider && (
 				<div className="config-add-provider-row">
-					<input
+					<TextField
+						label=""
 						value={props.newProviderName}
-						onChange={(e) => props.onChangeNewProviderName(e.target.value)}
+						onChange={(v) => props.onChangeNewProviderName(v)}
 						placeholder={t("config.providerNamePlaceholder")}
 						onKeyDown={(e) => e.key === "Enter" && props.onConfirmAddProvider()}
-						autoFocus
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						variant="primary"
 						onClick={props.onConfirmAddProvider}
 						disabled={!props.newProviderName.trim()}
 					>
 						{t("common.confirm")}
-					</button>
-					<button className="config-btn" onClick={props.onCancelAddProvider}>
+					</Button>
+					<Button variant="secondary" onClick={props.onCancelAddProvider}>
 						{t("common.cancel")}
-					</button>
+					</Button>
 				</div>
 			)}
 
@@ -444,16 +447,15 @@ export function ModelsTab(props: {
 							)}
 							<div className="config-provider-info">
 									{props.renamingProvider === name ? (
-										<input
+										<TextField
+											label=""
 											className="config-rename-input"
 											value={props.renameValue}
-											onChange={(e) => props.onChangeRenameValue(e.target.value)}
+											onChange={(v) => props.onChangeRenameValue(v)}
 											onKeyDown={(e) => {
 												if (e.key === "Enter") props.onConfirmRename(name);
 												if (e.key === "Escape") props.onCancelRename();
 											}}
-											onClick={(e) => e.stopPropagation()}
-											autoFocus
 										/>
 									) : (
 										<span className="config-provider-name">{name}</span>
@@ -472,59 +474,55 @@ export function ModelsTab(props: {
 								<div className="config-provider-actions">
 									{props.renamingProvider === name ? (
 										<>
-											<button
-												className="config-icon-btn"
+											<IconButton
+												label={t("config.renameConfirm")}
 												onClick={(e) => {
 													e.stopPropagation();
 													props.onConfirmRename(name);
 												}}
-												title={t("config.renameConfirm")}
 											>
 												<Check size={14} />
-											</button>
-											<button
-												className="config-icon-btn"
+											</IconButton>
+											<IconButton
+												label={t("config.renameCancel")}
 												onClick={(e) => {
 													e.stopPropagation();
 													props.onCancelRename();
 												}}
-												title={t("config.renameCancel")}
 											>
-												×
-											</button>
+												<X size={14} />
+											</IconButton>
 										</>
 									) : (
-										<button
-											className="config-icon-btn"
+										<IconButton
+											label={t("config.renameProvider")}
 											onClick={(e) => {
 												e.stopPropagation();
 												props.onStartRename(name);
 											}}
-											title={t("config.renameProvider")}
 										>
-											✎
-										</button>
+											<span style={{ fontSize: 14 }}>✎</span>
+										</IconButton>
 									)}
-									<button
-										className="config-icon-btn"
+									<IconButton
+										label={t("config.duplicateProvider")}
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDuplicateProvider(name);
 										}}
-										title={t("config.duplicateProvider")}
 									>
 										<Copy size={14} />
-									</button>
-									<button
-										className="config-icon-btn danger"
+									</IconButton>
+									<IconButton
+										label={t("config.deleteProvider")}
+										className="danger"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDeleteProvider(name);
 										}}
-										title={t("config.deleteProvider")}
 									>
 										<Trash2 size={14} />
-									</button>
+									</IconButton>
 									<span className="config-chevron">
 										{isExpanded ? (
 											<ChevronDown size={14} />
@@ -817,17 +815,19 @@ export function ModelsTab(props: {
 										<div className="config-models-header">
 											<span>{t("config.modelList")}</span>
 											<div className="config-model-list-actions">
-												<button
-													className="config-btn small"
+												<Button
+													variant="secondary"
+													buttonSize="sm"
 													onClick={() => props.onFetchModels(name)}
 													disabled={props.fetchingProvider === name}
 												>
 													{props.fetchingProvider === name
 														? t("config.fetchingModels")
 														: t("config.fetchModels")}
-												</button>
-												<button
-													className="config-btn small"
+												</Button>
+												<Button
+													variant="secondary"
+													buttonSize="sm"
 													onClick={() => {
 														setPendingModelFocusKey(
 															getModelInputKey(name, provider.models.length),
@@ -836,7 +836,7 @@ export function ModelsTab(props: {
 													}}
 												>
 													{t("config.addModelManual")}
-												</button>
+												</Button>
 											</div>
 										</div>
 
@@ -854,8 +854,9 @@ export function ModelsTab(props: {
 													onChange={(modelIds) => setSelectedFetchedModels(name, modelIds)}
 												/>
 												<div className="config-model-dropdown-actions">
-													<button
-														className="config-btn primary small"
+													<Button
+														variant="primary"
+														buttonSize="sm"
 														onClick={() => {
 														const currentProvider = data.providers[name];
 														if (!currentProvider) return;
@@ -875,7 +876,7 @@ export function ModelsTab(props: {
 													disabled={(selectedFetchedModelIds[name] ?? []).length === 0}
 												>
 													{t("config.saveSelectedModels")}
-												</button>
+												</Button>
 											</div>
 										</div>
 										)}

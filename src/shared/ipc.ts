@@ -48,6 +48,8 @@ export const ipcChannels = {
 	settingsGet: "settings:get",
 	settingsUpdate: "settings:update",
 	settingsTestPiProxy: "settings:test-pi-proxy",
+	agentShellListCandidates: "agent-shell:list-candidates",
+	agentShellValidate: "agent-shell:validate",
 	settingsApplyWindow: "settings:apply-window",
 	skillsList: "skills:list",
 	skillsCreate: "skills:create",

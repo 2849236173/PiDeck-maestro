@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { IconButton } from "../components/ui/IconButton";
+import { TextField } from "../components/ui/TextField";
 import { t } from "../i18n";
 
 /**
@@ -42,34 +45,34 @@ export function TrustTab(props: {
 					<strong>{t("config.nav.trust")}</strong>
 					<p>{t("config.trust.hint")}</p>
 				</div>
-				<button
-					className="config-btn primary"
+				<Button
+					variant="primary"
 					onClick={props.onSave}
 					disabled={props.saving}
 				>
 					{props.saving ? t("common.saving") : t("common.save")}
-				</button>
+				</Button>
 			</div>
 
-			<div className="config-trust-add">
-				<input
+			<div className="config-trust-add" style={{ display: "flex", gap: "8px", alignItems: "end", marginBottom: "16px" }}>
+				<TextField
+					label=""
 					className="config-trust-input"
-					type="text"
 					value={addPath}
-					onChange={(e) => setAddPath(e.target.value)}
+					onChange={(v) => setAddPath(v)}
 					onKeyDown={(e) => {
 						if (e.key === "Enter") addEntry();
 					}}
 					placeholder={t("config.trust.addPlaceholder")}
 				/>
-				<button
-					className="config-btn"
+				<Button
+					variant="secondary"
 					onClick={addEntry}
 					disabled={!addPath.trim() || props.saving}
 				>
 					<Plus size={14} />
 					{t("config.trust.add")}
-				</button>
+				</Button>
 			</div>
 
 			{entries.length === 0 ? (
@@ -80,28 +83,30 @@ export function TrustTab(props: {
 			) : (
 				<div className="config-trust-list">
 					{entries.map(([path, trusted]) => (
-						<div key={path} className="config-trust-row" data-trusted={trusted || undefined}>
-							<label className="config-trust-toggle">
+						<div key={path} className="config-trust-row" data-trusted={trusted || undefined} style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px" }}>
+							<label className="setting-switch-row" style={{ flex: 1, padding: "8px 12px", margin: 0, borderRadius: "var(--radius-sm)" }}>
+								<span style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+									<span className="config-trust-path" title={path} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+										{path}
+									</span>
+									<span className="config-trust-status" style={{ fontSize: "var(--font-size-caption)", color: "var(--color-text-tertiary)" }}>
+										{trusted ? t("config.trust.statusTrusted") : t("config.trust.statusIgnored")}
+									</span>
+								</span>
 								<input
 									type="checkbox"
 									checked={trusted}
 									onChange={(e) => toggleEntry(path, e.target.checked)}
 								/>
-								<span className="config-trust-path" title={path}>
-									{path}
-								</span>
-								<span className="config-trust-status">
-									{trusted ? t("config.trust.statusTrusted") : t("config.trust.statusIgnored")}
-								</span>
 							</label>
-							<button
-								className="config-btn small danger"
-								title={t("common.delete")}
+							<IconButton
+								label={t("common.delete")}
+								className="danger"
 								onClick={() => removeEntry(path)}
 								disabled={props.saving}
 							>
 								<Trash2 size={13} />
-							</button>
+							</IconButton>
 						</div>
 					))}
 				</div>

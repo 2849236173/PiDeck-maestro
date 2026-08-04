@@ -118,3 +118,29 @@ test("adds a portable Git Bash bin directory discovered from PATH", () => {
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("lists real bash candidates and excludes System32 WSL bash", async () => {
+	const root = join(tmpdir(), `pi-desktop-shell-${process.pid}-${Date.now()}`);
+	const gitBinDir = join(root, "Git", "bin");
+	mkdirSync(gitBinDir, { recursive: true });
+	writeFileSync(join(gitBinDir, "bash.exe"), "", "utf8");
+
+	try {
+		const { PiLocator, isLegacyWslShellPath } = loadPiLocatorModule("win32", {
+			PATH: `${gitBinDir};C:\\Windows\\System32`,
+		});
+		const candidates = await new PiLocator().listAgentShellCandidates({ probeHealth: false });
+		assert.ok(candidates.some((candidate) => candidate.path === join(gitBinDir, "bash.exe")));
+		assert.equal(candidates.some((candidate) => isLegacyWslShellPath(candidate.path)), false);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("lists bash and sh candidates on Linux", async () => {
+	const { PiLocator } = loadPiLocatorModule("linux");
+	const candidates = await new PiLocator().listAgentShellCandidates({ probeHealth: false });
+	const paths = new Set(candidates.map((candidate) => candidate.path));
+	assert.equal(paths.has("/bin/bash"), true);
+	assert.equal(paths.has("/bin/sh"), true);
+});

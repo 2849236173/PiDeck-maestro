@@ -10,6 +10,8 @@ import type {
 	AppLogLevel,
 	AppLogQuery,
 	AppSettings,
+	AgentShellCandidatesResult,
+	AgentShellValidationResult,
 	AppUpdateDownloadProgress,
 	AppUpdateDownloadResult,
 	AppUpdateInfo,
@@ -657,6 +659,12 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.extensionsToggle, source, enabled) as Promise<void>,
 		update: () =>
 			ipcRenderer.invoke(ipcChannels.extensionsUpdate) as Promise<PiCliUpdateResult>,
+	},
+	agentShell: {
+		listCandidates: () =>
+			ipcRenderer.invoke(ipcChannels.agentShellListCandidates) as Promise<AgentShellCandidatesResult>,
+		validate: (path: string) =>
+			ipcRenderer.invoke(ipcChannels.agentShellValidate, path) as Promise<AgentShellValidationResult>,
 	},
 	settings: {
 		get: () =>

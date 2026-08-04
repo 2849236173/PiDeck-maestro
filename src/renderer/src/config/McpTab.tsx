@@ -305,11 +305,11 @@ export function McpTab(props: { workspacePath?: string }) {
 							<div className="mcp-edit-form">
 								<TextField label={t("mcp.field.command")} value={selected.command} onChange={(value) => updateSelected({ command: value })} placeholder="npx -y @modelcontextprotocol/server-filesystem" />
 								<TextField label={t("mcp.field.url")} value={selected.url} onChange={(value) => updateSelected({ url: value })} placeholder="https://..." />
-								<label className="mcp-enable-row">
+								<label className="config-checkbox-label">
 									<input type="checkbox" checked={selected.enabled} onChange={(event) => updateSelected({ enabled: event.target.checked })} />
 									<span>{t("mcp.field.enabled")}</span>
 								</label>
-								<label className="mcp-enable-row">
+								<label className="config-checkbox-label">
 									<input
 										type="checkbox"
 										checked={selected.auth === "oauth"}

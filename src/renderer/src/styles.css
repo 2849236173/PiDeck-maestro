@@ -14946,6 +14946,19 @@ a.config-btn {
   top: calc(100% + 2px);
 }
 
+.config-btn:focus-visible,
+.config-icon-btn:focus-visible,
+.config-model-chip:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
+}
+
+.config-models-grid-row input:focus-visible {
+	outline: none;
+	border-color: var(--color-accent);
+	box-shadow: 0 0 0 1px var(--color-accent);
+}
+
 .config-checkbox-label {
   display: flex !important;
   flex-direction: row !important;
@@ -14954,6 +14967,14 @@ a.config-btn {
   font-size: var(--font-size-control);
   color: var(--color-text-primary);
   cursor: pointer;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: var(--radius-sm);
+}
+
+.config-checkbox-label:has(input:focus-visible) {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .config-checkbox-label input[type="checkbox"] {
@@ -23171,30 +23192,56 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 
 .mcp-import-sources {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-	gap: var(--space-2);
-	margin-top: var(--space-2);
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: var(--space-3);
+	margin-top: var(--space-3);
 }
 
 .mcp-import-source {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	padding: var(--space-2) var(--space-3);
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto auto;
+	column-gap: var(--space-3);
+	row-gap: 2px;
+	padding: var(--space-3);
 	background: var(--color-bg-panel);
 	border: 1px solid var(--color-border-subtle);
 	border-radius: var(--radius-md);
+	cursor: pointer;
+	align-items: center;
+	transition: background-color 0.15s, border-color 0.15s;
+}
+
+.mcp-import-source:hover,
+.mcp-import-source.selected {
+	border-color: var(--color-accent);
+	background: var(--color-bg-hover, var(--color-bg-active, rgba(0,0,0,0.05)));
+}
+
+.mcp-import-source:has(input:focus-visible) {
+	outline: none;
+	box-shadow: var(--focus-ring);
+}
+
+.mcp-import-source input {
+	grid-row: 1 / span 2;
+	margin: 0;
+	width: 16px;
+	height: 16px;
+	accent-color: var(--color-accent);
 }
 
 .mcp-import-label {
-	font-size: var(--font-size-control);
+	grid-column: 2;
+	font-size: var(--font-size-body);
 	font-weight: 500;
 	color: var(--color-text-primary);
 }
 
 .mcp-import-source code {
+	grid-column: 2;
 	font-family: var(--font-family-mono);
-	font-size: var(--font-size-micro);
+	font-size: var(--font-size-caption);
 	color: var(--color-text-tertiary);
 }
 
@@ -23212,9 +23259,16 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	gap: var(--space-2);
 	padding: var(--space-3) var(--space-4);
 	background: var(--color-bg-secondary);
-	border: none;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
 	cursor: pointer;
 	text-align: left;
+	transition: background-color 0.15s, border-color 0.15s;
+}
+
+.mcp-precedence-toggle:hover {
+	background: var(--color-bg-hover, var(--color-bg-active, rgba(0,0,0,0.05)));
+	border-color: var(--color-border-subtle);
 }
 
 .mcp-precedence-toggle svg {
@@ -24135,12 +24189,17 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	display: inline-flex;
 	align-items: center;
 	gap: var(--space-2);
-	padding: var(--space-1) var(--space-3);
+	padding: var(--space-2) var(--space-3);
 	border: 1px solid var(--color-border-subtle);
 	border-radius: var(--radius-sm);
 	background: var(--color-bg-panel);
 	color: var(--color-text-secondary);
 	cursor: pointer;
+	transition: background-color 0.15s, border-color 0.15s;
+}
+
+.failover-enable-toggle:hover {
+	background: var(--color-bg-hover, var(--color-bg-active, rgba(0,0,0,0.05)));
 }
 
 .failover-enable-toggle.on {
@@ -24216,7 +24275,13 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .failover-list-item.selected,
 .mcp-server-list-item.selected {
 	border-color: var(--color-border-strong);
-	background: var(--color-surface-hover);
+	background: var(--color-bg-hover, var(--color-bg-active, rgba(0,0,0,0.05)));
+}
+
+.failover-list-item:focus-visible,
+.mcp-server-list-item:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
 }
 
 .failover-list-item code,
@@ -24247,7 +24312,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 }
 
 .failover-fallback-row.included {
-	background: var(--color-surface-hover);
+	background: var(--color-bg-hover, var(--color-bg-active, rgba(0,0,0,0.05)));
 }
 
 .failover-fallback-row label {
@@ -24276,7 +24341,6 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	align-items: end;
 }
 
-.mcp-enable-row,
 .mcp-auth-inline {
 	display: flex;
 	flex-wrap: wrap;
@@ -24284,31 +24348,14 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	gap: var(--space-2);
 	color: var(--color-text-secondary);
 	font-size: var(--font-size-sm);
-}
-
-.mcp-import-sources {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-	gap: var(--space-2);
-}
-
-.mcp-import-source {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	padding: var(--space-2) var(--space-3);
-	border: 1px solid var(--color-border-subtle);
+	padding: var(--space-2);
+	background: var(--color-bg-muted);
 	border-radius: var(--radius-sm);
-	cursor: pointer;
 }
 
-.mcp-import-source.selected {
-	border-color: var(--color-accent);
-	background: var(--color-surface-hover);
-}
-
-.mcp-import-source input {
-	margin-right: var(--space-2);
+.failover-fallback-row:has(input:focus-visible) {
+	outline: none;
+	box-shadow: var(--focus-ring);
 }
 
 .hooks-handler-row {
@@ -24319,6 +24366,14 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 	padding: var(--space-2);
 	border: 1px solid var(--color-border-subtle);
 	border-radius: var(--radius-sm);
+}
+
+.hooks-event-toggle:focus-visible,
+.web-search-group-toggle:focus-visible,
+.mcp-precedence-toggle:focus-visible,
+.failover-enable-toggle:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
 }
 
 .hooks-handler-row code {

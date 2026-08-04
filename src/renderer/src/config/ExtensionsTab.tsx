@@ -333,20 +333,18 @@ export function ExtensionsTab(props: {
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>
 								{installing ? (
-									<span className="config-btn" style={{ opacity: 0.6 }}>{t("config.installing")}</span>
+									<Button variant="secondary" buttonSize="sm" disabled>{t("config.installing")}</Button>
 								) : (
-									<button
-										className="config-icon-btn"
-										title={alreadyInstalled ? t("config.installed") : t("config.install")}
+									<IconButton
+										label={alreadyInstalled ? t("config.installed") : t("config.install")}
 										onClick={() => handleInstall(pkg)}
 										disabled={alreadyInstalled}
 									>
 										<Download size={15} strokeWidth={1.8} />
-									</button>
+									</IconButton>
 								)}
-								<button
-									className="config-icon-btn"
-									title={t("common.copy")}
+								<IconButton
+									label={t("common.copy")}
 									onClick={(e) => {
 										e.stopPropagation();
 										const cmd = `pi install ${pkg.installCmd}`;
@@ -355,7 +353,7 @@ export function ExtensionsTab(props: {
 									}}
 								>
 									<Copy size={14} strokeWidth={1.8} />
-								</button>
+								</IconButton>
 							</div>
 						</div>
 					);
@@ -378,12 +376,12 @@ export function ExtensionsTab(props: {
 						</small>
 					</div>
 					<div className="skills-toolbar-actions">
-						<button className="config-btn" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
+						<Button variant="secondary" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
 							{updating ? t("settings.updating") : t("settings.updateExtensionsAll")}
-						</button>
-						<button className="config-btn" onClick={props.onRefresh} disabled={props.loading}>
+						</Button>
+						<Button variant="secondary" onClick={props.onRefresh} disabled={props.loading}>
 							{t("common.refresh")}
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="skills-list">
@@ -454,23 +452,21 @@ function ExtensionCard(props: {
 					{extension.path && <small>{extension.path}</small>}
 				</div>
 				<div className="prompts-list-item-actions">
-					<button
-						className="config-icon-btn"
+					<IconButton
+						label={extension.enabled !== false ? t("common.disable") : t("common.enabled")}
 						disabled={props.toggling}
 						onClick={() => props.onToggle(extension)}
-						title={extension.enabled !== false ? t("common.disable") : t("common.enabled")}
-						style={extension.enabled !== false ? { color: "var(--color-accent)" } : undefined}
 					>
-						{extension.enabled !== false ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
-					</button>
-					<button
-						className="config-icon-btn danger"
+						{extension.enabled !== false ? <ToggleRight size={18} strokeWidth={1.8} style={{ color: "var(--color-accent)" }} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
+					</IconButton>
+					<IconButton
+						label={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}
+						className="danger"
 						disabled={props.uninstalling}
 						onClick={() => props.onUninstall(extension)}
-						title={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}
 					>
 						<Trash2 size={14} strokeWidth={1.8} />
-					</button>
+					</IconButton>
 				</div>
 			</div>
 		</article>

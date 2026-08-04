@@ -15,7 +15,7 @@ import { Button } from "../ui/Button";
 import { CloseIconButton, IconButton } from "../ui/IconButton";
 import { SelectField } from "../ui/SelectField";
 import { TextField } from "../ui/TextField";
-import type { AppSettings, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
+import type { AppSettings, AgentShellCandidate, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
 const ZOOM_FACTOR_MIN = 0.8;
@@ -255,6 +255,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 		setDirtyFields(new Set());
 		setPetPreviewMode("__auto");
 		setWslValidation(null);
+		setValidationResult(null);
 		setWslUserInput(baseSnapshotRef.current.wslUser);
 		setPerAreaFontSize(
 			baseSnapshotRef.current.uiFontSize !== null ||
@@ -336,6 +337,51 @@ function SettingsModalContent(props: SettingsModalProps) {
 		piVersion: string;
 		error: string;
 	} | null>(null);
+
+	// ── Agent Shell 相关状态 ──
+	const [shellCandidates, setShellCandidates] = useState<AgentShellCandidate[]>([]);
+	const [shellResolvedAuto, setShellResolvedAuto] = useState<string>("");
+	const [shellCandidatesLoaded, setShellCandidatesLoaded] = useState(false);
+	const [validatingShell, setValidatingShell] = useState(false);
+	const [validationResult, setValidationResult] = useState<{
+		ok: boolean;
+		version?: string;
+		error?: string;
+	} | null>(null);
+
+	useEffect(() => {
+		if (activeTab === "dev" && !shellCandidatesLoaded) {
+			if (window.piDesktop?.agentShell?.listCandidates) {
+				window.piDesktop.agentShell.listCandidates()
+					.then((res: { candidates: AgentShellCandidate[]; resolvedAuto?: string }) => {
+						setShellCandidates(res?.candidates ?? []);
+						setShellResolvedAuto(res?.resolvedAuto ?? "");
+						setShellCandidatesLoaded(true);
+					})
+					.catch((err: any) => {
+						console.error("Failed to load shell candidates:", err);
+					});
+			}
+		}
+	}, [activeTab, shellCandidatesLoaded]);
+
+	const handleValidateShellPath = async () => {
+		if (!draftSettings.agentShellPath) return;
+		setValidatingShell(true);
+		setValidationResult(null);
+		try {
+			if (window.piDesktop?.agentShell?.validate) {
+				const res = await window.piDesktop.agentShell.validate(draftSettings.agentShellPath);
+				setValidationResult(res);
+			} else {
+				setValidationResult({ ok: false, error: "Validation API not available" });
+			}
+		} catch (err: any) {
+			setValidationResult({ ok: false, error: String(err?.message || err) });
+		} finally {
+			setValidatingShell(false);
+		}
+	};
 	// WSL 发行版列表懒加载（仅 Windows + WSL 开启时拉取，无论成败只拉一次）
 	useEffect(() => {
 		const isWin = props.appInfo.platform === "win32";
@@ -1132,6 +1178,112 @@ function SettingsModalContent(props: SettingsModalProps) {
 										)}
 									</div>
 									)}
+
+									<hr className="setting-divider" />
+
+									{/* Agent Shell block */}
+									<div className="setting-agent-shell-panel" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+										<div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+											<strong style={{ color: "var(--color-text-primary)", fontSize: "var(--font-size-control)", fontWeight: 500 }}>
+												{t("settings.dev.agentShell.title")}
+											</strong>
+											<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)", lineHeight: 1.4 }}>
+												{t("settings.dev.agentShell.desc")}
+											</small>
+										</div>
+
+										{props.appInfo.platform === "win32" && draftSettings.wslEnabled ? (
+											<div className="setting-wsl-shell-hint" style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-sm)", padding: "var(--space-2) 0" }}>
+												{t("settings.dev.agentShell.wslHint")}
+											</div>
+										) : (
+											<>
+												<SelectField
+													label={t("settings.dev.agentShell.selectorLabel")}
+													value={
+														draftSettings.agentShellMode === "preset"
+															? (draftSettings.agentShellPath || "")
+															: (draftSettings.agentShellMode || "auto")
+													}
+													options={[
+														{
+															value: "auto",
+															label: t("settings.dev.agentShell.modeAuto", {
+																path: shellResolvedAuto ? ` (${shellResolvedAuto})` : "",
+															}),
+														},
+														...shellCandidates.map((c) => ({
+															value: c.path,
+															label: c.label,
+														})),
+														{
+															value: "custom",
+															label: t("settings.dev.agentShell.modeCustom"),
+														},
+													]}
+													onChange={(val) => {
+														if (val === "auto") {
+															updateDraft({ agentShellMode: "auto", agentShellPath: "" });
+														} else if (val === "custom") {
+															updateDraft({ agentShellMode: "custom" });
+														} else {
+															updateDraft({ agentShellMode: "preset", agentShellPath: val });
+														}
+														setValidationResult(null);
+													}}
+												/>
+
+												{draftSettings.agentShellMode === "custom" && (
+													<div className="setting-agent-shell-custom" style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: "var(--space-1)" }}>
+														<TextField
+															label={t("settings.dev.agentShell.customPathLabel")}
+															value={draftSettings.agentShellPath || ""}
+															placeholder={t("settings.dev.agentShell.customPathPlaceholder")}
+															onChange={(val) => {
+																updateDraft({ agentShellPath: val });
+																setValidationResult(null);
+															}}
+														/>
+														<div style={{ display: "flex", gap: "var(--space-2)" }}>
+															<Button
+																onClick={handleValidateShellPath}
+																disabled={!draftSettings.agentShellPath || validatingShell}
+																loading={validatingShell}
+															>
+																{t("settings.dev.agentShell.validate")}
+															</Button>
+														</div>
+														{validationResult && (
+															<small className={`setting-status ${validationResult.ok ? "success" : "error"}`}>
+																{validationResult.ok
+																	? t("settings.dev.agentShell.validateSuccess", {
+																			version: validationResult.version || "",
+																	  })
+																	: t("settings.dev.agentShell.validateError", {
+																			error: validationResult.error || "",
+																	  })}
+															</small>
+														)}
+													</div>
+												)}
+											</>
+										)}
+
+										{/* Show resolved effective path and restart hint */}
+										{!(props.appInfo.platform === "win32" && draftSettings.wslEnabled) && (
+											<div className="setting-agent-shell-effective" style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", fontSize: "var(--font-size-caption)", color: "var(--color-text-tertiary)" }}>
+												<span>
+													{t("settings.dev.agentShell.effectivePath")}:{" "}
+													<code style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-text-secondary)" }}>
+														{draftSettings.agentShellMode === "auto"
+															? shellResolvedAuto || t("settings.dev.agentShell.resolving")
+															: draftSettings.agentShellPath || t("settings.dev.agentShell.notConfigured")}
+													</code>
+												</span>
+												<span>{t("settings.dev.agentShell.restartHint")}</span>
+											</div>
+										)}
+									</div>
 
 									<hr className="setting-divider" />
 

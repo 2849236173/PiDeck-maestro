@@ -432,6 +432,19 @@ function SettingsValueInput(props: {
 }) {
 	const { value, fieldKey, modelsData, authData, discoveredModels, allSettings } = props;
 
+	// shellPath 由开发设置中的 Agent Shell 单一入口管理，配置页只展示当前值，避免两个编辑器互相覆盖。
+	if (fieldKey === "shellPath") {
+		const shellPath = typeof value === "string" && value.trim() ? value : t("common.notConfigured");
+		return (
+			<div className="config-settings-readonly">
+				<code className="config-settings-input" style={{ opacity: 0.7 }}>{shellPath}</code>
+				<small style={{ display: "block", marginTop: "var(--space-1)", color: "var(--color-text-secondary)" }}>
+					{t("config.label.shellPath.hint")}
+				</small>
+			</div>
+		);
+	}
+
 	// defaultProvider: 从 modelsData.providers + authData 的 key 列表聚合所有可用的供应商
 	if (fieldKey === "defaultProvider") {
 		const providerSet = new Set<string>();
@@ -563,13 +576,13 @@ function SettingsValueInput(props: {
 
 	if (typeof value === "boolean") {
 		return (
-			<label className="config-checkbox-label">
+			<label className="setting-switch-row" style={{ width: "100%", maxWidth: 300, border: "none", padding: 0, background: "transparent" }}>
+				<span>{value ? t("common.true") : t("common.false")}</span>
 				<input
 					type="checkbox"
 					checked={value}
 					onChange={(e) => props.onChange(e.target.checked)}
 				/>
-				<span>{value ? t("common.true") : t("common.false")}</span>
 			</label>
 		);
 	}
@@ -723,13 +736,13 @@ function PermissionsCard(props: {
 					</div>
 				) : null}
 
-				<label className="config-permissions-disable-bypass">
+				<label className="setting-switch-row" style={{ marginTop: "var(--space-2)", maxWidth: 300, border: "none", padding: 0, background: "transparent" }}>
+					<span>{t("permissions.disableBypass")}</span>
 					<input
 						type="checkbox"
 						checked={bypassBlocked}
 						onChange={(e) => setDisableBypass(e.target.checked)}
 					/>
-					<span>{t("permissions.disableBypass")}</span>
 				</label>
 
 			{(["allow", "ask", "deny"] as const).map((behavior) => (

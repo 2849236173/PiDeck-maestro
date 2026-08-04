@@ -2,7 +2,13 @@ import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { delimiter, dirname, extname, join } from "node:path";
 import { app } from "electron";
-import type { AppSettings, PiInstallStatus } from "../../shared/types";
+import type { AgentShellCandidate, AgentShellValidationResult, AppSettings, PiInstallStatus } from "../../shared/types";
+
+export type { AgentShellCandidate, AgentShellValidationResult } from "../../shared/types";
+
+export function isLegacyWslShellPath(value: string): boolean {
+  return /^[a-z]:[\\/]windows[\\/](?:system32|sysnative)[\\/]bash(?:\.exe)?$/i.test(value.trim());
+}
 
 type PiProxySettings = Pick<
   AppSettings,
@@ -60,7 +66,11 @@ export class PiLocator {
     const home = app.getPath("home");
     const appData = process.env.APPDATA ?? join(home, "AppData", "Roaming");
     const localAppData = process.env.LOCALAPPDATA ?? join(home, "AppData", "Local");
+    // Git\bin 必须排在 pathDirs（含 System32）之前：pi 的 Windows shell 解析用
+    // `where bash.exe` 取第一个命中；若 System32\bash.exe（坏掉的 WSL 壳）排在前面，
+    // 所有 bash 工具（pwd/df/wmic…）都会失败。portable Git（如 E:\runtime\git）尤其依赖此顺序。
     const dirs = [
+      ...this.getGitBashDirs(),
       ...this.pathDirs(),
       join(appData, "npm"),
       join(localAppData, "pnpm"),
@@ -76,7 +86,6 @@ export class PiLocator {
       ...this.listChildDirs(join(home, ".nvm", "versions", "node")).map(dir => join(dir, "bin")),
       join(home, ".asdf", "shims"),
       join(home, ".volta", "bin"),
-      ...this.getGitBashDirs(),
     ];
 
     // These directories only locate an existing pi installation; pi itself is not bundled yet.
@@ -105,11 +114,14 @@ export class PiLocator {
     for (const entry of this.pathDirs()) addFromPath(entry);
 
     const installRoots = [
-      process.env.GIT_INSTALL_ROOT,
       process.env.ProgramFiles,
       process.env["ProgramFiles(x86)"],
     ].filter((value): value is string => Boolean(value));
-    for (const root of installRoots) candidates.add(join(root, "Git", "bin"));
+    if (process.env.GIT_INSTALL_ROOT) installRoots.push(process.env.GIT_INSTALL_ROOT);
+    for (const root of installRoots) {
+      const gitRoot = root === process.env.GIT_INSTALL_ROOT ? root : join(root, "Git");
+      candidates.add(join(gitRoot, "bin"));
+    }
 
     return [...candidates].filter((dir) => existsSync(join(dir, "bash.exe")));
   }
@@ -127,14 +139,108 @@ export class PiLocator {
     const searchDirs = pathPrefix
       ? [pathPrefix, ...this.getSearchDirs().filter(dir => dir !== pathPrefix)]
       : this.getSearchDirs();
+    // pathPrefix（pi 所在 Node bin）可能插到最前；再保证 Git\bin 仍优先于 System32。
+    const gitBashDirs = process.platform === "win32" && !wsl ? this.getGitBashDirs() : [];
+    const orderedDirs =
+      gitBashDirs.length > 0
+        ? [...gitBashDirs, ...searchDirs.filter((dir) => !gitBashDirs.includes(dir))]
+        : searchDirs;
     const env = {
       ...process.env,
-      PATH: searchDirs.join(delimiter),
+      PATH: orderedDirs.join(delimiter),
     };
+
 
     return this.applyPiProxyEnv(env, settings);
   }
 
+  async listAgentShellCandidates(options: { probeHealth?: boolean } = {}): Promise<AgentShellCandidate[]> {
+    const candidates = new Map<string, AgentShellCandidate>();
+    const add = (path: string, source: AgentShellCandidate["source"]) => {
+      const normalized = path.trim();
+      if (!normalized || isLegacyWslShellPath(normalized) || !existsSync(normalized)) return;
+      const key = process.platform === "win32" ? normalized.toLowerCase() : normalized;
+      if (!candidates.has(key)) {
+        candidates.set(key, {
+          id: `${source}:${candidates.size}`,
+          label: `${source === "git" ? "Git Bash" : source === "cygwin" ? "Cygwin" : source === "msys2" ? "MSYS2" : source === "linux" ? "Linux" : source === "mac" ? "macOS" : "Shell"} (${normalized})`,
+          path: normalized,
+          source,
+          healthy: false,
+        });
+      }
+    };
+
+    if (process.platform === "win32") {
+      for (const dir of this.getGitBashDirs()) add(join(dir, "bash.exe"), "git");
+      for (const dir of this.pathDirs()) add(join(dir, "bash.exe"), this.shellSourceForPath(dir));
+      const roots = [
+        process.env.ProgramFiles,
+        process.env["ProgramFiles(x86)"],
+        process.env.GIT_INSTALL_ROOT,
+      ].filter((value): value is string => Boolean(value));
+      for (const root of roots) {
+        const gitRoot = root === process.env.GIT_INSTALL_ROOT ? root : join(root, "Git");
+        add(join(gitRoot, "bin", "bash.exe"), "git");
+        add(join(gitRoot, "usr", "bin", "bash.exe"), "git");
+      }
+      add(join(process.env.SystemDrive || "C:", "cygwin64", "bin", "bash.exe"), "cygwin");
+      add(join(process.env.SystemDrive || "C:", "msys64", "usr", "bin", "bash.exe"), "msys2");
+      add(join(process.env.SystemDrive || "C:", "msys64", "usr", "bin", "sh.exe"), "msys2");
+    } else {
+      const names = process.platform === "darwin"
+        ? [["/bin/bash", "mac"], ["/usr/bin/bash", "mac"], ["/bin/zsh", "mac"], ["/usr/bin/zsh", "mac"]]
+        : [["/bin/bash", "linux"], ["/usr/bin/bash", "linux"], ["/bin/sh", "linux"], ["/usr/bin/sh", "linux"]];
+      for (const [path, source] of names) add(path, source as AgentShellCandidate["source"]);
+      for (const dir of this.pathDirs()) add(join(dir, "bash"), process.platform === "darwin" ? "mac" : "linux");
+    }
+
+    const list = [...candidates.values()];
+    if (options.probeHealth !== false) {
+      await Promise.all(list.map(async (candidate) => {
+        candidate.healthy = await this.validateAgentShell(candidate.path).then(result => result.ok).catch(() => false);
+      }));
+    }
+    return list;
+  }
+
+  async resolveAutoAgentShell(): Promise<string | undefined> {
+    const candidates = await this.listAgentShellCandidates({ probeHealth: true });
+    return candidates.find(candidate => candidate.healthy && !isLegacyWslShellPath(candidate.path))?.path;
+  }
+
+  async validateAgentShell(shellPath: string): Promise<AgentShellValidationResult> {
+    const path = shellPath.trim();
+    if (!path) return { ok: false, error: "Shell path is required" };
+    if (isLegacyWslShellPath(path)) return { ok: false, error: "System32/Sysnative WSL bash is not an Agent Shell" };
+    if (!existsSync(path)) return { ok: false, error: "Shell path does not exist" };
+    return new Promise((resolve) => {
+      execFile(path, ["-c", "echo __pideok__"], {
+        encoding: "utf8",
+        timeout: 5_000,
+        windowsHide: true,
+      }, (error, stdout, stderr) => {
+        if (error || !stdout.includes("__pideok__")) {
+          resolve({ ok: false, error: (stderr || error?.message || "Shell health check failed").trim() });
+          return;
+        }
+        resolve({ ok: true, version: stdout.trim() });
+      });
+    });
+  }
+
+  private shellSourceForPath(dir: string): AgentShellCandidate["source"] {
+    if (/[\\/]cygwin(?:64)?[\\/]bin$/i.test(dir)) return "cygwin";
+    if (/[\\/]msys(?:64|2)?[\\/](?:usr[\\/])?bin$/i.test(dir)) return "msys2";
+    if (/[\\/]Git[\\/](?:usr[\\/])?bin$/i.test(dir)) return "git";
+    return process.platform === "darwin" ? "mac" : "linux";
+  }
+
+  /**
+   * 构造实际启动 pi 的子进程参数。优先复用用户在 settings 里配置的 Agent Shell 路径，
+   * WSL 模式固定走 wsl.exe，否则按平台选择 cmd.exe / 裸命令。返回的对象会直接交给
+   * PiProcess，避免在那里再次拼接 shell 路径或字符串。
+   */
   createInvocation(command: string, args: string[], options: { wslCwd?: string } = {}): PiCommandInvocation {
     // WSL 模式：command 为 "wsl://<distro>/<user>/pi" 形式的标记
     if (command.startsWith("wsl://")) {

@@ -351,6 +351,26 @@ export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "commit-mono" | "system-mono" | "custom";
+export type AgentShellMode = "auto" | "preset" | "custom";
+
+export type AgentShellCandidate = {
+	id: string;
+	label: string;
+	path: string;
+	source: "auto" | "git" | "cygwin" | "msys2" | "linux" | "mac";
+	healthy: boolean;
+};
+
+export type AgentShellValidationResult = {
+	ok: boolean;
+	version?: string;
+	error?: string;
+};
+
+export type AgentShellCandidatesResult = {
+	candidates: AgentShellCandidate[];
+	resolvedAuto?: string;
+};
 
 export type AppSettings = {
 	useNativeTitleBar: boolean;
@@ -389,6 +409,10 @@ export type AppSettings = {
 	desktopProxyBypass: string;
 	/** 用户手动指定的 pi CLI 命令路径，自动检测不到时用于兜底 */
 	customPiPath: string;
+	/** Agent bash 工具使用的 shell 选择模式；与 Dock 终端 shell 独立。 */
+	agentShellMode: AgentShellMode;
+	/** Agent Shell 的 preset/custom 绝对路径；auto 模式可为空。 */
+	agentShellPath: string;
 
 	/** 是否发送匿名、低频、最小字段的使用统计 */
 	telemetryEnabled: boolean;

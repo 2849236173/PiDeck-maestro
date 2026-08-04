@@ -1,4 +1,4 @@
-import type { ReactNode, MouseEvent } from "react";
+import type { CSSProperties, ReactNode, MouseEvent } from "react";
 import { X } from "lucide-react";
 
 export function IconButton(props: {
@@ -9,6 +9,7 @@ export function IconButton(props: {
 	title?: string;
 	type?: "button" | "submit" | "reset";
 	disabled?: boolean;
+	style?: CSSProperties;
 }) {
 	return (
 		<button
@@ -18,6 +19,7 @@ export function IconButton(props: {
 			title={props.title ?? props.label}
 			onClick={props.onClick}
 			disabled={props.disabled}
+			style={props.style}
 		>
 			{props.children}
 		</button>

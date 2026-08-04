@@ -1332,6 +1332,13 @@ export class ConfigManager {
 		return { valid: true };
 	}
 
+	/** 更新全局 shellPath 时先合并现有 settings，避免丢失 pi 的其它配置字段。 */
+	async saveSettingsShellPath(shellPath: string): Promise<ConfigValidationResult> {
+		const current = await this.getSettingsConfig();
+		const next = { ...current.parsed, shellPath };
+		return this.saveSettingsConfig(next);
+	}
+
 	// ── 保存（源文件编辑） ────────────────────────────────
 
 	async saveRawConfig(

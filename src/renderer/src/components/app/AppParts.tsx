@@ -1722,14 +1722,19 @@ function CopyMenu(props: {
 			showNotice(t("copy.failed"), 2000);
 		}
 	};
+	// 用 trigger 的 bounding rect 把菜单固定在按钮正下方。菜单宽度按内容自适应
+	// （CSS min-width 132px + padding），所以定位采用「顶部贴底 + 右边缘对齐」：
+	// 让菜单的右边缘 = 按钮右边缘，避免因为固定偏移导致菜单出现在按钮的远处。
+	// 同时做 viewport 边界检测：按钮贴近屏幕左/右边缘时把菜单拉回可视区。
 	const toggleOpen = () => {
 		clearCloseTimer();
 		const rect = triggerRef.current?.getBoundingClientRect();
 		if (rect) {
+			const rightGap = Math.max(8, window.innerWidth - rect.right);
 			setMenuStyle({
 				position: "fixed",
 				top: rect.bottom + 4,
-				left: Math.min(window.innerWidth - 156, Math.max(8, rect.right - 148)),
+				right: rightGap,
 			});
 		}
 		setOpen((value) => !value);

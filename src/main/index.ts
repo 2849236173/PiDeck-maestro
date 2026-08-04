@@ -2604,8 +2604,18 @@ function registerIpc() {
 	ipcMain.handle(
 		ipcChannels.settingsUpdate,
 		async (_event, patch: Partial<AppSettings>) => {
+			const currentSettings = settingsStore.get();
+			const requestedSettings = { ...currentSettings, ...patch };
+			if (
+				("agentShellMode" in patch || "agentShellPath" in patch) &&
+				!requestedSettings.wslEnabled &&
+				requestedSettings.agentShellMode !== "auto"
+			) {
+				const validation = await piLocator.validateAgentShell(requestedSettings.agentShellPath.trim());
+				if (!validation.ok) throw new Error(validation.error ?? "Agent Shell validation failed");
+			}
 			// 记录更新前的设置，用于驱动桌面宠物对 pet 字段变化的反应
-			const prevSettings = settingsStore.get();
+			const prevSettings = currentSettings;
 			const settings = await settingsStore.update(patch);
 			void appLogger.info("settings", "Settings updated", { keys: Object.keys(patch) });
 			// 桌面宠物：设置面板走 settings.update，这里统一驱动开窗/切换/置顶
@@ -2644,8 +2654,22 @@ function registerIpc() {
 			if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
 				await syncWslEnvironment(settings);
 			}
+			if (
+				"agentShellMode" in patch ||
+				"agentShellPath" in patch ||
+				"wslEnabled" in patch
+			) {
+				await agentManager.ensureAgentShellPath(settings);
+			}
 			return settings;
 		},
+	);
+	ipcMain.handle(ipcChannels.agentShellListCandidates, async () => ({
+		candidates: await piLocator.listAgentShellCandidates({ probeHealth: true }),
+		resolvedAuto: await piLocator.resolveAutoAgentShell(),
+	}));
+	ipcMain.handle(ipcChannels.agentShellValidate, async (_event, shellPath: string) =>
+		piLocator.validateAgentShell(shellPath),
 	);
 	ipcMain.handle(
 		ipcChannels.settingsTestPiProxy,
@@ -3740,6 +3764,9 @@ app.whenReady().then(async () => {
 	// 启动关键路径只等设置加载与 IPC 注册，尽快 createWindow。
 	// 扩展部署、WSL 同步、代理/Web 服务/宠物等后置，避免打包后点击启动要先等一长串磁盘/网络 IO。
 	await settingsStore.load();
+	await agentManager.ensureAgentShellPath(settingsStore.get()).catch((error) => {
+		void appLogger.warn("settings", "Failed to ensure Agent Shell path", error);
+	});
 	// 本地 settings.json 只有一次小文件读写，必须在开放 Agent IPC 前完成，
 	// 避免用户启动后的首个模型请求仍沿用过短 timeout 或关闭的 Pi 原生重试。
 	await ensurePiSettingsDefaults(resolveLocalPiAgentDir()).catch((error) => {

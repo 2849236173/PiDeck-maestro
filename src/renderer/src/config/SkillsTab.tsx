@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Check, FileEdit, Pencil, Settings2, ShoppingBag, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { IconButton } from "../components/ui/IconButton";
+import { TextField } from "../components/ui/TextField";
 import type {
 	CreatePiSkillInput,
 	PiSkillListResult,
@@ -113,26 +116,24 @@ export function SkillsTab(props: {
 					</small>
 				</div>
 				<div className="skills-toolbar-actions">
-					<button className="config-btn" onClick={props.onRefresh} disabled={props.loading}>
+					<Button variant="secondary" onClick={props.onRefresh} disabled={props.loading}>
 						{t("common.refresh")}
-					</button>
-					<button className="config-btn blue" onClick={props.onOpenRoot}>
+					</Button>
+					<Button variant="primary" onClick={props.onOpenRoot}>
 						{t("config.openFolder")}
-					</button>
+					</Button>
 				</div>
 			</div>
 
 			<section className="skill-create-card">
 				<strong>{t("config.createSkill")}</strong>
 				<div className="skill-create-grid">
-					<label>
-						<span>{t("config.name")}</span>
-						<input
-							value={props.newName}
-							placeholder={t("config.skillNamePlaceholder")}
-							onChange={(event) => props.onChangeNewName(event.target.value)}
-						/>
-					</label>
+					<TextField
+						label={t("config.name")}
+						value={props.newName}
+						placeholder={t("config.skillNamePlaceholder")}
+						onChange={(v) => props.onChangeNewName(v)}
+					/>
 					<label>
 						<span>{t("config.location")}</span>
 						<div
@@ -184,13 +185,13 @@ export function SkillsTab(props: {
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
 					/>
 				</label>
-				<button
-					className="config-btn primary"
+				<Button
+					variant="primary"
 					onClick={props.onCreate}
 					disabled={!canCreate || props.creating}
 				>
 					{props.creating ? t("config.creatingSkill") : t("config.addSkill")}
-				</button>
+				</Button>
 			</section>
 
 			<div className="skills-list">
@@ -293,35 +294,32 @@ function SkillCard(props: {
 				</button>
 				{!skill.readOnly && (
 					<div className="prompts-list-item-actions">
-					<button
-						className="config-icon-btn"
+					<IconButton
+						label={skill.enabled ? t("common.disable") : t("common.enabled")}
 						onClick={() => props.onToggle(skill, !skill.enabled)}
-						title={skill.enabled ? t("common.disable") : t("common.enabled")}
 						style={skill.enabled ? { color: "var(--color-accent)" } : undefined}
 					>
 						{skill.enabled ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
-					</button>
-					<button
-						className="config-icon-btn"
+					</IconButton>
+					<IconButton
+						label={t("common.edit")}
 						onClick={() => props.onEdit(skill)}
-						title={t("common.edit")}
 					>
 						<Pencil size={14} strokeWidth={1.8} />
-					</button>
-					<button
-						className="config-icon-btn"
+					</IconButton>
+					<IconButton
+						label={t("common.rename")}
 						onClick={() => { setRenaming(true); setRenameValue(skill.name); }}
-						title={t("common.rename")}
 					>
 						<FileEdit size={14} strokeWidth={1.8} />
-					</button>
-					<button
-						className="config-icon-btn danger"
+					</IconButton>
+					<IconButton
+						label={t("common.delete")}
+						className="danger"
 						onClick={() => props.onDelete(skill)}
-						title={t("common.delete")}
 					>
 						<Trash2 size={14} strokeWidth={1.8} />
-					</button>
+					</IconButton>
 					</div>
 				)}
 			</div>

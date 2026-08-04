@@ -142,6 +142,8 @@ let previewSettings: AppSettings = {
 	desktopProxyUrl: "http://127.0.0.1:7890",
 	desktopProxyBypass: "localhost,127.0.0.1,::1",
 	customPiPath: "",
+	agentShellMode: "auto",
+	agentShellPath: "",
 	wslEnabled: false,
 	wslDistro: "Ubuntu",
 	wslUser: "root",
@@ -635,6 +637,10 @@ export function createPreviewApi(): PiDesktopApi {
 			search: async () => ({ query: "", total: 0, items: [] }),
 			detail: async () => null,
 			install: async (slug) => ({ success: true, slug, installDir: "", message: "Preview install" }),
+		},
+		agentShell: {
+			listCandidates: async () => ({ candidates: [], resolvedAuto: undefined }),
+			validate: async () => ({ ok: false, error: "Preview API" }),
 		},
 		settings: {
 			get: async (): Promise<AppSettings> => ({ ...previewSettings }),
