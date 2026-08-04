@@ -961,6 +961,8 @@ export class ConfigManager {
 			...(trustDiagnostic ? { trustDiagnostic } : {}),
 			installedCount: Object.values(configParsed.hooks).reduce((sum, groups) => sum + (groups ?? []).reduce((inner, group) => inner + group.hooks.length, 0), 0),
 			trusted: Boolean(configHash && trustParsed.trusted[trustKey] === configHash),
+			configHash: configHash || "",
+			trustKey,
 		};
 	}
 

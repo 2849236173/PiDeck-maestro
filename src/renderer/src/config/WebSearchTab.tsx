@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Globe2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleHelp, Globe2, RefreshCw } from "lucide-react";
 import type { SmartSearchConfigSnapshot, WebSearchConfigSnapshot } from "../../../shared/types";
 import { Button } from "../components/ui/Button";
+import { IconButton } from "../components/ui/IconButton";
 import { TextField } from "../components/ui/TextField";
-import { t } from "../i18n";
+import { t, TranslationKey } from "../i18n";
 import { showNotice } from "../utils/notice";
 
 type ConfigSource = "smartSearch" | "webAccess";
@@ -225,7 +226,10 @@ export function WebSearchTab() {
 								<div key={group.id} className="web-search-provider-group">
 									<button type="button" className="web-search-group-toggle" onClick={() => toggleGroup(group.id)}>
 										{isExpanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
-										<span className="web-search-group-label">{group.label}</span>
+										<div className="web-search-group-title">
+											<span className="web-search-group-label">{t(`webSearch.groups.${group.id}.label` as TranslationKey)}</span>
+											<span className="web-search-group-capability">{t(`webSearch.groups.${group.id}.capability` as TranslationKey)}</span>
+										</div>
 										<span className="web-search-group-count">{count}/{group.keys.length}</span>
 									</button>
 									{isExpanded ? (
@@ -235,8 +239,13 @@ export function WebSearchTab() {
 												return (
 													<div key={key} className={`web-search-key-row ${values[key] != null && values[key] !== "" ? "configured" : ""}`}>
 														<div className="web-search-key-meta">
-															<code>{key}</code>
-															<span>{displayValue(key, values[key])}</span>
+															<div className="web-search-key-name">
+																<code>{key}</code>
+																<IconButton className="web-search-key-help" label={t(`webSearch.keys.${key}` as TranslationKey)}>
+																	<CircleHelp size={14} aria-hidden="true" />
+																</IconButton>
+															</div>
+															<span className="web-search-key-value">{displayValue(key, values[key])}</span>
 														</div>
 														{isEditing ? (
 															<div className="web-search-key-edit">

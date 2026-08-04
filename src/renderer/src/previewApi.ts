@@ -826,6 +826,8 @@ export function createPreviewApi(): PiDesktopApi {
 				trustParsed: { version: 1 as const, trusted: {}, toggles: {} },
 				installedCount: 1,
 				trusted: false,
+				configHash: "abc123hashmock",
+				trustKey: "mock-trust-key",
 			}),
 			saveHooks: async () => ({ valid: true }),
 			saveSkillConfig: async () => ({ valid: true }),

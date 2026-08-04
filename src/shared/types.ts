@@ -777,6 +777,8 @@ export type HooksConfigSnapshot = {
 	trustDiagnostic?: ConfigFileDiagnostic;
 	installedCount: number;
 	trusted: boolean;
+	configHash: string;
+	trustKey: string;
 };
 
 export type HooksConfigSaveRequest = {

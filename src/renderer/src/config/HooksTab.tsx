@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, RefreshCw, ShieldCheck, Trash2, Zap } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Zap } from "lucide-react";
+import { Modal } from "../components/ui/Modal";
 import type { HookEventName, HooksConfigFile, HooksConfigSnapshot } from "../../../shared/types";
 import { Button } from "../components/ui/Button";
 import { IconButton } from "../components/ui/IconButton";
@@ -34,9 +35,10 @@ const HOOK_EVENTS: Array<{ id: HookEventName; descriptionKey: Parameters<typeof 
 type CommandHook = {
 	type: "command";
 	command: string;
+	commandWindows?: string;
 	timeout: number;
 	statusMessage?: string;
-};
+} & Record<string, unknown>;
 
 type MatcherGroup = {
 	matcher?: string;
@@ -59,7 +61,8 @@ export function HooksTab(props: { workspacePath?: string }) {
 	const [error, setError] = useState<string | null>(null);
 	const [dirty, setDirty] = useState(false);
 	const [expanded, setExpanded] = useState<Set<string>>(new Set(["SessionStart"]));
-	const [drafts, setDrafts] = useState<Record<string, { command: string; timeout: string }>>({});
+	const [drafts, setDrafts] = useState<Record<string, { command: string; commandWindows: string; timeout: string; statusMessage: string; }>>({});
+	const [trustModalOpen, setTrustModalOpen] = useState(false);
 
 	const handlerCounts = useMemo(() => {
 		const map = new Map<string, number>();
@@ -100,9 +103,9 @@ export function HooksTab(props: { workspacePath?: string }) {
 		});
 	};
 
-	const getDraft = (eventId: string) => drafts[eventId] ?? { command: "", timeout: "600" };
+	const getDraft = (eventId: string) => drafts[eventId] ?? { command: "", commandWindows: "", timeout: "600", statusMessage: "" };
 
-	const setDraft = (eventId: string, patch: Partial<{ command: string; timeout: string }>) => {
+	const setDraft = (eventId: string, patch: Partial<{ command: string; commandWindows: string; timeout: string; statusMessage: string; }>) => {
 		setDrafts((prev) => ({ ...prev, [eventId]: { ...getDraft(eventId), ...patch } }));
 	};
 
@@ -118,14 +121,22 @@ export function HooksTab(props: { workspacePath?: string }) {
 			setError(t("hooks.timeoutInvalid"));
 			return;
 		}
-		const handler: CommandHook = { type: "command", command, timeout };
+		const commandWindows = (draft.commandWindows || "").trim();
+		const statusMessage = (draft.statusMessage || "").trim();
+		const handler: CommandHook = {
+			type: "command",
+			command,
+			timeout,
+			...(commandWindows ? { commandWindows } : {}),
+			...(statusMessage ? { statusMessage } : {}),
+		};
 		setConfig((prev) => {
 			const groups = [...(prev.hooks[eventId] ?? [])] as MatcherGroup[];
 			if (groups.length === 0) groups.push({ hooks: [handler] });
 			else groups[0] = { ...groups[0], hooks: [...(groups[0].hooks ?? []), handler] };
 			return { ...prev, hooks: { ...prev.hooks, [eventId]: groups } };
 		});
-		setDraft(eventId, { command: "", timeout: "600" });
+		setDraft(eventId, { command: "", commandWindows: "", timeout: "600", statusMessage: "" });
 		setDirty(true);
 		setError(null);
 	};
@@ -145,6 +156,56 @@ export function HooksTab(props: { workspacePath?: string }) {
 			return { ...prev, hooks: nextHooks };
 		});
 		setDirty(true);
+	};
+
+	const trustState = useMemo(() => {
+		if (!snapshot || !snapshot.configHash) return "untrusted";
+		if (!snapshot.trustParsed.trusted[snapshot.trustKey]) return "untrusted";
+		if (snapshot.trustParsed.trusted[snapshot.trustKey] !== snapshot.configHash) return "changed";
+		return "trusted";
+	}, [snapshot]);
+
+	const handleTrust = async () => {
+		if (!props.workspacePath || !snapshot || !snapshot.configHash) return;
+		try {
+			const nextTrustParsed = { ...snapshot.trustParsed };
+			nextTrustParsed.trusted = { ...nextTrustParsed.trusted, [snapshot.trustKey]: snapshot.configHash };
+			const result = await getConfigApi().saveHooks({
+				workspacePath: props.workspacePath,
+				trustRaw: JSON.stringify(nextTrustParsed, null, 2),
+			});
+			if (!result.valid) {
+				setError(result.error ?? t("hooks.saveFailed"));
+				return;
+			}
+			showNotice(t("hooks.trustSuccess"), 1600);
+			setTrustModalOpen(false);
+			await load();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleRevoke = async () => {
+		if (!props.workspacePath || !snapshot) return;
+		try {
+			const nextTrustParsed = { ...snapshot.trustParsed };
+			const newTrusted = { ...nextTrustParsed.trusted };
+			delete newTrusted[snapshot.trustKey];
+			nextTrustParsed.trusted = newTrusted;
+			const result = await getConfigApi().saveHooks({
+				workspacePath: props.workspacePath,
+				trustRaw: JSON.stringify(nextTrustParsed, null, 2),
+			});
+			if (!result.valid) {
+				setError(result.error ?? t("hooks.saveFailed"));
+				return;
+			}
+			showNotice(t("hooks.revokeSuccess"), 1600);
+			await load();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
 	};
 
 	const save = async () => {
@@ -170,6 +231,12 @@ export function HooksTab(props: { workspacePath?: string }) {
 		}
 	};
 
+	const hasSubagentWarning = useMemo(() => {
+		const startCount = handlerCounts.get("SubagentStart") ?? 0;
+		const stopCount = handlerCounts.get("SubagentStop") ?? 0;
+		return startCount > 0 || stopCount > 0;
+	}, [handlerCounts]);
+
 	if (!props.workspacePath) return <div className="config-empty">{t("hooks.noProject")}</div>;
 
 	return (
@@ -191,20 +258,83 @@ export function HooksTab(props: { workspacePath?: string }) {
 
 			{error ? <div className="config-error">{error}</div> : null}
 
+						{snapshot ? (
+				<div className="hooks-audit-banner" data-state={trustState}>
+					<div className="hooks-audit-info">
+						<div className="hooks-audit-title-row">
+							{trustState === "trusted" ? <ShieldCheck size={18} aria-hidden="true" /> : trustState === "changed" ? <AlertTriangle size={18} aria-hidden="true" /> : <ShieldAlert size={18} aria-hidden="true" />}
+							<strong>
+								{trustState === "trusted" ? t("hooks.audit.trusted") : trustState === "changed" ? t("hooks.audit.changed") : t("hooks.audit.untrusted")}
+							</strong>
+						</div>
+						<span className="hooks-audit-description">
+							{trustState === "trusted" ? t("hooks.audit.desc.trusted") : trustState === "changed" ? t("hooks.audit.desc.changed") : t("hooks.audit.desc.untrusted")}
+						</span>
+					</div>
+					<div className="hooks-audit-actions">
+						{(trustState === "untrusted" || trustState === "changed") && (
+							<Button variant="primary" buttonSize="sm" onClick={() => setTrustModalOpen(true)}>
+								{t("hooks.reviewTrust")}
+							</Button>
+						)}
+						{(trustState === "trusted" || trustState === "changed") && (
+							<Button variant="secondary" buttonSize="sm" onClick={() => void handleRevoke()}>
+								{t("hooks.revokeTrust")}
+							</Button>
+						)}
+					</div>
+				</div>
+			) : null}
+
+			{hasSubagentWarning ? (
+				<div className="hooks-subagent-warning-banner">
+					<AlertTriangle size={16} aria-hidden="true" />
+					<span>{t("hooks.subagentWarning")}</span>
+				</div>
+			) : null}
+
 			{snapshot ? (
 				<div className="hooks-summary">
 					<div className="hooks-card">
-						<ShieldCheck size={18} aria-hidden="true" />
-						<div>
-							<strong>{snapshot.trusted ? t("hooks.trusted") : t("hooks.untrusted")}</strong>
-							<span>{t("hooks.installedCount", { count: snapshot.installedCount })}</span>
-						</div>
-					</div>
-					<div className="hooks-card">
 						<strong>{t("hooks.configFile")}</strong>
 						<code title={snapshot.configPath}>{snapshot.configPath}</code>
+						<span className="hooks-summary-installed-count">{t("hooks.installedCount", { count: snapshot.installedCount })}</span>
 					</div>
 				</div>
+			) : null}
+
+			{snapshot && trustModalOpen ? (
+				<Modal open={trustModalOpen} onClose={() => setTrustModalOpen(false)} title={t("hooks.trustModalTitle")}>
+					<div className="hooks-trust-review-content">
+						<div>
+							<strong>{t("hooks.configFile")}: </strong>
+							<code title={snapshot.configPath}>{snapshot.configPath}</code>
+						</div>
+						<div>
+							<strong>{t("hooks.hash")}: </strong>
+							<code>{snapshot.configHash.substring(0, 8)}</code>
+						</div>
+						<div className="hooks-trust-review-commands">
+							{(() => {
+								const commands = [];
+								for (const [evt, groups] of Object.entries(snapshot.configParsed.hooks || {})) {
+									for (const group of groups || []) {
+										for (const hook of group.hooks || []) {
+											if (hook.command) {
+												commands.push(`[${evt}] ${hook.command}`);
+											}
+										}
+									}
+								}
+								return commands.length > 0 ? commands.join("\n") : t("hooks.audit.noHooks");
+							})()}
+						</div>
+						<div className="hooks-trust-review-actions">
+							<Button variant="secondary" onClick={() => setTrustModalOpen(false)}>{t("hooks.cancel")}</Button>
+							<Button variant="primary" onClick={() => void handleTrust()}>{t("hooks.trust")}</Button>
+						</div>
+					</div>
+				</Modal>
 			) : null}
 
 			{loading && !snapshot ? (
@@ -235,9 +365,13 @@ export function HooksTab(props: { workspacePath?: string }) {
 											{groups.map((group, groupIndex) =>
 												(group.hooks ?? []).map((hook, hookIndex) => (
 													<div key={`${event.id}-${groupIndex}-${hookIndex}`} className="hooks-handler-row">
-														<div>
+														<div className="hooks-handler-info">
 															<code>{hook.command || t("hooks.emptyCommand")}</code>
-															<small>{t("hooks.timeoutSeconds", { seconds: hook.timeout })}</small>
+															{hook.commandWindows ? <code className="hooks-handler-win">{t("hooks.win")}: {hook.commandWindows}</code> : null}
+															<div className="hooks-handler-meta">
+																<small>{t("hooks.timeoutSeconds", { seconds: hook.timeout })}</small>
+																{hook.statusMessage ? <small>{t("hooks.msg")}: {hook.statusMessage}</small> : null}
+															</div>
 														</div>
 														<IconButton
 															label={t("common.delete")}
@@ -254,6 +388,18 @@ export function HooksTab(props: { workspacePath?: string }) {
 													value={draft.command}
 													onChange={(value) => setDraft(event.id, { command: value })}
 													placeholder={t("hooks.commandPlaceholder")}
+												/>
+												<TextField
+													label={t("hooks.commandWindowsLabel")}
+													value={draft.commandWindows}
+													onChange={(value) => setDraft(event.id, { commandWindows: value })}
+													placeholder=""
+												/>
+												<TextField
+													label={t("hooks.statusMessageLabel")}
+													value={draft.statusMessage}
+													onChange={(value) => setDraft(event.id, { statusMessage: value })}
+													placeholder=""
 												/>
 												<TextField
 													label={t("hooks.timeoutLabel")}
