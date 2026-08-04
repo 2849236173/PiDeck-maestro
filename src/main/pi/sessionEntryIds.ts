@@ -99,8 +99,44 @@ export function collectDescendantEntryIds(
 
 export type ResendTextCandidate = string | readonly string[];
 
+/** 桌面 Plan 模式注入的隐藏标记；pi-deck-plan-mode 扩展可能在落盘前剥离它。 */
+export const PI_DECK_PLAN_MODE_MARKER = "__PI_DECK_PLAN_MODE__";
+
+export type FindUserMessageOptions = {
+	allowImageFallback?: boolean;
+	/** 自动重试最近一条 prompt 时，允许直接取 JSONL 中最后一条 user，忽略正文差异。 */
+	allowLastUserFallback?: boolean;
+};
+
 function normalizeTextCandidates(text: ResendTextCandidate): string[] {
 	return [...new Set((Array.isArray(text) ? text : [text]).filter((value): value is string => typeof value === "string"))];
+}
+
+/**
+ * 生成可用于定位的正文变体：原文、去掉 Plan 标记、extractText 去宿主后的结果。
+ * Plan 扩展可能在落盘前剥离标记，宿主包装则由 extractText 剥离，两侧都要覆盖。
+ */
+export function expandResendTextCandidates(
+	text: ResendTextCandidate,
+	extractText: (content: unknown) => string = (value) => (typeof value === "string" ? value : ""),
+): string[] {
+	const expanded: string[] = [];
+	for (const candidate of normalizeTextCandidates(text)) {
+		expanded.push(candidate);
+		const withoutPlanMarker = stripPiDeckPlanModeMarker(candidate);
+		if (withoutPlanMarker) expanded.push(withoutPlanMarker);
+		const extracted = extractText(candidate);
+		if (extracted) expanded.push(extracted);
+		const extractedWithoutPlan = stripPiDeckPlanModeMarker(extracted);
+		if (extractedWithoutPlan) expanded.push(extractedWithoutPlan);
+	}
+	return [...new Set(expanded.filter(Boolean))];
+}
+
+export function stripPiDeckPlanModeMarker(text: string): string {
+	if (!text) return "";
+	if (!text.startsWith(PI_DECK_PLAN_MODE_MARKER)) return text;
+	return text.slice(PI_DECK_PLAN_MODE_MARKER.length).replace(/^\s+/, "");
 }
 
 function isImagePlaceholderCandidate(candidates: string[], allowImageFallback: boolean): boolean {
@@ -117,6 +153,20 @@ function isImageUserMessage(
 	return content.some((block) => block && typeof block === "object" && (block as { type?: unknown }).type === "image");
 }
 
+function entryTextMatchesCandidates(
+	entryText: string,
+	candidates: string[],
+	extractText: (content: unknown) => string,
+): boolean {
+	if (candidates.includes(entryText)) return true;
+	const normalizedEntry = stripPiDeckPlanModeMarker(extractText(entryText) || entryText);
+	if (candidates.includes(normalizedEntry)) return true;
+	return candidates.some((candidate) => {
+		const normalizedCandidate = stripPiDeckPlanModeMarker(extractText(candidate) || candidate);
+		return Boolean(normalizedCandidate) && normalizedCandidate === normalizedEntry;
+	});
+}
+
 /**
  * 在 JSONL 中按「角色 + 文本」找最后一次匹配的用户消息行。
  * 重试时传入 agentMessage 和 UI 文本两个候选值：前者是实际落盘正文，后者只用于
@@ -126,11 +176,12 @@ export function findLastUserMessageLine(
 	lines: string[],
 	text: ResendTextCandidate,
 	extractText: (content: unknown) => string,
-	options: { allowImageFallback?: boolean } = {},
+	options: FindUserMessageOptions = {},
 ): { lineIndex: number; entry: Record<string, unknown> } | null {
-	const candidates = normalizeTextCandidates(text);
+	const candidates = expandResendTextCandidates(text, extractText);
 	const allowImageFallback = isImagePlaceholderCandidate(candidates, options.allowImageFallback === true);
 	let found: { lineIndex: number; entry: Record<string, unknown> } | null = null;
+	let lastUser: { lineIndex: number; entry: Record<string, unknown> } | null = null;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]?.trim();
 		if (!line) continue;
@@ -139,15 +190,23 @@ export function findLastUserMessageLine(
 			if (entry.type === "deleted") continue;
 			const message = entry.message as { role?: string; content?: unknown } | undefined;
 			if (message?.role !== "user") continue;
+			lastUser = { lineIndex: i, entry };
 			const entryText = extractText(message.content);
-			if (candidates.includes(entryText) || (allowImageFallback && isImageUserMessage(message, extractText))) {
+			if (
+				entryTextMatchesCandidates(entryText, candidates, extractText) ||
+				(allowImageFallback && isImageUserMessage(message, extractText))
+			) {
 				found = { lineIndex: i, entry };
 			}
 		} catch {
 			// 跳过无法解析的行
 		}
 	}
-	return found;
+	if (found) return found;
+	// Deck 自动重试的是最近一次 prompt；扩展 transform 后正文可能与 UI/agentMessage 都不同，
+	// 此时取 JSONL 最后一条 user 作为截断根是安全的。
+	if (options.allowLastUserFallback) return lastUser;
+	return null;
 }
 
 /**
@@ -158,18 +217,19 @@ export function assertResendRootEntry(
 	entry: Record<string, unknown>,
 	expectedText: ResendTextCandidate,
 	extractText: (content: unknown) => string,
-	options: { allowImageFallback?: boolean } = {},
+	options: FindUserMessageOptions = {},
 ): void {
 	const message = entry.message as { role?: string; content?: unknown } | undefined;
 	if (!message || message.role !== "user") {
 		throw new Error("Resend root must be a user message entry");
 	}
-	const candidates = normalizeTextCandidates(expectedText);
+	if (options.allowLastUserFallback) return;
+	const candidates = expandResendTextCandidates(expectedText, extractText);
 	const entryText = extractText(message.content);
 	// 图片消息桌面端可能显示为「[图片]」，或被 pi 规范化为空文案/默认描述。
 	const imageFallback = isImagePlaceholderCandidate(candidates, options.allowImageFallback === true)
 		&& isImageUserMessage(message, extractText);
-	if (!candidates.includes(entryText) && !imageFallback) {
+	if (!entryTextMatchesCandidates(entryText, candidates, extractText) && !imageFallback) {
 		throw new Error(
 			`Resend root text mismatch: expected ${JSON.stringify(candidates[0]?.slice(0, 80) ?? "")}, got ${JSON.stringify(entryText.slice(0, 80))}`,
 		);

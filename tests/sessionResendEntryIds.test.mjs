@@ -5,11 +5,15 @@ import {
 	alignEntryIdsForDisplayMessages,
 	assertResendRootEntry,
 	collectDescendantEntryIds,
+	expandResendTextCandidates,
 	findLastUserMessageLine,
+	PI_DECK_PLAN_MODE_MARKER,
+	stripPiDeckPlanModeMarker,
 	takeActiveEntryId,
 } from "../src/main/pi/sessionEntryIds.ts";
 
 function extractText(content) {
+	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
 	return content
 		.filter((c) => c && c.type === "text")
@@ -20,8 +24,9 @@ function extractText(content) {
 test("AgentManager binds the persisted entryId back to the optimistic message", () => {
 	const manager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	assert.match(manager, /const optimisticMessage = nextMessages\.find\(\(message\) => message\.id === lastPrompt\.messageId\)/);
-	assert.match(manager, /this\.extractText\(lastPrompt\.agentMessage\)/);
+	assert.match(manager, /expandResendTextCandidates\(/);
 	assert.match(manager, /entryId: historyMessage\.meta\.entryId/);
+	assert.match(manager, /allowLastUserFallback: isLastPromptResend/);
 	assert.doesNotMatch(manager, /lastPrompt\.messageId = historyMessage\.id/);
 });
 
@@ -76,14 +81,12 @@ test("empty assistant tool-call must not shift later user entryIds", () => {
 		const entryId = activeEntryIds[badIndex];
 		const text = extractText(typed.content);
 		if ((typed.role === "user" || typed.role === "assistant") && !text.trim()) {
-			// 旧 bug：return [] 且不 ++
 			continue;
 		}
 		badIndex++;
 		bad.push({ role: typed.role, entryId });
 	}
 	const badU3 = bad.find((m) => m.role === "user" && m.entryId !== "u1" && m.entryId !== "u2");
-	// 旧逻辑下「第三条 user」会拿到 a2 而非 u3
 	assert.equal(bad[bad.length - 2]?.entryId, "a2", "documents the old mis-alignment");
 	assert.notEqual(badU3?.entryId, "u3");
 });
@@ -157,7 +160,7 @@ test("findLastUserMessageLine accepts the persisted agentMessage before the UI t
 	];
 	const found = findLastUserMessageLine(
 		lines,
-		["<host>\nPlan instructions\nactual prompt", "actual prompt"],
+		extractMessageCandidates(["<host>\nPlan instructions\nactual prompt", "actual prompt"]),
 		extractText,
 	);
 	assert.equal(found?.entry.id, "u-plan");
@@ -171,7 +174,7 @@ test("findLastUserMessageLine accepts image entries for an image-only optimistic
 			message: { role: "user", content: [{ type: "image", data: "base64" }] },
 		}),
 	];
-	const found = findLastUserMessageLine(lines, "[图片]", extractText, { allowImageFallback: true });
+	const found = findLastUserMessageLine(lines, extractMessageCandidates(["[图片]"]), extractText, { allowImageFallback: true });
 	assert.equal(found?.entry.id, "u-image");
 	assert.doesNotThrow(() => assertResendRootEntry(found.entry, "[图片]", extractText, { allowImageFallback: true }));
 });
@@ -194,7 +197,85 @@ test("findLastUserMessageLine prefers the latest duplicate text", () => {
 			message: { role: "user", content: [{ type: "text", text: "same" }] },
 		}),
 	];
-	const found = findLastUserMessageLine(lines, "same", extractText);
+	const found = findLastUserMessageLine(lines, extractMessageCandidates(["same"]), extractText);
 	assert.equal(found?.entry.id, "u2");
 	assert.equal(found?.lineIndex, 2);
 });
+
+test("findLastUserMessageLine matches Plan mode after extension strips the marker", () => {
+	const uiText = "实现自动重试";
+	const agentMessage = [
+		PI_DECK_PLAN_MODE_MARKER,
+		uiText,
+		"",
+		"请先只做只读分析，不要修改文件。最后必须输出以 `Plan:` 开头的编号计划，格式如下：",
+		"Plan:",
+		"1. 第一步",
+		"2. 第二步",
+	].join("\n");
+	// pi-deck-plan-mode 扩展会剥离标记后再落盘
+	const persisted = stripPiDeckPlanModeMarker(agentMessage);
+	assert.notEqual(persisted, agentMessage);
+	const lines = [
+		JSON.stringify({
+			type: "message",
+			id: "u-plan-transform",
+			message: { role: "user", content: [{ type: "text", text: persisted }] },
+		}),
+	];
+	const candidates = expandResendTextCandidates([agentMessage, uiText], extractText);
+	const found = findLastUserMessageLine(lines, candidates, extractText);
+	assert.equal(found?.entry.id, "u-plan-transform");
+	assert.doesNotThrow(() =>
+		assertResendRootEntry(found.entry, candidates, extractText),
+	);
+});
+
+test("findLastUserMessageLine can fall back to the last user for Deck last-prompt retry", () => {
+	const lines = [
+		JSON.stringify({
+			type: "message",
+			id: "u-old",
+			message: { role: "user", content: [{ type: "text", text: "old" }] },
+		}),
+		JSON.stringify({
+			type: "message",
+			id: "u-transformed",
+			message: { role: "user", content: [{ type: "text", text: "completely rewritten by extension" }] },
+		}),
+	];
+	assert.equal(
+		findLastUserMessageLine(lines, extractMessageCandidates(["ui text only"]), extractText)?.entry.id,
+		undefined,
+	);
+	const found = findLastUserMessageLine(lines, extractMessageCandidates(["ui text only"]), extractText, {
+		allowLastUserFallback: true,
+	});
+	assert.equal(found?.entry.id, "u-transformed");
+	assert.doesNotThrow(() =>
+		assertResendRootEntry(found.entry, "ui text only", extractText, {
+			allowLastUserFallback: true,
+		}),
+	);
+});
+
+test("assertResendRootEntry still rejects early user without last-user fallback", () => {
+	const earlierUser = {
+		type: "message",
+		id: "u1",
+		message: { role: "user", content: [{ type: "text", text: "first" }] },
+	};
+	assert.throws(
+		() => assertResendRootEntry(earlierUser, "resend-me", extractText),
+		/text mismatch/,
+	);
+	assert.doesNotThrow(() =>
+		assertResendRootEntry(earlierUser, "other", extractText, {
+			allowLastUserFallback: true,
+		}),
+	);
+});
+
+function extractMessageCandidates(values) {
+	return expandResendTextCandidates(values, (content) => extractText(content));
+}

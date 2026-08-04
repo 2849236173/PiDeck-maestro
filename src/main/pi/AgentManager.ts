@@ -37,7 +37,9 @@ import {
 import {
 	assertResendRootEntry,
 	collectDescendantEntryIds,
+	expandResendTextCandidates,
 	findLastUserMessageLine,
+	stripPiDeckPlanModeMarker,
 	takeActiveEntryId,
 } from "./sessionEntryIds";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
@@ -594,16 +596,18 @@ export class AgentManager {
 		const lastPrompt = this.lastPromptByAgent.get(agentId);
 		if (lastPrompt) {
 			// RPC 历史消息带有 pi 的 entryId；将它绑定回乐观气泡后，后续 Deck 重试可直接按
-			// JSONL 根节点定位。匹配同时使用 UI 文本和 extractMessageText 的去宿主结果，
-			// 覆盖 Plan/飞书等 agentMessage 与 UI 文案不同的场景。
+			// JSONL 根节点定位。匹配覆盖 UI 原文、Plan 标记剥离后正文、以及 extractText 去宿主结果。
 			const optimisticMessage = nextMessages.find((message) => message.id === lastPrompt.messageId);
-			const persistedTextCandidates = new Set([
-				optimisticMessage?.text,
-				this.extractText(lastPrompt.agentMessage),
-			].filter((text): text is string => Boolean(text)));
+			const persistedTextCandidates = new Set(expandResendTextCandidates(
+				[optimisticMessage?.text ?? "", lastPrompt.agentMessage],
+				(content) => this.extractText(content),
+			));
 			const historyMessage = [...messages].reverse().find((message) =>
 				message.role === "user" && message.meta?.entryId &&
-				persistedTextCandidates.has(message.text),
+				(
+					persistedTextCandidates.has(message.text) ||
+					persistedTextCandidates.has(stripPiDeckPlanModeMarker(message.text))
+				),
 			);
 			if (optimisticMessage && historyMessage?.meta?.entryId) {
 				optimisticMessage.meta = {
@@ -2487,7 +2491,7 @@ export class AgentManager {
 		messages: ChatMessage[],
 		msg: ChatMessage,
 		matchText: string | readonly string[] = msg.text,
-		matchOptions: { allowImageFallback?: boolean } = {},
+		matchOptions: { allowImageFallback?: boolean; allowLastUserFallback?: boolean } = {},
 	): { lineIndex: number; entry: Record<string, any> } {
 		const entryId = msg.meta?.entryId as string | undefined;
 
@@ -2806,10 +2810,19 @@ export class AgentManager {
 			if (!raw) throw new Error("Session file is empty");
 			const lines = raw.split(/\r?\n/);
 			const original = this.lastPromptByAgent.get(agentId);
-			const resendTexts = original?.messageId === messageId
-				? [original.agentMessage, msg.text]
-				: [msg.text];
-			const resendOptions = { allowImageFallback: Boolean(msg.images?.length) };
+			const isLastPromptResend = original?.messageId === messageId;
+			const resendTexts = isLastPromptResend
+				? expandResendTextCandidates(
+					[original.agentMessage, msg.text],
+					(content) => this.extractText(content),
+				)
+				: expandResendTextCandidates(msg.text, (content) => this.extractText(content));
+			// Deck 自动重试最近一条 prompt 时，允许最后一条 user 兜底：
+			// Plan/宿主扩展可能改写落盘正文，导致 UI 文案与 JSONL 不完全一致。
+			const resendOptions = {
+				allowImageFallback: Boolean(msg.images?.length),
+				allowLastUserFallback: isLastPromptResend,
+			};
 			let lineIndex = -1;
 			let entry: Record<string, any>;
 			try {
@@ -2818,7 +2831,9 @@ export class AgentManager {
 				entry = located.entry;
 				// entryId 错位时可能定位到 assistant 或更早的 user；
 				// 校验失败则回退到「最后一条候选正文 user」，禁止带着错误根继续截断。
-				assertResendRootEntry(entry, resendTexts, (content) => this.extractText(content), resendOptions);
+				assertResendRootEntry(entry, resendTexts, (content) => this.extractText(content), {
+					allowImageFallback: resendOptions.allowImageFallback,
+				});
 			} catch (locateError) {
 				const fallback = findLastUserMessageLine(
 					lines,
@@ -2831,6 +2846,7 @@ export class AgentManager {
 					agentId,
 					messageId,
 					error: locateError instanceof Error ? locateError.message : String(locateError),
+					allowLastUserFallback: resendOptions.allowLastUserFallback,
 				});
 				lineIndex = fallback.lineIndex;
 				entry = fallback.entry;
