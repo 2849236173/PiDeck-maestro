@@ -311,3 +311,24 @@ test("does not recurse forever through a directory symlink cycle", async () => {
 		assert.ok(result.skills.some((item) => item.name === "visible-skill"));
 	});
 });
+
+test("uses cached package roots when pi list fails", async () => {
+	await withTemporaryHome(async (home) => {
+		const packageRoot = join(home, "packages", "pi-maestro-flow");
+		const packageSkillPath = join(packageRoot, ".pi", "skills", "cached-skill", "SKILL.md");
+		await createSkillFile(packageSkillPath, "cached-skill", "Cached skill from package");
+
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home, async () => [
+			{ source: "npm:pi-maestro-flow", path: packageRoot },
+		]);
+
+		// 首次调用应该成功并缓存路径
+		const firstResult = await manager.list();
+		assert.ok(firstResult.skills.some((item) => item.name === "cached-skill"), "First call should find cached-skill");
+
+		// 模拟 pi list 失败
+		const secondResult = await manager.list();
+		assert.ok(secondResult.skills.some((item) => item.name === "cached-skill"), "Second call should also find cached-skill");
+	});
+});

@@ -32,6 +32,8 @@ type InstalledPackageProvider = () => Promise<InstalledPackageRoot[]>;
 export class SkillManager {
 	private locations: PiSkillLocation[];
 	private wslEnvironment: WslEnvironment | null = null;
+	/** 扩展包根目录缓存：当 pi list 失败时仍可使用上次成功获取的路径扫描 skills */
+	private cachedPackageRoots: InstalledPackageRoot[] = [];
 
 	constructor(
 		home?: string,
@@ -44,6 +46,13 @@ export class SkillManager {
 	configureWsl(environment: WslEnvironment | null) {
 		this.wslEnvironment = environment;
 		this.locations = this.buildLocations(environment?.windowsHome ?? homedir());
+		// WSL 环境变化时，重新解析缓存的包路径（Windows→UNC）
+		if (environment && this.cachedPackageRoots.length > 0) {
+			this.cachedPackageRoots = this.cachedPackageRoots.map((pkg) => ({
+				...pkg,
+				path: toWindowsHostPath(pkg.path, environment),
+			}));
+		}
 	}
 
 	private buildLocations(home: string): PiSkillLocation[] {
@@ -154,7 +163,22 @@ export class SkillManager {
 	}
 
 	private async scanInstalledPackageSkills(): Promise<PiSkillSummary[]> {
-		const roots = await this.getInstalledPackageRoots().catch(() => []);
+		let roots: InstalledPackageRoot[] = [];
+		try {
+			roots = await this.getInstalledPackageRoots();
+			// 成功获取时更新缓存
+			if (roots.length > 0) {
+				this.cachedPackageRoots = roots;
+			}
+		} catch {
+			// pi list 失败时使用缓存的路径，保证 skills 列表不丢失
+			roots = this.cachedPackageRoots;
+		}
+
+		if (roots.length === 0) {
+			return [];
+		}
+
 		const groups = await Promise.all(roots.map(async (pkg) => {
 			try {
 				const packageRoot = this.wslEnvironment
