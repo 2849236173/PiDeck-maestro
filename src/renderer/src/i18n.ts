@@ -1769,9 +1769,16 @@ const zhCN = {
   "drawer.sessionEmptyDesc":
     "点击项目右侧历史按钮或右键项目打开历史会话；新会话完成后会出现在这里。",
   "drawer.sessionEmptyTitle": "暂无历史会话",
+  "drawer.sessionEmptyAllDesc":
+    "切换到「全部会话」可查看所有项目的会话；新会话完成后会自动出现在对应目录下。",
+  "drawer.sessionEmptyAllTitle": "暂无任何会话",
   "drawer.sessionExported": "已导出",
   "drawer.sessionMessages": "{count} messages",
   "drawer.sessionCount": "{count} sessions",
+  "drawer.sessionModeProject": "当前项目",
+  "drawer.sessionModeAll": "全部会话",
+  "drawer.sessionModeTabs": "会话视图切换",
+  "drawer.sessionDirCount": "{count} 个会话",
   "drawer.unpin": "取消固定抽屉",
   "drawer.subagentSession": "子会话",
   "drawer.subagentSessionCount": "{count} 个子会话",
@@ -4060,9 +4067,16 @@ const enUS: Record<TranslationKey, string> = {
   "drawer.sessionEmptyDesc":
     "Use the project history button or project context menu to open history sessions. Completed sessions will appear here.",
   "drawer.sessionEmptyTitle": "No history sessions",
+  "drawer.sessionEmptyAllDesc":
+    "Switch to \"All sessions\" to see sessions from every project; new sessions will appear under their project folder automatically.",
+  "drawer.sessionEmptyAllTitle": "No sessions yet",
   "drawer.sessionExported": "Exported",
   "drawer.sessionMessages": "{count} messages",
   "drawer.sessionCount": "{count} sessions",
+  "drawer.sessionModeProject": "Current project",
+  "drawer.sessionModeAll": "All sessions",
+  "drawer.sessionModeTabs": "Session view toggle",
+  "drawer.sessionDirCount": "{count} sessions",
   "drawer.unpin": "Unpin drawer",
   "drawer.subagentSession": "subagent",
   "drawer.subagentSessionCount": "{count} child sessions",

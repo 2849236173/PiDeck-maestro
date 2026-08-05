@@ -32,6 +32,7 @@ export const ipcChannels = {
 	filesDelete: "files:delete",
 	filesRename: "files:rename",
 	sessionsList: "sessions:list",
+	sessionsListAll: "sessions:list-all",
 	sessionsRename: "sessions:rename",
 	sessionsCopy: "sessions:copy",
 	sessionsExportHtml: "sessions:export-html",

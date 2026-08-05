@@ -4901,6 +4901,10 @@ export function DrawerContent(props: {
 	project?: Project;
 	files: FileTreeNode[];
 	sessions: SessionSummary[];
+	sessionsMode?: "project" | "all";
+	onSessionsModeChange?: (mode: "project" | "all") => void;
+	/** 已知项目列表，用于把 encoded cwd 目录名还原为友好项目名。 */
+	projects?: Project[];
 	sessionsLoading?: boolean;
 	expandedDirs: Set<string>;
 	onToggleDirectory: (path: string) => void;
@@ -4973,6 +4977,9 @@ export function DrawerContent(props: {
 			{props.panel === "sessions" && (
 				<SessionsPanel
 					sessions={props.sessions}
+					mode={props.sessionsMode ?? "project"}
+					onModeChange={props.onSessionsModeChange ?? (() => {})}
+					projects={props.projects}
 					onRefresh={props.onRefreshSessions}
 					onOpen={props.onOpenSession}
 					onRename={props.onRenameSession}
@@ -5422,8 +5429,14 @@ function FileNode(props: {
 	);
 }
 
+type SessionsPanelMode = "project" | "all";
+
 function SessionsPanel(props: {
 	sessions: SessionSummary[];
+	mode: SessionsPanelMode;
+	onModeChange: (mode: SessionsPanelMode) => void;
+	/** 已知项目列表，用于把 encodedDir 还原为友好的项目名。 */
+	projects?: Project[];
 	onRefresh: () => void;
 	onOpen: (session: SessionSummary) => void;
 	onRename: (filePath: string, newName: string) => void | Promise<void>;
@@ -5513,184 +5526,206 @@ function SessionsPanel(props: {
 		});
 	}, []);
 
+	// "全部会话"模式：按 encodedDir 分组。每个 encodedDir 默认展开，
+	// 用户点击文件夹头可折叠/展开，便于在大型会话库中定位。
+	const dirGroups = useMemo(() => {
+		if (props.mode !== "all") return [];
+		const groups = new Map<string, SessionSummary[]>();
+		for (const s of parentSessions) {
+			const key = s.encodedDir ?? "(root)";
+			const list = groups.get(key) ?? [];
+			list.push(s);
+			groups.set(key, list);
+		}
+		return [...groups.entries()]
+			.map(([dir, items]) => ({ dir, items: items.slice().sort((a, b) => b.updatedAt - a.updatedAt) }))
+			.sort((a, b) => {
+				// 最近更新的目录排在最前
+				const aLatest = a.items[0]?.updatedAt ?? 0;
+				const bLatest = b.items[0]?.updatedAt ?? 0;
+				return bLatest - aLatest;
+			});
+	}, [props.mode, parentSessions]);
+	// encodedDir → 项目名的映射，用于把 --H--github-PiDeck-- 显示为友好项目名。
+	const dirToProjectName = useMemo(() => {
+		const map = new Map<string, string>();
+		if (!props.projects) return map;
+		for (const project of props.projects) {
+			const encoded = encodeCwdForSessionsDir(project.path);
+			if (encoded) map.set(encoded, project.name);
+		}
+		return map;
+	}, [props.projects]);
+	// "全部"模式下所有目录默认展开；用户折叠后会记录在该 Set 里。
+	const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+	const toggleDir = useCallback((dir: string) => {
+		setCollapsedDirs(prev => {
+			const next = new Set(prev);
+			if (next.has(dir)) next.delete(dir);
+			else next.add(dir);
+			return next;
+		});
+	}, []);
+
+	function friendlyDirLabel(dir: string): string {
+		const projectName = dirToProjectName.get(dir);
+		if (projectName) return projectName;
+		// 把 --C--Users-asus-AppData-Roaming-pi-desktop-chat-workspace-- 这样的
+		// encoded 名称反解回更易读的 Windows 路径形式，作为 fallback。
+		if (dir.startsWith("--") && dir.endsWith("--")) {
+			const inner = dir.slice(2, -2);
+			// 形如 C--Users-asus-AppData-Roaming-pi-desktop-chat-workspace
+			const drive = inner.match(/^([A-Z])--/);
+			if (drive) {
+				const rest = inner.slice(drive[0].length).replace(/--/g, "/");
+				return `${drive[1]}:\\${rest}`;
+			}
+		}
+		return dir;
+	}
+
+	const totalCount = parentSessions.length;
+	const empty =
+		props.mode === "all"
+			? t("drawer.sessionEmptyAllTitle")
+			: t("drawer.sessionEmptyTitle");
+	const emptyDesc =
+		props.mode === "all"
+			? t("drawer.sessionEmptyAllDesc")
+			: t("drawer.sessionEmptyDesc");
+
 	return (
 		<div className="sessions-panel">
 			<div className="panel-action-row">
-				<span>{t("drawer.sessionCount", { count: parentSessions.length })}</span>
+				<div className="sessions-panel-mode-tabs" role="tablist" aria-label={t("drawer.sessionModeTabs")}>
+					<button
+						role="tab"
+						aria-selected={props.mode === "project"}
+						className={`sessions-panel-mode-tab ${props.mode === "project" ? "active" : ""}`}
+						onClick={() => props.onModeChange("project")}
+					>
+						{t("drawer.sessionModeProject")}
+					</button>
+					<button
+						role="tab"
+						aria-selected={props.mode === "all"}
+						className={`sessions-panel-mode-tab ${props.mode === "all" ? "active" : ""}`}
+						onClick={() => props.onModeChange("all")}
+					>
+						{t("drawer.sessionModeAll")}
+					</button>
+				</div>
+				<span>{t("drawer.sessionCount", { count: totalCount })}</span>
 				<button onClick={props.onRefresh}>{t("common.refresh")}</button>
 			</div>
-			{parentSessions.length === 0 && (
+			{totalCount === 0 && (
 				<div className="sessions-empty">
-					<strong>{t("drawer.sessionEmptyTitle")}</strong>
-					<span>{t("drawer.sessionEmptyDesc")}</span>
+					<strong>{empty}</strong>
+					<span>{emptyDesc}</span>
 				</div>
 			)}
-			{parentSessions.map((session) => {
-				const children = parentToChildren.get(normalizeSessionPathForCompare(session.filePath) ?? "");
-				const normalizedPath = normalizeSessionPathForCompare(session.filePath) ?? session.filePath;
-				const isExpanded = expandedParents.has(normalizedPath);
-				return (
-				<div
-					key={session.filePath}
-					className="session-card-group"
-				>
-					<div className="session-card">
-					{renamingPath === session.filePath ? (
-						<div className="session-rename-row">
-							<input
-								ref={inputRef}
-								value={editValue}
-								onChange={(e) => setEditValue(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter") confirmRename();
-									if (e.key === "Escape") {
-										setRenamingPath(null);
-										setEditValue("");
-									}
-								}}
-								autoFocus
-							/>
-							<button onClick={confirmRename}>{t("common.save")}</button>
-							<button
-								onClick={() => {
-									setRenamingPath(null);
-									setEditValue("");
-								}}
-							>
-								{t("common.cancel")}
-							</button>
-						</div>
-					) : (
-						<div className="session-card-display">
-							<button
-								className="session-card-inner"
-								onClick={() => props.onOpen(session)}
-								title={session.filePath}
-							>
-								<div className="session-card-title">
-									<strong>{session.name || t("common.untitled")}</strong>
-									{session.source && session.source !== "pi" && (
-										<span className={`session-source-badge ${session.source}`}>
-											{t(`sessionSource.${session.source}` as any)}
-										</span>
-									)}
-									<small>
-										{new Date(session.updatedAt).toLocaleString()} ·{" "}
-										{t("drawer.sessionMessages", {
-											count: session.messageCount,
-										})}
+			{props.mode === "all"
+				? dirGroups.map((group) => {
+						const isCollapsed = collapsedDirs.has(group.dir);
+						return (
+							<div key={group.dir} className="session-card-group">
+								<button
+									className="session-dir-header"
+									onClick={() => toggleDir(group.dir)}
+									title={group.dir}
+								>
+									{isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+									<span className="session-dir-name">
+										{friendlyDirLabel(group.dir)}
+									</span>
+									<small className="session-dir-count">
+										{t("drawer.sessionDirCount", { count: group.items.length })}
 									</small>
-								</div>
-							</button>
-							<div className="session-card-actions">
-								<button
-									className="session-rename-button"
-									title={t("menu.copySession")}
-									disabled={Boolean(sessionActionLoading)}
-									onClick={() =>
-										void runSessionAction(
-											session,
-											"copy",
-											() => props.onCopy(session),
-											t("drawer.sessionCopied"),
-										)
-									}
-								>
-									{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "copy" && <span className="mini-loader" />}
-									<span>
-										{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "copy"
-											? t("menu.copying")
-											: t("common.copy")}
-									</span>
 								</button>
-								<button
-									className="session-rename-button"
-									title={t("menu.exportHtml")}
-									disabled={Boolean(sessionActionLoading)}
-									onClick={() =>
-										void runSessionAction(
-											session,
-											"export",
-											() => props.onExport(session),
-											t("drawer.sessionExported"),
-										)
-									}
-								>
-									{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "export" && <span className="mini-loader" />}
-									<span>
-										{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "export"
-											? t("menu.exporting")
-											: t("common.export")}
-									</span>
-								</button>
-								<button
-									className="session-rename-button"
-									title={t("common.rename")}
-									onClick={() => startRename(session)}
-								>
-									<span>{t("common.rename")}</span>
-								</button>
-								<button
-									className="session-rename-button danger"
-									title={t("common.delete")}
-									disabled={Boolean(sessionActionLoading)}
-									onClick={() => setDeleteConfirmSession(session)}
-								>
-									{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "delete" && <span className="mini-loader" />}
-									<span>
-										{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "delete"
-											? t("drawer.sessionActionDeleting")
-											: t("common.delete")}
-									</span>
-								</button>
+								{!isCollapsed && group.items.map((session) => (
+									<SessionCard
+										key={session.filePath}
+										session={session}
+										isChild={false}
+										renamingPath={renamingPath}
+										editValue={editValue}
+										setEditValue={setEditValue}
+										confirmRename={confirmRename}
+										cancelRename={() => { setRenamingPath(null); setEditValue(""); }}
+										startRename={startRename}
+										inputRef={inputRef}
+										sessionActionLoading={sessionActionLoading}
+										runSessionAction={runSessionAction}
+										onOpen={props.onOpen}
+										onCopy={props.onCopy}
+										onExport={props.onExport}
+										onDelete={(s) => setDeleteConfirmSession(s)}
+									/>
+								))}
 							</div>
-							{/* sessionActionNotice 已改用 toast (sonner) 实现 */}
-						</div>
-					)}
-				</div>
-					{children && children.length > 0 && (
-						<div className="session-card-children-header">
-							<button
-								className="session-card-expand-btn"
-								title={isExpanded ? t("drawer.collapseSubagentSessions") : t("drawer.expandSubagentSessions")}
-								onClick={() => toggleParent(session.filePath)}
+						);
+					})
+				: parentSessions.map((session) => {
+						const children = parentToChildren.get(normalizeSessionPathForCompare(session.filePath) ?? "");
+						const normalizedPath = normalizeSessionPathForCompare(session.filePath) ?? session.filePath;
+						const isExpanded = expandedParents.has(normalizedPath);
+						return (
+							<div
+								key={session.filePath}
+								className="session-card-group"
 							>
-								{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-								<span>{t("drawer.subagentSessionCount", { count: children.length })}</span>
-							</button>
-						</div>
-					)}
-					{isExpanded && children?.map((child) => (
-						<div key={child.filePath} className="session-card session-card-child">
-							<div className="session-card-display">
-								<button
-									className="session-card-inner"
-									onClick={() => props.onOpen(child)}
-									title={child.filePath}
-								>
-									<div className="session-card-title">
-										<strong>{child.name || t("common.untitled")}</strong>
-										<span className="session-source-badge subagent">{t("drawer.subagentSession")}</span>
-										<small>
-											{new Date(child.updatedAt).toLocaleString()} ·{" "}
-											{t("drawer.sessionMessages", {
-												count: child.messageCount,
-											})}
-										</small>
+								<SessionCard
+									session={session}
+									isChild={false}
+									renamingPath={renamingPath}
+									editValue={editValue}
+									setEditValue={setEditValue}
+									confirmRename={confirmRename}
+									cancelRename={() => { setRenamingPath(null); setEditValue(""); }}
+									startRename={startRename}
+									inputRef={inputRef}
+									sessionActionLoading={sessionActionLoading}
+									runSessionAction={runSessionAction}
+									onOpen={props.onOpen}
+									onCopy={props.onCopy}
+									onExport={props.onExport}
+									onDelete={(s) => setDeleteConfirmSession(s)}
+								/>
+								{children && children.length > 0 && (
+									<div className="session-card-children-header">
+										<button
+											className="session-card-expand-btn"
+											title={isExpanded ? t("drawer.collapseSubagentSessions") : t("drawer.expandSubagentSessions")}
+											onClick={() => toggleParent(session.filePath)}
+										>
+											{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+											<span>{t("drawer.subagentSessionCount", { count: children.length })}</span>
+										</button>
 									</div>
-								</button>
+								)}
+								{isExpanded && children?.map((child) => (
+									<SessionCard
+										key={child.filePath}
+										session={child}
+										isChild={true}
+										renamingPath={renamingPath}
+										editValue={editValue}
+										setEditValue={setEditValue}
+										confirmRename={confirmRename}
+										cancelRename={() => { setRenamingPath(null); setEditValue(""); }}
+										startRename={startRename}
+										inputRef={inputRef}
+										sessionActionLoading={sessionActionLoading}
+										runSessionAction={runSessionAction}
+										onOpen={props.onOpen}
+										onCopy={props.onCopy}
+										onExport={props.onExport}
+										onDelete={(s) => setDeleteConfirmSession(s)}
+									/>
+								))}
 							</div>
-						</div>
-					))}
-				</div>
-				);
-			})}
+						);
+					})}
 			{deleteConfirmSession && (() => {
 					const deleteChildren = parentToChildren.get(normalizeSessionPathForCompare(deleteConfirmSession.filePath) ?? "") ?? [];
 					return (
@@ -5736,6 +5771,174 @@ function SessionsPanel(props: {
 	);
 }
 
+/**
+ * 单个 session 卡片渲染。提取为内部组件，让 SessionsPanel 的两种模式（project/all）
+ * 复用同一份卡片 UI，避免重复实现。
+ */
+function SessionCard(props: {
+	session: SessionSummary;
+	isChild: boolean;
+	renamingPath: string | null;
+	editValue: string;
+	setEditValue: (v: string) => void;
+	confirmRename: () => void;
+	cancelRename: () => void;
+	startRename: (s: SessionSummary) => void;
+	inputRef: React.RefObject<HTMLInputElement | null>;
+	sessionActionLoading: { filePath: string; action: "copy" | "export" | "delete" } | null;
+	runSessionAction: (
+		s: SessionSummary,
+		a: "copy" | "export" | "delete",
+		fn: () => void | Promise<void>,
+		success: string,
+	) => Promise<void>;
+	onOpen: (s: SessionSummary) => void;
+	onCopy: (s: SessionSummary) => void | Promise<void>;
+	onExport: (s: SessionSummary) => void | Promise<void>;
+	onDelete: (s: SessionSummary) => void;
+}) {
+	const { session, isChild } = props;
+	const sessionActionLoading = props.sessionActionLoading;
+	return (
+		<div className={isChild ? "session-card session-card-child" : "session-card"}>
+			{props.renamingPath === session.filePath ? (
+				<div className="session-rename-row">
+					<input
+						ref={props.inputRef}
+						value={props.editValue}
+						onChange={(e) => props.setEditValue(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") props.confirmRename();
+							if (e.key === "Escape") props.cancelRename();
+						}}
+						autoFocus
+					/>
+					<button onClick={props.confirmRename}>{t("common.save")}</button>
+					<button onClick={props.cancelRename}>
+						{t("common.cancel")}
+					</button>
+				</div>
+			) : (
+				<div className="session-card-display">
+					<button
+						className="session-card-inner"
+						onClick={() => props.onOpen(session)}
+						title={session.filePath}
+					>
+						<div className="session-card-title">
+							<strong>{session.name || t("common.untitled")}</strong>
+							{session.source && session.source !== "pi" && (
+								<span className={`session-source-badge ${session.source}`}>
+									{t(`sessionSource.${session.source}` as any)}
+								</span>
+							)}
+							{isChild && (
+								<span className="session-source-badge subagent">{t("drawer.subagentSession")}</span>
+							)}
+							<small>
+								{new Date(session.updatedAt).toLocaleString()} ·{" "}
+								{t("drawer.sessionMessages", {
+									count: session.messageCount,
+								})}
+							</small>
+						</div>
+					</button>
+					{!isChild && (
+						<div className="session-card-actions">
+							<button
+								className="session-rename-button"
+								title={t("menu.copySession")}
+								disabled={Boolean(sessionActionLoading)}
+								onClick={() =>
+									void props.runSessionAction(
+										session,
+										"copy",
+										() => props.onCopy(session),
+										t("drawer.sessionCopied"),
+									)
+								}
+							>
+								{sessionActionLoading?.filePath === session.filePath &&
+									sessionActionLoading.action === "copy" && <span className="mini-loader" />}
+								<span>
+									{sessionActionLoading?.filePath === session.filePath &&
+									sessionActionLoading.action === "copy"
+										? t("menu.copying")
+										: t("common.copy")}
+								</span>
+							</button>
+							<button
+								className="session-rename-button"
+								title={t("menu.exportHtml")}
+								disabled={Boolean(sessionActionLoading)}
+								onClick={() =>
+									void props.runSessionAction(
+										session,
+										"export",
+										() => props.onExport(session),
+										t("drawer.sessionExported"),
+									)
+								}
+							>
+								{sessionActionLoading?.filePath === session.filePath &&
+									sessionActionLoading.action === "export" && <span className="mini-loader" />}
+								<span>
+									{sessionActionLoading?.filePath === session.filePath &&
+									sessionActionLoading.action === "export"
+										? t("menu.exporting")
+										: t("common.export")}
+								</span>
+							</button>
+							<button
+								className="session-rename-button"
+								title={t("common.rename")}
+								onClick={() => props.startRename(session)}
+							>
+								<span>{t("common.rename")}</span>
+							</button>
+							<button
+								className="session-rename-button danger"
+								title={t("common.delete")}
+								disabled={Boolean(sessionActionLoading)}
+								onClick={() => props.onDelete(session)}
+							>
+								{sessionActionLoading?.filePath === session.filePath &&
+									sessionActionLoading.action === "delete" && <span className="mini-loader" />}
+								<span>
+									{sessionActionLoading?.filePath === session.filePath &&
+									sessionActionLoading.action === "delete"
+										? t("drawer.sessionActionDeleting")
+										: t("common.delete")}
+								</span>
+							</button>
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
+}
+
+/**
+ * 把项目绝对路径编码为 ~/.pi/agent/sessions 下对应的 encoded cwd 目录名。
+ * 与 SessionScanner.collectJsonl 里使用的命名规则保持一致：
+ *   - Windows: C:\foo\bar → --C--foo-bar--
+ *   - POSIX:   /home/x/y    → --home-x-y--
+ * 两端分隔符统一为 "--"，便于跨平台目录名还原。
+ */
+function encodeCwdForSessionsDir(cwd: string): string | null {
+	if (!cwd) return null;
+	const normalized = cwd.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+	if (!normalized) return null;
+	// Windows 盘符：C:/foo/bar → C--foo-bar--
+	const win = normalized.match(/^([A-Za-z]):\/(.*)$/);
+	const parts = win
+		? [win[1], ...win[2].split("/").filter(Boolean)]
+		: normalized.split("/").filter(Boolean);
+	if (parts.length === 0) return null;
+	return `--${parts.join("--")}--`;
+}
+
 export function SessionHistoryModal(props: {
 	project: Project;
 	sessions: SessionSummary[];
@@ -5779,6 +5982,8 @@ export function SessionHistoryModal(props: {
 					) : (
 						<SessionsPanel
 							sessions={props.sessions}
+							mode="project"
+							onModeChange={() => {}}
 							onRefresh={props.onRefresh}
 							onOpen={props.onOpen}
 							onRename={props.onRename}

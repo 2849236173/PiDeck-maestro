@@ -9248,9 +9248,96 @@ body.is-resizing .subagent-panel-resizer::before {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-2);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
   margin-bottom: var(--space-3);
+}
+
+/**
+ * "当前项目 / 全部会话" 视图切换。复用已有 focus 样式，
+ * 让用户用键盘也能在两个视图间切换。
+ */
+.sessions-panel-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.sessions-panel-mode-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sessions-panel-mode-tab:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
+}
+
+.sessions-panel-mode-tab.active {
+  background: var(--color-accent-soft);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.sessions-panel-mode-tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/**
+ * "全部会话" 模式下的目录分组头。复用 sessions-panel 内部的间距节奏，
+ * 渲染为可点击的文件夹行，悬停反馈与现有 list-item 保持一致。
+ */
+.session-dir-header {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px 8px;
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+  text-align: left;
+}
+
+.session-dir-header:hover {
+  background: var(--color-bg-hover);
+}
+
+.session-dir-header:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.session-dir-name {
+  flex: 1;
+  font-weight: 500;
+  /* 长 encoded 路径允许省略号截断，避免撑开抽屉 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-dir-count {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro, 11px);
 }
 
 .panel-action-buttons {

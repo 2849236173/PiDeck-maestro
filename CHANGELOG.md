@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.6-18 - 2026-08-05
+
+### Feature: left drawer "All sessions" view
+
+- The left chat-area drawer now has two tabs: **Current project** (default, same behavior as before) and **All sessions**.
+- **All sessions** mode bypasses the per-project `isSameProject` filter and lists every session under `~/.pi/agent/sessions/`, grouped by their encoded cwd folder.
+- Folder headers show the friendly project name when a project matches (e.g. `--H--github-PiDeck--` → `PiDeck`); otherwise the encoded name is decoded back to a readable Windows/Linux path.
+- Folders are sorted by most recently updated session inside, so the active project always floats to the top.
+- Sessions from `pi-desktop/chat-workspace`, `pideck-maestro/chat-workspace`, and any other historical folder that the strict project filter previously hid are now reachable.
+
+### How to use
+
+1. Open the left chat-area drawer.
+2. Click **All sessions** in the header.
+3. Expand a folder, click any session to load it into the main chat area.
+
 ## v0.6.6-17 - 2026-08-05
 
 ### Fix: appId reverted, in-place upgrades restored

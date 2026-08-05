@@ -1198,8 +1198,13 @@ export function App() {
       setDrawer(null);
     }
   }, [editorTabs.length, drawer]);
-  const [sessionsProjectId, setSessionsProjectId] = useState<string>();
-  const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
+const [sessionsProjectId, setSessionsProjectId] = useState<string>();
+	const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
+	// 左抽屉"全部会话"模式：不过滤当前项目，按 encoded cwd 目录分组渲染。
+	// 默认 project 模式（保持原行为），用户切到 all 后由 sessionsAllCache 缓存扫描结果。
+	const [sessionsMode, setSessionsMode] = useState<"project" | "all">("project");
+	const [sessionsAllCache, setSessionsAllCache] = useState<SessionSummary[]>([]);
+	const [sessionsAllLoading, setSessionsAllLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
@@ -3538,6 +3543,42 @@ export function App() {
   async function refreshSessions(projectId = activeProjectId) {
     const next = await api.sessions.list(projectId);
     setSessions([...next].sort((a, b) => b.updatedAt - a.updatedAt));
+  }
+
+  /**
+   * "全部会话" 模式扫描：调主进程 listAll() 拿到所有 session（含 encodedDir），
+   * 结果缓存在 sessionsAllCache；切换模式时立即返回缓存，避免每次切回都重新扫描。
+   */
+  async function refreshSessionsAll() {
+    setSessionsAllLoading(true);
+    try {
+      const next = await api.sessions.listAll();
+      setSessionsAllCache([...next].sort((a, b) => b.updatedAt - a.updatedAt));
+    } finally {
+      setSessionsAllLoading(false);
+    }
+  }
+
+  async function setSessionsModeAndLoad(mode: "project" | "all") {
+    setSessionsMode(mode);
+    if (mode === "all") {
+      await refreshSessionsAll();
+    }
+  }
+
+  /**
+   * 根据 session.projectPath 反查所属项目 ID，供"全部会话"模式下打开会话时使用：
+   * 即便用户当前选中的是另一个项目，会话仍以归属项目为活动项目，
+   * 避免 createAgent 时因 activeProject 不匹配导致读不到正确的 projectPath。
+   */
+  function resolveProjectIdForSession(session: SessionSummary): string | undefined {
+    if (!session.projectPath) return sessionsProjectId ?? activeProjectId;
+    const normalized = session.projectPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const match = projects.find((p) => {
+      const pn = p.path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+      return pn === normalized;
+    });
+    return match?.id ?? sessionsProjectId ?? activeProjectId;
   }
 
   async function refreshProjectSessions(projectId: string, silent = false) {
@@ -8707,10 +8748,19 @@ filePath={gitDrawerDiff.filePath}
               panel={drawerContentPanel}
               project={drawerContentPanel === "sessions" ? sessionsProject : undefined}
               files={files}
-              sessions={(sessionsProjectId && sessionSourceFilter[sessionsProjectId]) ? sessions.filter(
-                (s) => !s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
-              ).concat(sessions.filter(s => s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"))) : sessions}
-              sessionsLoading={sessionHistoryLoading}
+              projects={projects}
+              sessions={
+                drawerContentPanel === "sessions" && sessionsMode === "all"
+                  ? sessionsAllCache
+                  : (sessionsProjectId && sessionSourceFilter[sessionsProjectId])
+                    ? sessions.filter(
+                        (s) => !s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
+                      ).concat(sessions.filter(s => s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi")))
+                    : sessions
+              }
+              sessionsMode={sessionsMode}
+              onSessionsModeChange={setSessionsModeAndLoad}
+              sessionsLoading={sessionHistoryLoading || sessionsAllLoading}
               expandedDirs={expandedDirs}
               onToggleDirectory={toggleDirectory}
               onCollapseAllDirectories={collapseAllDirectories}
@@ -8727,26 +8777,31 @@ filePath={gitDrawerDiff.filePath}
                 const p = projects.find((p) => p.id === activeProjectId);
                 if (p) void api.files.open(p.path);
               }}
-              onRefreshSessions={() =>
-                refreshSessions(sessionsProjectId ?? activeProjectId)
-              }
-              onOpenSession={(session) =>
+              onRefreshSessions={() => {
+                if (sessionsMode === "all") void refreshSessionsAll();
+                else refreshSessions(sessionsProjectId ?? activeProjectId);
+              }}
+              onOpenSession={(session) => {
+                // 全部模式下从属于哪个项目就用哪个项目作为 sessionsProjectId，
+                // 保证 createAgent 选定的项目路径与会话归属一致。
+                const targetProjectId = resolveProjectIdForSession(session);
                 createAgent(
-                  sessionsProjectId ?? activeProjectId ?? "",
+                  targetProjectId ?? activeProjectId ?? "",
                   session.filePath,
                   session.name,
-                )
-              }
+                );
+              }}
               onRenameSession={async (filePath, newName) => {
                 await api.sessions.rename(filePath, newName);
-                await refreshSessions(sessionsProjectId ?? activeProjectId);
+                if (sessionsMode === "all") await refreshSessionsAll();
+                else await refreshSessions(sessionsProjectId ?? activeProjectId);
               }}
-              onCopySession={(session) =>
-                copySession(
-                  session.filePath,
-                  sessionsProjectId ?? activeProjectId,
-                )
-              }
+              onCopySession={(session) => {
+                const projectId = sessionsMode === "all"
+                  ? resolveProjectIdForSession(session)
+                  : (sessionsProjectId ?? activeProjectId);
+                return copySession(session.filePath, projectId);
+              }}
               onExportSession={exportHistorySession}
               onDeleteSession={deleteHistorySession}
               onViewFile={viewFilePath}

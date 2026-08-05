@@ -233,6 +233,24 @@ export class SessionScanner {
     const normalizedProjectPath = projectPath && this.wslConfig
       ? toWslLinuxPath(projectPath, this.wslConfig)
       : projectPath;
+    return this.runScan(normalizedProjectPath, projectPath);
+  }
+
+  /**
+   * 列出所有会话（不过滤当前项目），用于左抽屉的"全部会话"视图。
+   * 与 list() 行为一致，但跳过 isSameProject 过滤；返回结果附带 encodedDir 字段
+   * 供 renderer 按 ~/.pi/agent/sessions/<encoded-cwd>/ 分组渲染。
+   */
+  async listAll(): Promise<SessionSummary[]> {
+    const summaries = await this.runScan(undefined, undefined);
+    return summaries.map((s) => ({ ...s, encodedDir: this.extractEncodedDir(s.filePath) }));
+  }
+
+  /** 单一扫描入口：list() 和 listAll() 共用扫描/摘要/缓存逻辑。 */
+  private async runScan(
+    normalizedProjectPath?: string,
+    hostProjectPath?: string,
+  ): Promise<SessionSummary[]> {
     // WSL 扫描会启动大量外部命令；整体 watchdog 必须早于 renderer 超时，
     // 这样超时会真正终止底层 wsl.exe，而不是只释放前端锁后继续堆积扫描。
     const controller = this.wslConfig ? new AbortController() : null;
@@ -254,7 +272,9 @@ export class SessionScanner {
 
       // 扫描根 = 默认全局 sessions + 项目/全局 sessionDir（如 <project>/.pi/sessions）。
       // pi 配置 sessionDir 后不再写 encoded-cwd 子目录，必须额外扫该路径。
-      const scanRoots = await this.resolveScanRoots(projectPath, normalizedProjectPath);
+      // hostProjectPath 用于读项目 .pi/settings.json（Windows 路径），
+      // normalizedProjectPath 用于解析相对 sessionDir（WSL 下已是 /mnt/...）。
+      const scanRoots = await this.resolveScanRoots(hostProjectPath, normalizedProjectPath);
       this.activeScanRoots = scanRoots;
 
       // WSL 模式 vs 本地模式：互斥扫描，不会同时展示两个环境的会话。
@@ -297,6 +317,24 @@ export class SessionScanner {
     } finally {
       if (scanTimer) clearTimeout(scanTimer);
     }
+  }
+
+  /**
+   * 从会话文件路径提取 ~/.pi/agent/sessions/<encodedDir>/<file> 中的 encodedDir。
+   * 用于"全部会话"模式按目录分组渲染。
+   */
+  private extractEncodedDir(filePath: string): string {
+    const normalized = this.normalize(filePath);
+    const root = this.normalize(this.defaultSessionsRoot);
+    if (normalized === root || !normalized.startsWith(`${root}/`)) {
+      // 自定义 sessionDir（如 <project>/.pi/sessions）下的文件：返回项目目录本身
+      const parts = normalized.split("/");
+      const last = parts[parts.length - 2] ?? "(custom)";
+      return last || "(root)";
+    }
+    const rest = normalized.slice(root.length + 1);
+    const firstSlash = rest.indexOf("/");
+    return firstSlash === -1 ? rest : rest.slice(0, firstSlash);
   }
 
   /**

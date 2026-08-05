@@ -205,6 +205,10 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.sessionsList, projectId) as Promise<
 				SessionSummary[]
 			>,
+		listAll: () =>
+			ipcRenderer.invoke(ipcChannels.sessionsListAll) as Promise<
+				SessionSummary[]
+			>,
 		rename: (filePath: string, newName: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsRename,

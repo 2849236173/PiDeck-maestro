@@ -188,6 +188,11 @@ export type SessionSummary = {
 	codexParentThreadId?: string;
 	codexAgentRole?: string;
 	codexAgentNickname?: string;
+	/**
+	 * 会话文件所在的 encoded cwd 目录名（~/.pi/agent/sessions/<encodedDir>/...）。
+	 * 仅在 listAll() 返回时填充，供左抽屉"全部会话"模式按目录分组渲染。
+	 */
+	encodedDir?: string;
 };
 
 export type CodexImportStatus = "new" | "current" | "outdated";

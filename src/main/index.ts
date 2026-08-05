@@ -1594,6 +1594,10 @@ function registerIpc() {
 			return sessionScanner.list(project?.path);
 		},
 	);
+	// "全部会话" 模式：不过滤当前项目，返回所有 session + encodedDir 用于分组渲染。
+	ipcMain.handle(ipcChannels.sessionsListAll, async () => {
+		return sessionScanner.listAll();
+	});
 	ipcMain.handle(
 		ipcChannels.sessionsRename,
 		async (_event, filePath: string, newName: string) => {

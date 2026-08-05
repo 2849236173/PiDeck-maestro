@@ -294,6 +294,7 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		sessions: {
 			list: async () => getSessions(),
+			listAll: async () => getSessions(),
 			rename: async () => undefined,
 			copy: async (_projectId, filePath) => ({
 				cancelled: false,
