@@ -56,3 +56,34 @@ nul
 
 
 *.tsbuildinfo
+
+# Local workflow / debug artifacts
+# - .workflow/ 是 agent/AI 协作产物（scratch / knowhow / specs / explore / embedding 等），与正式仓库无关。
+# - 根目录的 analyze_session*.ps1 / dump_*.ps1 / final_text.ps1 / get_tail.ps1 / refactor.js / update_css*.js
+#   是 debug 一次性脚本，绝不能进入版本发布。
+# - 根目录临时 *.txt（tail / timeline / final / gaps / last_dump 等）同上。
+.workflow/
+/analyze_session.ps1
+/analyze_session2.ps1
+/dump_final.ps1
+/dump_gaps.ps1
+/dump_last.ps1
+/dump_last2.ps1
+/dump_last3.ps1
+/dump_last4.ps1
+/dump_timeline.ps1
+/final_text.ps1
+/get_tail.ps1
+/refactor.js
+/scripts/refactor_a1_a2.js
+/update_css.js
+/update_css2.js
+/update_models_css.js
+/final.txt
+/gaps.txt
+/last4.txt
+/last_dump.txt
+/last_dump2.txt
+/last_dump3.txt
+/tail.txt
+/timeline.txt

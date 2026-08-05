@@ -421,17 +421,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 					setRawFileName("vision.json");
 					setConfigDiagnostic(res.diagnostic ?? null);
 				} else if (target === "raw") {
-					// 源文件 tab 复用当前 tab 对应的文件
-					const fileName =
-						tab === "models"
-							? "models.json"
-							: tab === "auth"
-								? "auth.json"
-								: tab === "trust"
-									? "trust.json"
-									: tab === "vision"
-										? "vision.json"
-										: "settings.json";
+					// Raw may be opened from a diagnostic card; use its selected file instead of the current tab.
+					const fileName = rawFileName;
 					setRawFileName(fileName);
 					const res =
 						fileName === "models.json"
@@ -448,7 +439,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				setLoading(false);
 			}
 		},
-		[tab],
+		[tab, rawFileName],
 	);
 
 	useEffect(() => {
