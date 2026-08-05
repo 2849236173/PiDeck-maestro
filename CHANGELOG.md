@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.6-16 - 2026-08-05
+
+### Fix: appId reverted, in-place upgrades restored
+
+- **Critical fix**: Reverted `appId` from `com.personal.pideck-maestro` back to `com.ayuayue.pi-desktop`.
+- `v0.6.6.15` (dot notation, wrong appId) caused Windows NSIS to treat it as a different program from the original PiDeck, preventing in-place upgrades and leaving duplicate entries in Add/Remove Programs.
+- `v0.6.6-16` shares the same appId as the original upstream PiDeck, so the NSIS installer automatically detects the old install and upgrades in-place — no uninstall needed, no data loss.
+- If you previously installed `v0.6.6.15` (dot), please manually uninstall **PiDeck** from Add/Remove Programs first, then install `v0.6.6-16`. Your session history and settings are safe either way.
+
+### Known issues
+
+- Users who are still on an older PiDeck release (before maestro) will not receive an update notification through PiDeck itself, since PiDeck checks `ayuayue/PiDeck` releases and maestro publishes to `2849236173/PiDeck-maestro`. Download the new installer directly from the [Releases page](https://github.com/2849236173/PiDeck-maestro/releases).
+
 ## v0.6.6.15 - 2026-08-05
 
 ### Renamed to PiDeck-maestro

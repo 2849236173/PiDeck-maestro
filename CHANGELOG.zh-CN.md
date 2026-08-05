@@ -1,5 +1,18 @@
 # 更新日志
 
+## v0.6.6-16 - 2026-08-05
+
+### 修复：appId 恢复，原地升级生效
+
+- **关键修复**：`appId` 从 `com.personal.pideck-maestro` 恢复为 `com.ayuayue.pi-desktop`。
+- `v0.6.6.15`（点号版本）使用了错误的 appId，导致 Windows NSIS 将其识别为与原版 PiDeck 完全不同的程序，无法原地升级，并在"应用与功能"中留下重复条目。
+- `v0.6.6-16` 与原版 PiDeck 使用相同的 appId，NSIS 安装器可自动检测旧安装并原地升级，无需卸载，不丢数据。
+- 如果你之前安装了 `v0.6.6.15`（点号版本），请先在"应用与功能"中**手动卸载 PiDeck**，再安装 `v0.6.6-16`。会话历史和设置均安全。
+
+### 已知限制
+
+- 使用旧版 PiDeck（maestro 之前版本）的用户不会收到 PiDeck 自身的更新提示，因为旧版 PiDeck 检查的是 `ayuayue/PiDeck` releases，而 maestro 发布在 `2849236173/PiDeck-maestro`。请直接前往 [Releases 页面](https://github.com/2849236173/PiDeck-maestro/releases) 下载新版安装包。
+
 ## v0.6.6.15 - 2026-08-05
 
 ### 品牌更名为 PiDeck-maestro
