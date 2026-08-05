@@ -86,7 +86,7 @@
     "sql.js": "^1.14.1"
   },
   "build": {
-    "appId": "com.personal.pideck-maestro",
+    "appId": "com.ayuayue.pi-desktop",
     "productName": "PiDeck-maestro",
     "asar": true,
     "compression": "maximum",
@@ -143,8 +143,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "include": "build/installer.nsh"
+      "createStartMenuShortcut": true
     },
     "mac": {
       "icon": "build/icon.icns",

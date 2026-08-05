@@ -116,7 +116,6 @@ import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
 import { RpcLogger } from "./logging/RpcLogger";
-import { migrateUserDataOnce } from "./migration/migrateUserDataDir";
 import { resolveWslEnvironment } from "./wsl/WslEnvironment";
 import type { WslEnvironment } from "./wsl/WslPaths";
 import {
@@ -3706,13 +3705,10 @@ app.whenReady().then(async () => {
 	// 单实例 lock 会落到旧 appId 的注册表项上，与新 appId 不一致会触发 Windows Toast 黑屏。
 	// macOS / Linux 忽略此调用。
 	if (process.platform === "win32") {
-		app.setAppUserModelId("com.personal.pideck-maestro");
+		app.setAppUserModelId("com.ayuayue.pi-desktop");
 	}
 
-	// 用户数据目录一次性迁移：PiDeck（旧 appId=com.ayuayue.pi-desktop） → PiDeck-maestro（新 appId=com.personal.pideck-maestro）。
-	// 必须早于 AppLogger / ProjectStore / SettingsStore 等任何依赖 userData 的服务实例化，否则
-	// 它们会在新路径下新建空文件，导致后续 rename 失败。
-	migrateUserDataOnce();
+	// 用户数据目录保持在原有路径，无需迁移。
 
 	projectStore = new ProjectStore();
 	fileSystemService = new FileSystemService();
