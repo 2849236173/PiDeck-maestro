@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.6-16 - 2026-08-05
+## v0.6.6-17 - 2026-08-05
 
 ### Fix: appId reverted, in-place upgrades restored
 
