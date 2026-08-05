@@ -1,7 +1,7 @@
 {
-  "name": "pi-desktop",
+  "name": "pideck-maestro",
   "version": "0.6.6-15",
-  "description": "PiDeck is an open-source desktop workbench to manage multiple pi AI coding agents across local project folders with session history, Git integration, terminal, and config management.",
+  "description": "PiDeck-maestro is the ayuayue/PiDeck compatible distribution maintained by 逍遥客, with desktop-RPC fixes for pi-maestro-flow.",
   "private": true,
   "license": "MIT",
   "author": {
@@ -12,6 +12,11 @@
     {
       "name": "1900EasonJin",
       "url": "https://github.com/1900EasonJin"
+    },
+    {
+      "name": "逍遥客",
+      "email": "2849236173@qq.com",
+      "url": "https://github.com/2849236173"
     }
   ],
   "homepage": "https://github.com/2849236173/PiDeck-maestro#readme",
@@ -81,8 +86,8 @@
     "sql.js": "^1.14.1"
   },
   "build": {
-    "appId": "com.ayuayue.pi-desktop",
-    "productName": "PiDeck",
+    "appId": "com.personal.pideck-maestro",
+    "productName": "PiDeck-maestro",
     "asar": true,
     "compression": "maximum",
     "afterPack": "./scripts/after-pack-cleanup.js",
