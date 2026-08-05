@@ -1,6 +1,6 @@
 # 配置与 Skills
 
-PiDeck 提供图形化配置入口，减少频繁查找和编辑 pi 配置文件的成本。
+PiDeck-maestro 提供图形化配置入口，减少频繁查找和编辑 pi 配置文件的成本。
 
 ## 配置管理
 
@@ -22,7 +22,7 @@ PiDeck 提供图形化配置入口，减少频繁查找和编辑 pi 配置文件
 
 页面提供一个默认模型，并可分别为 `explore`、`analysis`、`debug`、`planning`、`development`、`review`、`testing` 七类 teammate 任务指定模型。模型下拉会从 Pi 的 `models.json` 读取已配置的 `provider/model` 候选，支持搜索，也允许直接输入自定义值。
 
-全局配置写入 `~/.pi/agent/teammate-models.json`，项目配置写入当前项目的 `.pi/teammate-models.json`。项目映射按任务类型覆盖全局映射；点击恢复按钮会删除项目字段并重新继承全局值。保存会保留 `thinkingLevels` 和未知字段；原文件 JSON 损坏时，PiDeck 只显示诊断，不会覆盖文件。
+全局配置写入 `~/.pi/agent/teammate-models.json`，项目配置写入当前项目的 `.pi/teammate-models.json`。项目映射按任务类型覆盖全局映射；点击恢复按钮会删除项目字段并重新继承全局值。保存会保留 `thinkingLevels` 和未知字段；原文件 JSON 损坏时，PiDeck-maestro 只显示诊断，不会覆盖文件。
 
 <img class="doc-screenshot" src="/images/config.png" alt="配置管理界面">
 
@@ -40,7 +40,7 @@ C:\Program Files\pi\pi
 
 ## 代理设置
 
-PiDeck 区分两类代理：
+PiDeck-maestro 区分两类代理：
 
 - pi agent 子进程代理：影响实际 Agent 进程。
 - 桌面端代理：影响模型拉取、连接测试等桌面应用请求。

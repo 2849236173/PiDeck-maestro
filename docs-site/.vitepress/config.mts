@@ -6,8 +6,8 @@ const base = process.env.VITEPRESS_BASE ?? "/";
 const siteOrigin = process.env.DOCS_SITE_ORIGIN ?? "https://pideck.caoayu.top";
 
 export default defineConfig({
-  title: "PiDeck - pi Agent Desktop Workbench",
-  description: "PiDeck is an open-source desktop workbench for managing multiple pi AI coding agents across local project folders. Features session history, Git integration, built-in terminal, and visual config management.",
+  title: "PiDeck-maestro - pi Agent Desktop Workbench",
+  description: "PiDeck-maestro is the ayuayue/PiDeck compatibility distribution by 逍遥客. An open-source desktop workbench for managing multiple pi AI coding agents across local project folders. Features session history, Git integration, built-in terminal, Maestro workflow, and visual config management.",
   lang: "zh-CN",
   base,
   cleanUrls: true,
@@ -15,11 +15,11 @@ export default defineConfig({
   head: [
     ["link", { rel: "icon", href: `${base}icon.svg` }],
     ["link", { rel: "canonical", href: `${siteOrigin}/` }],
-    ["meta", { name: "keywords", content: "PiDeck, pi, pi-agent, ai-coding-agent, desktop, electron, rpc, local-ai, developer-tools, coding-assistant, workspace, session-management, git, terminal, windows, macos, linux, open-source" }],
+    ["meta", { name: "keywords", content: "PiDeck-maestro, PiDeck, pi, pi-agent, ai-coding-agent, desktop, electron, rpc, local-ai, developer-tools, coding-assistant, workspace, session-management, git, terminal, windows, macos, linux, open-source" }],
     ["meta", { name: "author", content: "ayuayue" }],
     ["meta", { name: "robots", content: "index, follow" }],
-    ["meta", { property: "og:site_name", content: "PiDeck" }],
-    ["meta", { property: "og:title", content: "PiDeck - pi Agent Desktop Workbench" }],
+    ["meta", { property: "og:site_name", content: "PiDeck-maestro" }],
+    ["meta", { property: "og:title", content: "PiDeck-maestro - pi Agent Desktop Workbench" }],
     ["meta", { property: "og:description", content: "Open-source desktop workbench to manage pi AI coding agents across local project folders. Features session history, Git integration, terminal, and plugin management." }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:url", content: `${siteOrigin}/` }],
@@ -27,7 +27,7 @@ export default defineConfig({
     ["meta", { property: "og:image:width", content: "1200" }],
     ["meta", { property: "og:image:height", content: "630" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
-    ["meta", { name: "twitter:title", content: "PiDeck - pi Agent Desktop Workbench" }],
+    ["meta", { name: "twitter:title", content: "PiDeck-maestro - pi Agent Desktop Workbench" }],
     ["meta", { name: "twitter:description", content: "Manage multiple pi AI coding agents in local workspaces. Open-source desktop app with sessions, Git, terminal, and extensions." }],
     ["meta", { name: "twitter:image", content: `${siteOrigin}/og-image.png` }],
     [
@@ -36,7 +36,7 @@ export default defineConfig({
       JSON.stringify({
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        "name": "PiDeck",
+        "name": "PiDeck-maestro",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Windows, macOS, Linux",
         "description": "Open-source desktop workbench for managing multiple pi AI coding agents across local project folders.",
@@ -59,7 +59,7 @@ export default defineConfig({
   ],
   themeConfig: {
     logo: "/icon.svg",
-    siteTitle: "PiDeck",
+    siteTitle: "PiDeck-maestro",
     nav: [
       { text: "首页", link: "/" },
       { text: "English", link: "/en" },

@@ -8,9 +8,11 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.6--13-green)
+![Version](https://img.shields.io/badge/version-0.6.6--15-green)
 
-> 这是面向 `pi-maestro-flow` 的 PiDeck 兼容发行版。它基于原作者 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)，专门修复桌面 RPC 与 Maestro 工作流之间的兼容问题。
+> 这是面向 `pi-maestro-flow` 的 **PiDeck-maestro** 兼容发行版。它基于原作者 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)，专门修复桌面 RPC 与 Maestro 工作流之间的兼容问题。
+>
+> **从 v0.6.6.15 起，正式以 PiDeck-maestro 命名**（安装包名、appId `com.personal.pideck-maestro`、npm `pideck-maestro`），便于与上游 ayuayue/PiDeck 形成可分辨的对比。旧用户的数据通过启动时的一次性目录迁移自动保留下来。
 >
 > - 上游原仓库：[ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)
 > - 本兼容仓库：[2849236173/PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro)
@@ -26,7 +28,7 @@
 
 ## 📋 更新日志
 
-> **兼容版最新版本 v0.6.6-13**（2026-07-31）
+> **兼容版最新版本 v0.6.6.15**（2026-08-05）—— 首个以 **PiDeck-maestro** 命名的发版。
 
 ### v0.6.6-13 Maestro 兼容版
 

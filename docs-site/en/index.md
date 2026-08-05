@@ -2,9 +2,9 @@
 layout: home
 lang: en
 hero:
-  name: PiDeck Maestro Compatibility Edition
+  name: PiDeck-maestro
   text: A multi-project desktop workbench for pi-maestro-flow
-  tagline: Based on PiDeck and focused on Maestro RPC questionnaires, Plan, delegate, and explore compatibility across Windows, macOS, and Linux.
+  tagline: PiDeck-maestro is the compatibility distribution maintained by 逍遥客, focused on Maestro RPC questionnaires, Plan, delegate, and explore compatibility across Windows, macOS, and Linux.
   actions:
     - theme: brand
       text: Download Latest

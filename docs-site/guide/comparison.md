@@ -4,7 +4,7 @@
 
 ## 快速对比
 
-| 维度 | PiDeck | Claude Code | Codex CLI | Cursor | Windsurf |
+| 维度 | PiDeck-maestro | Claude Code | Codex CLI | Cursor | Windsurf |
 |---|---|---|---|---|---|
 | **类型** | 桌面工作台 | CLI 工具 | CLI 工具 | IDE | IDE |
 | **多项目隔离** | ✅ 项目级隔离 | ⚠️ 需手动切换 | ⚠️ 需手动切换 | ⚠️ 窗口级 | ⚠️ 窗口级 |
@@ -17,19 +17,19 @@
 | **跨平台** | ✅ Win/Mac/Linux | ✅ Win/Mac/Linux | ✅ Win/Mac/Linux | ✅ Win/Mac/Linux | ✅ Win/Mac/Linux |
 | **开源** | ✅ MIT | ⚠️ 部分开源 | ⚠️ 部分开源 | ❌ 闭源 | ❌ 闭源 |
 
-## PiDeck 的独特优势
+## PiDeck-maestro 的独特优势
 
 ### 1. 多项目工作区 + 会话隔离
 
-如果你同时在多个本地项目中使用 AI 编码助手，PiDeck 提供**项目级隔离**：每个项目目录对应独立的 Agent 会话，不会互相污染。这在 Claude Code、Codex CLI 等单进程工具中需要手动管理。
+如果你同时在多个本地项目中使用 AI 编码助手，PiDeck-maestro 提供**项目级隔离**：每个项目目录对应独立的 Agent 会话，不会互相污染。这在 Claude Code、Codex CLI 等单进程工具中需要手动管理。
 
 ### 2. 统一管理多个 AI 编码助手
 
-PiDeck 不仅可以管理 **pi**，还可以通过会话导入功能将 **Codex** 和 **Claude** 的本地会话导入为统一的历史记录，方便在一个界面中回顾所有 AI 编码工作。
+PiDeck-maestro 不仅可以管理 **pi**，还可以通过会话导入功能将 **Codex** 和 **Claude** 的本地会话导入为统一的历史记录，方便在一个界面中回顾所有 AI 编码工作。
 
 ### 3. 桌面原生体验
 
-作为 Electron 桌面应用，PiDeck 提供：
+作为 Electron 桌面应用，PiDeck-maestro 提供：
 - 系统托盘常驻
 - 独立窗口管理
 - 原生文件选择器
@@ -45,7 +45,7 @@ PiDeck 不仅可以管理 **pi**，还可以通过会话导入功能将 **Codex*
 
 ## 适合人群
 
-**选择 PiDeck 如果你：**
+**选择 PiDeck-maestro 如果你：**
 - 需要同时在多个本地项目中使用 AI 编码助手
 - 希望统一管理 pi、Codex、Claude 的会话历史
 - 喜欢桌面原生应用而非 CLI 工具
@@ -64,4 +64,4 @@ PiDeck 不仅可以管理 **pi**，还可以通过会话导入功能将 **Codex*
 
 ## 总结
 
-PiDeck 的定位是**本地 AI 编码助手的桌面工作台**，而不是替代 Claude Code 或 Codex CLI 本身。它通过桌面封装和多项目管理，让这些 CLI 工具在多项目场景下更易用、更可追溯。
+PiDeck-maestro 的定位是**本地 AI 编码助手的桌面工作台**，而不是替代 Claude Code 或 Codex CLI 本身。它通过桌面封装和多项目管理，让这些 CLI 工具在多项目场景下更易用、更可追溯。

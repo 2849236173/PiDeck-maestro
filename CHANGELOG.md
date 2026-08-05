@@ -1,6 +1,17 @@
 # Changelog
 
-## v0.6.6-15 - 2026-08-03
+## v0.6.6.15 - 2026-08-05
+
+### Renamed to PiDeck-maestro
+
+The compatible distribution line is now branded as **PiDeck-maestro**, distinct from the upstream `ayuayue/PiDeck`. The rename is bundled with this release so users get the new name on first install of v0.6.6.15.
+
+- Product display name, dock, taskbar, installer name: `PiDeck` → `PiDeck-maestro`.
+- Electron `appId`: `com.ayuayue.pi-desktop` → `com.personal.pideck-maestro` (changes the AUMID, installer id, and userData path).
+- npm package name: `pi-desktop` → `pideck-maestro`.
+- Boot overlay title, About panel copy, and ~20 user-visible strings in zh/en now reference PiDeck-maestro.
+- `package.json#author` keeps `ayuayue` for credit; `逍遥客` is added as a contributor.
+- Existing users keep their session history, settings, pet config, vision JSON, etc. thanks to a one-shot `userData` directory migration that runs at startup (before `AppLogger` and other userData consumers are instantiated) and is guarded by a `.migrated-from-appId.txt` sentinel.
 
 ### Configuration flows aligned with pi-maestro-flow
 

@@ -2,9 +2,9 @@
 layout: home
 
 hero:
-  name: PiDeck
+  name: PiDeck-maestro
   text: 多项目 pi Agent 桌面工作台
-  tagline: 在统一的桌面工作区中管理本地 pi 编码助手会话、配置、Git 和终端，支持 Windows、macOS、Linux，让本地 AI 编码工作流更稳定高效。
+  tagline: PiDeck-maestro 是面向 pi-maestro-flow 的兼容发行版，专注于桌面端 RPC、Maestro、Plan / delegate / explore 的兼容与增强，支持 Windows、macOS、Linux。
   actions:
     - theme: brand
       text: 下载最新版本
@@ -38,15 +38,15 @@ features:
 ---
 
 <figure class="home-showcase">
-  <img src="/images/overview.png" alt="PiDeck 工作区与对话界面截图">
+  <img src="/images/overview.png" alt="PiDeck-maestro 工作区与对话界面截图">
   <figcaption>工作区、会话、文件抽屉、Git 分支和工具调用集中在同一个桌面窗口中。</figcaption>
 </figure>
 
 ## 面向本地开发的桌面控制台
 
-`PiDeck` 不是 pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，把项目管理、会话管理、配置管理和桌面交互整合起来，Agent 能力仍由 pi 原生提供。
+`PiDeck-maestro` 不是 pi 的分支。它是一个轻量 Electron 外壳，通过启动多个 `pi --mode rpc` 进程，把项目管理、会话管理、配置管理和桌面交互整合起来，Agent 能力仍由 pi 原生提供。
 
-这是 `2849236173/PiDeck-maestro` 的 Maestro 兼容发行线，基于上游 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)。当前兼容版为 `0.6.6-13`，支持 teammate 子代理会话树、Maestro 配置管理、Hooks / Skill 配置入口和 GPT 5.5 / 5.6 Fast 模式；版本号在上游版本后追加兼容修复号。
+这是 `2849236173/PiDeck-maestro` 的 Maestro 兼容发行线，基于上游 [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)。当前兼容版为 `0.6.6-15`（首个以 **PiDeck-maestro** 命名的版本），支持 teammate 子代理会话树、Maestro 配置管理、Hooks / Skill 配置入口和 GPT 5.5 / 5.6 Fast 模式；版本号在上游版本后追加兼容修复号。
 
 <div class="info-strip">
   <div>
@@ -90,7 +90,7 @@ features:
 
 ## 社区交流
 
-加入 PiDeck QQ 群进行交流、反馈和讨论：
+加入 PiDeck-maestro QQ 群进行交流、反馈和讨论：
 
 **1026218644**
 

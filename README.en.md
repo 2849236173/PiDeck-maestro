@@ -8,9 +8,11 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.6--13-green)
+![Version](https://img.shields.io/badge/version-0.6.6--15-green)
 
-> This is the PiDeck compatibility distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
+> This is the **PiDeck-maestro** distribution for `pi-maestro-flow`. It is based on the original [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck) and focuses on RPC, questionnaire, and Maestro workflow compatibility in desktop mode.
+>
+> **Starting with v0.6.6.15 the product is officially branded as PiDeck-maestro** (installer name, appId `com.personal.pideck-maestro`, npm `pideck-maestro`) to make it easy to distinguish from upstream `ayuayue/PiDeck`. Existing users keep their settings and sessions automatically via a one-shot `userData` directory migration at startup.
 >
 > - Upstream project: [ayuayue/PiDeck](https://github.com/ayuayue/PiDeck)
 > - Compatibility repository: [2849236173/PiDeck-maestro](https://github.com/2849236173/PiDeck-maestro)
@@ -26,7 +28,7 @@
 
 ## 📋 Changelog
 
-> **Latest compatibility release: v0.6.6-13** (2026-07-31)
+> **Latest compatibility release: v0.6.6.15** (2026-08-05) — first build branded as **PiDeck-maestro**.
 
 ### v0.6.6-13 Maestro compatibility release
 

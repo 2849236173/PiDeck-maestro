@@ -4,7 +4,7 @@ title: 贡献者
 
 # 贡献者
 
-感谢所有为 PiDeck 做出贡献的人！
+感谢所有为 PiDeck-maestro 做出贡献的人！
 
 
 ## 代码贡献

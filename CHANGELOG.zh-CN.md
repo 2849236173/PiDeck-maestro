@@ -1,6 +1,21 @@
 # 更新日志
 
-## v0.6.6-15 - 2026-08-03
+## v0.6.6.15 - 2026-08-05
+
+### 品牌更名为 PiDeck-maestro
+
+兼容发行线正式以 **PiDeck-maestro** 命名，与上游 `ayuayue/PiDeck` 形成可分辨的对比。
+本次改名与本版本同批发布，使新用户首次安装 v0.6.6.15 时即可看到新名字。
+
+- 安装包名 / Dock / 任务栏 / 关于面板 / 启动画面：`PiDeck` → `PiDeck-maestro`
+- Electron `appId`：`com.ayuayue.pi-desktop` → `com.personal.pideck-maestro`
+  （同时影响 Windows AUMID、NSIS 包标识、userData 路径）
+- npm 包名：`pi-desktop` → `pideck-maestro`
+- 约 20 处用户可见文案（中英）已同步改为 PiDeck-maestro
+- `package.json#author` 保留 `ayuayue` 作为上游致谢；新增 `逍遥客` 到 contributors
+- 旧用户的会话历史、设置、pet 配置、vision.json 等数据通过启动时的一次性
+  `userData` 目录迁移完整保留（在 `AppLogger` 等 userData 消费者初始化之前执行），
+  并用 `.migrated-from-appId.txt` sentinel 防止重复迁移
 
 ### 配置页基础流对齐 pi-maestro-flow
 
