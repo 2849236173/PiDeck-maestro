@@ -23,12 +23,14 @@ import { Button } from "./components/ui/Button";
 import { t } from "./i18n";
 import { LazyMonacoEditor } from "./components/ui/LazyMonacoEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
+import { mergeVisionConfig } from "./config/configTypes";
 import type {
 	AuthFile,
 	ConfigTab,
 	ModelItem,
 	ModelsFile,
 	SettingsFile,
+	VisionConfig,
 } from "./config/configTypes";
 import type { ConfigFileDiagnostic, CreatePiPromptTemplateInput, PiExtensionListResult, PiExtensionSummary, PiPromptTemplateListResult, PiPromptTemplateSummary, PiSkillListResult, PiSkillLocation, PiSkillSummary } from "../../shared/types";
 import { getProviderHeaders, KNOWN_PROVIDER_ENDPOINTS } from "./config/providerHeaders";
@@ -125,10 +127,8 @@ type ConfigModalProps = {
 	onSaved: () => void;
 	projectPath?: string;
 	initialSection?: ConfigSection;
-	/** 当前激活的 Agent ID，用于把 /vision 等命令直接送进输入框 */
-	activeAgentId?: string;
-	/** 把给定文本写入指定 agent 的输入框；用于 VisionTab 一键插入 /vision 命令 */
-	onInsertPromptIntoAgent?: (agentId: string, text: string) => void;
+	/** Select an Agent from configuration views and return to its session. */
+	onSelectAgent?: (agentId: string) => void;
 };
 
 class ConfigModalErrorBoundary extends Component<
@@ -205,6 +205,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const [modelsData, setModelsData] = useState<ModelsFile>({ providers: {} });
 	const [authData, setAuthData] = useState<AuthFile>({});
 	const [settingsData, setSettingsData] = useState<SettingsFile>({});
+	const [visionData, setVisionData] = useState<VisionConfig>(() => mergeVisionConfig({}));
+	const [visionRawData, setVisionRawData] = useState<Record<string, unknown>>({});
 	/** 自动发现的模型：auth-only 供应商通过已知端点获取的模型列表 */
 	const [discoveredModels, setDiscoveredModels] = useState<
 		Record<string, Array<{ id: string; name?: string }>>
@@ -411,6 +413,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 					setRawContent(res.raw);
 					setRawFileName("trust.json");
 					setConfigDiagnostic(res.diagnostic ?? null);
+				} else if (target === "vision") {
+					const res = await api.config.getRaw("vision.json");
+					setVisionRawData(res.parsed);
+					setVisionData(mergeVisionConfig(res.parsed));
+					setRawContent(res.raw);
+					setRawFileName("vision.json");
+					setConfigDiagnostic(res.diagnostic ?? null);
 				} else if (target === "raw") {
 					// 源文件 tab 复用当前 tab 对应的文件
 					const fileName =
@@ -420,7 +429,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 								? "auth.json"
 								: tab === "trust"
 									? "trust.json"
-									: "settings.json";
+									: tab === "vision"
+										? "vision.json"
+										: "settings.json";
 					setRawFileName(fileName);
 					const res =
 						fileName === "models.json"
@@ -465,7 +476,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 		if (section === "webSearch") return;
 		if (section === "editors") return;
 		if (section === "logs") return;
-		if (tab === "vision") return;
 		void loadConfig(tab);
 	}, [open, section, tab, loadConfig]);
 
@@ -998,6 +1008,17 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	};
 
+	const handleSaveVision = async () => {
+		// Start from the parsed object so extension fields outside the standard form survive unchanged.
+		const next = { ...visionRawData, ...visionData };
+		if (await saveAndReload(
+			() => api.config.saveRaw("vision.json", JSON.stringify(next, null, 2)),
+			t("config.restartHint"),
+		)) {
+			await loadConfig("vision");
+		}
+	};
+
 	// ── Raw 操作 ─────────────────────────────────────────
 
 	const handleSaveRaw = async () => {
@@ -1013,6 +1034,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			void refreshRunningAgents();
 		} 		else if (rawFileName === "auth.json") await loadConfig("auth");
 		else if (rawFileName === "trust.json") await loadConfig("trust");
+		else if (rawFileName === "vision.json") await loadConfig("vision");
 		else await loadConfig("settings");
 	};
 
@@ -1612,6 +1634,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							models={modelsData}
 							workspacePath={props.projectPath}
 							onSave={onSaved}
+							onSelectAgent={(agentId) => {
+								onClose();
+								props.onSelectAgent?.(agentId);
+							}}
 						/>
 					)}
 
@@ -1736,11 +1762,11 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "config" && !loading && tab === "vision" && (
 						<VisionTab
-							data={settingsData}
-							modelsData={modelsData}
-							onInsertPrompt={props.onInsertPromptIntoAgent && props.activeAgentId
-								? (text) => props.onInsertPromptIntoAgent?.(props.activeAgentId!, text)
-								: undefined}
+							data={visionData}
+							saving={saving}
+							diagnostic={Boolean(configDiagnostic)}
+							onChange={setVisionData}
+							onSave={handleSaveVision}
 						/>
 					)}
 

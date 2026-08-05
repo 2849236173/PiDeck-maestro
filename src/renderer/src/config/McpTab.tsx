@@ -369,6 +369,13 @@ export function McpTab(props: { workspacePath?: string }) {
 		setWizardStep(nextStep);
 	};
 
+	const handleWizardPrevious = () => {
+		if (wizardStep === 0 || wizardSaving) return;
+		setWizardError(null);
+		// The edit flow omits scope (step 2), so moving back from lifecycle must return to transport.
+		setWizardStep(wizardStep === 3 && wizardDraft?.isEdit ? 1 : wizardStep - 1);
+	};
+
 	const handleWizardSave = async () => {
 		if (!wizardDraft) return;
 		setWizardSaving(true);
@@ -766,7 +773,7 @@ export function McpTab(props: { workspacePath?: string }) {
 						{wizardError && <div className="mcp-wizard-error">{wizardError}</div>}
 					</div>
 					<div className="mcp-wizard-footer">
-						<Button variant="secondary" onClick={() => setWizardStep(wizardStep === 3 && wizardDraft?.isEdit ? 1 : wizardStep - 1)} disabled={wizardStep === 0 || wizardSaving}>
+						<Button variant="secondary" onClick={handleWizardPrevious} disabled={wizardStep === 0 || wizardSaving}>
 							{t("mcp.wizard.prev")}
 						</Button>
 						{wizardStep < 5 ? (

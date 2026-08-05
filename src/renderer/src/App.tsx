@@ -9572,8 +9572,12 @@ filePath={gitDrawerDiff.filePath}
         open={configOpen}
         initialSection={configInitialSection}
         projectPath={activeProject?.path}
-        activeAgentId={activeAgentId ?? undefined}
-        onInsertPromptIntoAgent={(agentId, text) => setPromptForAgent(agentId, text)}
+        onSelectAgent={(agentId) => {
+          const agent = displayAgentsRef.current.find((item) => item.id === agentId);
+          if (!agent) return;
+          setActiveProjectId(agent.projectId);
+          setActiveAgentId(agent.id);
+        }}
         onClose={() => {
           setConfigOpen(false);
           setConfigInitialSection("config");

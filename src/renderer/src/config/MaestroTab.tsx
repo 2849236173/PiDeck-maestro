@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Globe, MapPin, RefreshCw, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Bot, Check, Globe, MapPin, RefreshCw, RotateCcw } from "lucide-react";
 import {
 	TEAMMATE_MODEL_TASK_TYPES,
+	type AgentRuntimeState,
+	type AgentTab,
 	type TeammateModelConfigScope,
 	type TeammateModelConfigSnapshot,
 	type TeammateModelRoutingFile,
@@ -85,10 +87,12 @@ export function MaestroTab({
 	models,
 	workspacePath,
 	onSave,
+	onSelectAgent,
 }: {
 	models: ModelsFile;
 	workspacePath?: string;
 	onSave: () => void;
+	onSelectAgent?: (agentId: string) => void;
 }) {
 	const [snapshot, setSnapshot] = useState<TeammateModelConfigSnapshot | null>(null);
 	const [scope, setScope] = useState<TeammateModelConfigScope>("global");
@@ -100,8 +104,47 @@ export function MaestroTab({
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [activeAgents, setActiveAgents] = useState<Array<{ agent: AgentTab; runtime?: AgentRuntimeState }>>([]);
+	const [activeAgentsLoading, setActiveAgentsLoading] = useState(true);
+	const [activeAgentsError, setActiveAgentsError] = useState<string | null>(null);
+	const [lastObservedModelChange, setLastObservedModelChange] = useState<Record<string, number>>({});
+	const activeAgentModelsRef = useRef<Record<string, string>>({});
 
 	const availableModels = useMemo(() => modelOptions(models), [models]);
+
+	const loadActiveAgents = useCallback(async () => {
+		setActiveAgentsLoading(true);
+		setActiveAgentsError(null);
+		try {
+			const agents = (await api.agents.list()).filter(
+				(agent) => agent.status === "starting" || agent.status === "running" || agent.status === "idle",
+			);
+			const next = await Promise.all(
+				agents.map(async (agent) => ({
+					agent,
+					runtime: await api.agents.runtimeState(agent.id).catch(() => undefined),
+				})),
+			);
+			const nextModels = Object.fromEntries(
+				next.map(({ agent, runtime }) => [agent.id, `${runtime?.provider ?? ""}/${runtime?.modelId ?? ""}`]),
+			);
+			setLastObservedModelChange((current) => {
+				const changes = { ...current };
+				for (const [agentId, model] of Object.entries(nextModels)) {
+					if (model && activeAgentModelsRef.current[agentId] && activeAgentModelsRef.current[agentId] !== model) {
+						changes[agentId] = Date.now();
+					}
+				}
+				return changes;
+			});
+			activeAgentModelsRef.current = nextModels;
+			setActiveAgents(next);
+		} catch (loadError) {
+			setActiveAgentsError(loadError instanceof Error ? loadError.message : String(loadError));
+		} finally {
+			setActiveAgentsLoading(false);
+		}
+	}, []);
 
 	const load = useCallback(async () => {
 		setLoading(true);
@@ -125,6 +168,10 @@ export function MaestroTab({
 	useEffect(() => {
 		void load();
 	}, [load]);
+
+	useEffect(() => {
+		void loadActiveAgents();
+	}, [loadActiveAgents]);
 
 	const selectedSource = scope === "global" ? snapshot?.global : snapshot?.workspace;
 	const draft = drafts[scope];
@@ -237,7 +284,7 @@ export function MaestroTab({
 					<h3>{t("maestro.title")}</h3>
 					<p>{t("maestro.description")}</p>
 				</div>
-				<Button variant="ghost" buttonSize="sm" onClick={() => void load()}>
+				<Button variant="ghost" buttonSize="sm" onClick={() => { void load(); void loadActiveAgents(); }}>
 					<RefreshCw size={15} aria-hidden="true" />
 					{t("common.refresh")}
 				</Button>
@@ -280,6 +327,51 @@ export function MaestroTab({
 			{scope === "workspace" && (
 				<div className="maestro-scope-note">{t("maestro.workspaceHint")}</div>
 			)}
+
+			<section className="maestro-active-section">
+				<div className="maestro-active-heading">
+					<div>
+						<strong>{t("maestro.activeAgents")}</strong>
+						<span>{t("maestro.activeAgentsHint")}</span>
+					</div>
+				</div>
+				{activeAgentsLoading ? (
+					<div className="config-loading">{t("common.loading")}</div>
+				) : activeAgentsError ? (
+					<div className="config-error">{activeAgentsError}</div>
+				) : activeAgents.length === 0 ? (
+					<div className="config-empty">{t("maestro.activeAgentsEmpty")}</div>
+				) : (
+					<div className="maestro-active-list">
+						{activeAgents.map(({ agent, runtime }) => {
+							const currentModel = runtime?.provider && runtime.modelId
+								? `${runtime.provider}/${runtime.modelId}`
+								: t("common.notConfigured");
+							const effectiveRoute = snapshot?.effective.global ?? currentModel;
+							const observedAt = lastObservedModelChange[agent.id];
+							return (
+								<Button
+									key={agent.id}
+									variant="ghost"
+									className="maestro-active-agent"
+									onClick={() => onSelectAgent?.(agent.id)}
+									disabled={!onSelectAgent}
+								>
+									<Bot size={17} aria-hidden="true" />
+									<span className="maestro-active-agent-main">
+										<strong>{agent.title || t("common.untitled")}</strong>
+										<small>{currentModel}</small>
+									</span>
+									<span className="maestro-active-agent-meta">
+										<span>{t("maestro.effectiveRoute", { route: effectiveRoute })}</span>
+										<span>{observedAt ? t("maestro.lastModelChange", { time: new Date(observedAt).toLocaleTimeString() }) : t("maestro.lastModelChangeUnknown")}</span>
+									</span>
+								</Button>
+							);
+						})}
+					</div>
+				)}
+			</section>
 
 			{selectedSource?.diagnostic && (
 				<div className="maestro-config-diagnostic" role="alert">
