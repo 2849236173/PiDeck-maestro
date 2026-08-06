@@ -1,5 +1,50 @@
 # 更新日志
 
+## v0.6.6-21 - 2026-08-06
+
+### 修复：升级到 v0.6.6-20 后内置聊天区没有内容
+
+- **问题**：v0.6.6-20 把 userData 从 `%APPDATA%\pideck-maestro\` 改到固定的 `%APPDATA%\PiDeck\`，内置聊天项目的 `path` 因此变为 `%APPDATA%\PiDeck\chat-workspace\`，对应 encoded-cwd token 是 `--c--users-asus-appdata-roaming-pideck-chat-workspace--`。但 pi RPC 之前一直把会话写到 `~/.pi/agent/sessions/<旧 userData>/chat-workspace/encoded/--…--` 下（`pi-desktop/chat-workspace` 6 个、`pideck-maestro/chat-workspace` 2 个），新 token 在该目录下不存在，导致 `sessionScanner.isSameProject` 全部 return false，内置聊天抽屉在 session list 里为空，看起来"内容全部消失"。
+- **修复**：在 `SessionScanner` 增加内置聊天项目的历史 encoded 兼容：
+  - `isSameProject` 当目标项目是当前内置聊天项目时，扩展 token 集合，把历史上 `<Roaming>/<候选 userData>/chat-workspace` 的所有 encoded-cwd 都算作命中，旧会话恢复显示。
+  - `extractEncodedDir` 把上述历史 encoded 归一化到当前内置 chat 的 token，"全部会话"视图不会再被拆成多个同名 group。
+  - 直接基于 `app.getPath("userData")` 拼装历史 userData 候选名（`pi-desktop` / `pideck-maestro` / `PiDeck-maestro` / `pi-deck`），无需外部注入。
+- **影响范围**：仅影响"内置聊天项目"。不会影响普通项目、普通项目的 worktree 子项、用户自定义聊天目录等。
+- **回滚**：本改动只改扫描匹配逻辑，不会改动任何用户数据，无需回滚步骤。
+
+## v0.6.6-20 - 2026-08-06
+
+### 修复：钉死 userData 到 `%APPDATA%\PiDeck\`，并迁移所有历史脏目录
+
+- **问题**：v0.6.6-19 的 `UserDataMigrator` 只处理扫描到的第一个历史目录。如果某个用户同时存在 `%APPDATA%\pi-desktop\`（旧版）与 `%APPDATA%\PiDeck-maestro\`（v0.6.6-15 ~ v0.6.6-19 生成的），没被第一个匹配到的那个目录的数据就会被吞掉。同时，userData 路径仍然由 `productName` 决定，未来再改名又会触发同样的数据丢失循环。
+- **修复**：
+  1. `index.ts` 在设置 Windows AUMID 之后，立即调用 `app.setPath("userData", join(app.getPath("appData"), "PiDeck"))`，从此 userData 永久指向 `%APPDATA%\PiDeck\`，与 `productName` / `name` 完全解耦。
+  2. `UserDataMigrator` 改为**按"由旧到新"顺序合并所有候选脏目录**，不再只搬第一个。最老的源里的 `projects.json` / `settings.json` / 会话缓存被视为权威数据，强制覆盖（覆盖前会把当前目标里的新版本备份到 `migration-backup/<file>.new` 供回滚）；后续源走"文件级合并"，让 `Partitions/`、`sandbox-workspaces/`、`sdk/`、`preload/`、`chat-workspace/` 里用户累积的本地文件全部保留。
+  3. 候选列表里去掉 `"PiDeck"` —— 它是目标，不能被当作源，否则会自环。
+- **回滚**：删除 `%APPDATA%\PiDeck\userdata.migrated` 后下次启动会重跑迁移；从 `migration-backup\` 还原 `.new` 文件即可回到"新版本初始状态"。
+
+### 升级说明
+
+- 直接运行 `PiDeck-maestro Setup 0.6.6-20.exe` 覆盖安装，无需先卸载。
+- 首次启动后，所有历史业务数据都已合并到 `%APPDATA%\PiDeck\`，原 `pi-desktop\`、`PiDeck-maestro\`、`pideck-maestro\` 目录保留不动；用户在确认左侧抽屉、会话历史、宠物位置都正常后，可以手动删除这些历史目录释放空间。
+
+## v0.6.6-19 - 2026-08-05
+
+### 修复：从 pi-desktop 升级后抽屉与会话全部丢失
+
+- **问题**：自 v0.6.6-15 把 `productName` 改为 `PiDeck-maestro` 之后，Electron 的 `app.getPath("userData")` 切到了 `%APPDATA%\pideck-maestro\`。旧 `pi-desktop` 下的 projects.json（抽屉列表）、settings.json、session-summary-cache.json、subagent-session-links.json、pi-desktop.json、pi-desktop-index.db、pet-position.json、Partitions/sandbox-workspaces/sdk/preload 等数据被遗留在 `pi-desktop` 目录里，新版本只能看到 2 个新抽屉，旧的 6 个抽屉（telRecord / PiDeck / vozeb / assistance-bot / sub2api 等）全部消失。
+- **修复**：在 main 启动早期新增 `UserDataMigrator`（`src/main/migration/UserDataMigrator.ts`），自动检测候补的旧 userData 目录，按 `userdata.migrated` 哨兵文件保证幂等。
+  - 关键业务文件（projects.json / settings.json / session-summary-cache.json / subagent-session-links.json）用旧数据**覆盖**新数据（备份新版本到 `migration-backup/<file>.new` 供回滚）。
+  - 宠物、sandbox、sdk、preload 目录做合并式复制，存在则跳过。
+  - chat-workspace 目录做合并写回，不丢用户在 Chat 抽屉里累积的本地文件。
+- **回滚**：如果迁移后想回退到"新版本初始状态"，删除 `%APPDATA%\pideck-maestro\userdata.migrated` 并从 `migration-backup\` 还原对应 `.new` 文件即可。
+
+### 升级说明
+
+- 直接运行 `PiDeck-maestro Setup 0.6.6-19.exe` 覆盖安装即可，不需要先卸载。
+- 首次启动会在主进程日志（`logs/main.log`）里输出 `[PiDeck][migrate]` 命名的迁移摘要，记录复制了哪些文件、被跳过的目标、源目录名。
+- 迁移完成后左侧抽屉中的"项目列表"会一次性回到 v0.6.6-15 之前的状态。
+
 ## v0.6.6-18 - 2026-08-05
 
 ### 新功能：左抽屉「全部会话」视图

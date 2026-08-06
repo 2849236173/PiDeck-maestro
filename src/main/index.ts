@@ -117,6 +117,7 @@ import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
 import { RpcLogger } from "./logging/RpcLogger";
 import { resolveWslEnvironment } from "./wsl/WslEnvironment";
+import { runUserDataMigrationIfNeeded } from "./migration/UserDataMigrator";
 import type { WslEnvironment } from "./wsl/WslPaths";
 import {
 	detectExternalEditors,
@@ -3712,7 +3713,18 @@ app.whenReady().then(async () => {
 		app.setAppUserModelId("com.ayuayue.pi-desktop");
 	}
 
-	// 用户数据目录保持在原有路径，无需迁移。
+	// 锁死 userData 路径为 %APPDATA%\PiDeck\：与 productName / name 解耦，
+	// 以后 productName 改来改去（比如历史上的 pi-desktop / PiDeck-maestro / pideck-maestro）
+	// 都不会再触发 userData 目录跳转。下方迁移器负责把历史上因为 productName 改名
+	// 而被遗留的旧目录里的业务数据兜底搬回这里。
+	app.setPath("userData", join(app.getPath("appData"), "PiDeck"));
+
+	// 早期迁移：在任何 store 实例化之前合并旧 userData。扫描候选脏目录列表，
+	// 把 projects.json / settings.json / 会话缓存 / pet / sandbox / sdk / chat-workspace 等
+	// 业务文件一次性搬入当前 userData。完成后会写 userdata.migrated 哨兵文件，下次启动跳过。
+	await runUserDataMigrationIfNeeded().catch((err) => {
+		console.error("[PiDeck][migrate] failed:", err);
+	});
 
 	projectStore = new ProjectStore();
 	fileSystemService = new FileSystemService();

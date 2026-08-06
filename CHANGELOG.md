@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.6.6-21 - 2026-08-06
+
+### Fix: built-in chat drawer appears empty after upgrading to v0.6.6-20
+
+- **The problem**: v0.6.6-20 pinned userData to `%APPDATA%\PiDeck\`, so the built-in chat project's `path` is now `%APPDATA%\PiDeck\chat-workspace\` — whose encoded-cwd token is `--c--users-asus-appdata-roaming-pideck-chat-workspace--`. But pi RPC was still writing sessions to `~/.pi/agent/sessions/--<legacy userData>/chat-workspace--/` (6 from `pi-desktop/chat-workspace`, 2 from `pideck-maestro/chat-workspace`). The new token doesn't match anything in that directory tree, so `SessionScanner.isSameProject` returned false for every old session — the built-in chat drawer appeared empty ("the chat content is gone").
+- **The fix** (`src/main/sessions/SessionScanner.ts`):
+  - When the target project IS the current built-in chat project, `isSameProject` now expands its token set to include the legacy `<Roaming>/<candidate userData>/chat-workspace` encoded-cwd tokens (`pi-desktop`, `pideck-maestro`, `PiDeck-maestro`, `pi-deck`). Those sessions reappear under the chat drawer.
+  - `extractEncodedDir` normalizes the same legacy tokens to the current chat token, so the "All sessions" view doesn't split the built-in chat into multiple groups.
+  - The historical-token set is derived from `app.getPath("userData")` directly — no external injection required.
+- **Scope**: only the built-in chat project. Normal projects, worktree children, and user-customized chat directories are unaffected.
+- **Rollback**: the change is purely a matching tweak in `SessionScanner`. No user data is touched; no rollback steps are needed.
+
+## v0.6.6-20 - 2026-08-06
+
+### Fix: pin userData to `%APPDATA%\PiDeck\` and migrate every legacy directory
+
+- **The problem**: even after v0.6.6-19's `UserDataMigrator`, the migration only handled the *first* legacy directory it found. A user who had data in both `%APPDATA%\pi-desktop\` (old) and `%APPDATA%\PiDeck-maestro\` (from a v0.6.6-15 ~ v0.6.6-19 install) would still lose whichever directory wasn't picked first. Worse, the userData path itself was still driven by `productName`, so any future rename would re-trigger the same data-loss cycle.
+- **The fix**:
+  1. `index.ts` now calls `app.setPath("userData", join(app.getPath("appData"), "PiDeck"))` immediately after the Windows AUMID is set. The userData directory is now permanently `%APPDATA%\PiDeck\` regardless of `productName` or `name`.
+  2. `UserDataMigrator` now merges **every** candidate legacy directory (not just the first), in order from oldest to newest. The oldest source's `projects.json` / `settings.json` / session caches are treated as authoritative and overwrite the empty new-install templates (backed up to `migration-backup/<file>.new`); subsequent sources are merged file-by-file so locally accumulated files inside `Partitions/`, `sandbox-workspaces/`, `sdk/`, `preload/`, and `chat-workspace/` survive.
+  3. `"PiDeck"` is no longer listed as a candidate source — it is the target, not a source.
+- **Rollback**: delete `%APPDATA%\PiDeck\userdata.migrated` to re-run migration on next launch; restore any `.new` files from `migration-backup\` inside `%APPDATA%\PiDeck\`.
+
+### Upgrade notes
+
+- Run `PiDeck-maestro Setup 0.6.6-20.exe` over the existing install — no uninstall needed.
+- After the first launch, `%APPDATA%\PiDeck\` contains all legacy business data; the legacy directories (`pi-desktop\`, `PiDeck-maestro\`, `pideck-maestro\`) are left in place and can be deleted manually once the user has verified the left drawer and chat history are intact.
+
+## v0.6.6-19 - 2026-08-05
+
+### Fix: drawer and session data lost after upgrading from pi-desktop
+
+- **The problem**: starting with v0.6.6-15, `productName` was changed to `PiDeck-maestro`, which made Electron's `app.getPath("userData")` switch to `%APPDATA%\pideck-maestro\`. All older data under `pi-desktop` — `projects.json` (the drawer / project list), `settings.json`, `session-summary-cache.json`, `subagent-session-links.json`, `pi-desktop.json`, `pi-desktop-index.db`, `pet-position.json`, `Partitions/`, `sandbox-workspaces/`, `sdk/`, `preload/` — was orphaned in the old directory. New installs only saw 2 default drawers, and the 6 drawers the user had accumulated (telRecord / PiDeck / vozeb / assistance-bot / sub2api / Chat) disappeared.
+- **The fix**: a new `UserDataMigrator` (`src/main/migration/UserDataMigrator.ts`) runs early in main process startup. It scans known candidate directory names, picks the first one that contains a non-empty `projects.json`, and copies the business-critical files over. A `userdata.migrated` sentinel makes it idempotent.
+  - Key business files (`projects.json`, `settings.json`, `session-summary-cache.json`, `subagent-session-links.json`) are **overwritten** with the legacy data (the new version is preserved under `migration-backup/<file>.new` for rollback).
+  - Pet / sandbox / sdk / preload directories are merged file-by-file; existing targets are kept.
+  - `chat-workspace` is merged so locally accumulated chat files survive.
+- **Rollback**: to revert to the "fresh new install" state, delete `%APPDATA%\pideck-maestro\userdata.migrated` and restore the matching `.new` files from `migration-backup\`.
+
+### Upgrade notes
+
+- Run `PiDeck-maestro Setup 0.6.6-19.exe` over the existing install — no uninstall needed.
+- On first launch the main-process log (`logs/main.log`) will print a `[PiDeck][migrate]` summary listing every file copied, every target skipped, and the source directory name.
+- After migration the left drawer list returns to the same state it was in before v0.6.6-15.
+
 ## v0.6.6-18 - 2026-08-05
 
 ### Feature: left drawer "All sessions" view

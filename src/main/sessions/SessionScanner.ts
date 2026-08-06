@@ -322,6 +322,11 @@ export class SessionScanner {
   /**
    * 从会话文件路径提取 ~/.pi/agent/sessions/<encodedDir>/<file> 中的 encodedDir。
    * 用于"全部会话"模式按目录分组渲染。
+   *
+   * 内置聊天项目特殊处理：历史上 userData 多次改名，sessions 目录里会保留
+   * 多个 encoded-cwd 子目录（pi-desktop/chat-workspace、pideck-maestro/chat-workspace ...），
+   * 它们都是同一个"内置聊天项目"。在分组时应统一归到当前内置 chat 的 encoded，
+   * 否则在"全部会话"视图里同一个内置聊天会被拆成多个独立 group。
    */
   private extractEncodedDir(filePath: string): string {
     const normalized = this.normalize(filePath);
@@ -334,7 +339,15 @@ export class SessionScanner {
     }
     const rest = normalized.slice(root.length + 1);
     const firstSlash = rest.indexOf("/");
-    return firstSlash === -1 ? rest : rest.slice(0, firstSlash);
+    const encoded = firstSlash === -1 ? rest : rest.slice(0, firstSlash);
+
+    // 内置聊天项目历史上多次改名，分组统一归到当前内置 chat 的 encoded。
+    const currentChatToken = this.safePathToken(join(app.getPath("userData"), "chat-workspace"));
+    if (encoded === currentChatToken) return encoded;
+    for (const legacyToken of this.getHistoricalChatProjectTokens()) {
+      if (encoded === legacyToken) return currentChatToken;
+    }
+    return encoded;
   }
 
   /**
@@ -1478,10 +1491,51 @@ export class SessionScanner {
     // 该布局不再使用 encoded-cwd 子目录，safePathToken 无法从路径反推项目。
     if (this.isUnderProjectSessionDir(summary.filePath, projectPath)) return true;
 
-    const filePathMatch = this.normalize(summary.filePath).includes(this.safePathToken(projectPath));
-    if (!filePathMatch && summary.parentSessionPath) {
+    const normalizedFile = this.normalize(summary.filePath);
+    if (normalizedFile.includes(this.safePathToken(projectPath))) return true;
+
+    // 内置聊天项目兼容：userData 改名后 chat-project.path 已更新到新目录，但
+    // ~/.pi/agent/sessions/ 下保留的是旧 userData 拼写的 encoded-cwd 子目录
+    // （例如 pi-desktop/chat-workspace、pideck-maestro/chat-workspace）。
+    // 当目标项目是当前内置聊天项目时，扩展 token 集合，把历史上同语义的
+    // "<userData>/chat-workspace" 全部算作命中，让旧会话恢复显示。
+    if (this.isChatProjectPath(projectPath)) {
+      for (const token of this.getHistoricalChatProjectTokens()) {
+        if (normalizedFile.includes(token)) return true;
+      }
     }
-    return filePathMatch;
+
+    return false;
+  }
+
+  /**
+   * 判断给定项目路径是否等于当前内置聊天项目路径（含 Windows 大小写无关与路径分隔符无关）。
+   * 内置聊天项目始终位于 <userData>/chat-workspace，因此可以直接用 userData 路径推算。
+   */
+  private isChatProjectPath(projectPath: string): boolean {
+    const builtIn = join(app.getPath("userData"), "chat-workspace");
+    return this.normalize(projectPath) === this.normalize(builtIn);
+  }
+
+  /**
+   * 历史内置聊天项目路径对应的 encoded-cwd token 集合。
+   * 这些都是同一语义的 "<userData>/chat-workspace"，但历史上 userData 目录名
+   * 经历多次改名（pi-desktop → pideck-maestro → PiDeck），导致 pi 把会话写到
+   * ~/.pi/agent/sessions/ 下时用了不同的 encoded 子目录名。内置聊天项目需要
+   * 把这些历史 encoded 一并算作自己名下，避免升级后旧会话"消失"。
+   *
+   * 直接基于 userData 的父目录（Roaming）拼装历史 userData 候选名，无需外部注入。
+   */
+  private getHistoricalChatProjectTokens(): string[] {
+    const tokens: string[] = [];
+    const userData = app.getPath("userData");
+    const roamingRoot = resolve(userData, "..");
+    // 历史上的 userData 候选名（按时间倒序，主源在最前）。
+    for (const candidate of ["pi-desktop", "pideck-maestro", "PiDeck-maestro", "pi-deck"]) {
+      const legacy = join(roamingRoot, candidate, "chat-workspace");
+      tokens.push(this.safePathToken(legacy));
+    }
+    return tokens;
   }
 
   /**

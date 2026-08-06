@@ -2,7 +2,19 @@
 
 完整更新日志仍维护在仓库根目录：
 
-当前兼容发行线为 `v0.6.6.15`（首个以 **PiDeck-maestro** 命名的版本），基于上游 `ayuayue/PiDeck v0.6.6-beta.2`，保留 `pi-maestro-flow` 桌面 RPC / 子代理兼容能力。
+当前兼容发行线为 `v0.6.6-21`（含内置聊天区跨版本兼容修复）。
+
+## v0.6.6-21
+
+修复升级到 v0.6.6-20 后内置聊天区显示为空的问题：userData 改为 `%APPDATA%\PiDeck\` 后，会话的 encoded-cwd token 不再匹配历史 `~/.pi/agent/sessions/<旧 userData>/chat-workspace/` 子目录；`SessionScanner` 现在内置聊天项目路径下扩展历史 token 集合，旧会话自动恢复显示。
+
+## v0.6.6-20
+
+新增用户数据迁移器：把 userData 钉死到 `%APPDATA%\PiDeck\`，按"由旧到新"合并所有历史脏目录 (`pi-desktop\` / `PiDeck-maestro\` / `pideck-maestro\` 等)，避免因 productName / name 改名导致的数据丢失循环。回滚支持：删除 `userdata.migrated` 重跑迁移，从 `migration-backup\` 还原 `.new` 文件。
+
+## v0.6.6-19
+
+新增 `UserDataMigrator`，自动检测并把 `pi-desktop\` / `PiDeck-maestro\` 等旧 userData 目录的关键业务文件（projects.json / settings.json / 会话缓存 / 子代理关系 / 宠物位置 / sandbox / sdk / preload / chat-workspace）搬过来；用 `userdata.migrated` 哨兵保证幂等，并把被覆盖的新版本文件备份到 `migration-backup\<file>.new` 供回滚。
 
 ## v0.6.6-13
 

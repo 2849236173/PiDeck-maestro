@@ -1,6 +1,6 @@
 {
   "name": "pideck-maestro",
-  "version": "0.6.6-18",
+  "version": "0.6.6-21",
   "description": "PiDeck-maestro is the ayuayue/PiDeck compatible distribution maintained by 逍遥客, with desktop-RPC fixes for pi-maestro-flow.",
   "private": true,
   "license": "MIT",
